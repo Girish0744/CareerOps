@@ -1,0 +1,43 @@
+{
+  "overallScore": 82,
+  "fitLevel": "Apply",
+  "recommendation": "Apply",
+  "summary": "Girish is a good fit for this Intermediate Applications Software Developer role at BlackBerry/Secusmart. His full-stack development skills, mandatory mobile application experience through Android Studio, strong OOP knowledge, and interest in AI technologies align well with the job requirements. While the \"Intermediate\" title and compensation range suggest a slightly higher experience level than his current student status, his extensive project work and self-starter mindset demonstrate readiness for a rapid learning environment.",
+  "categories": {
+    "experienceMatch": 22,
+    "skillsMatch": 16,
+    "roleLevelMatch": 12,
+    "locationMatch": 8,
+    "industryMatch": 8,
+    "growthPotential": 8,
+    "riskFactors": 4
+  },
+  "matchedKeywords": [
+    "mobile application experience",
+    "android",
+    "oop",
+    "java",
+    "c#",
+    "python",
+    "c++",
+    "agile",
+    "ai technologies",
+    "hackathon",
+    "prototyping",
+    "problem solving",
+    "full-stack",
+    "generalist mindset",
+    "self-starter",
+    "collaborative",
+    "waterloo",
+    "computer science"
+  ],
+  "missingKeywords": [
+    "ios",
+    "cybersecurity",
+    "cryptography",
+    "desktop platforms"
+  ],
+  "notes": "Girish is a good fit for this Intermediate Applications Software Developer role at BlackBerry/Secusmart. His full-stack development skills, mandatory mobile application experience through Android Studio, strong OOP knowledge, and interest in AI technologies align well with the job requirements. While the \"Intermediate\" title and compensation range suggest a slightly higher experience level than his current student status, his extensive project work and self-starter mindset demonstrate readiness for a rapid learning environment.",
+  "evaluatedAt": "2026-05-29"
+}

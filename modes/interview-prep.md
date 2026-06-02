@@ -1,14 +1,27 @@
 # Mode: interview-prep — Company-Specific Interview Intelligence
 
-When the user asks to prep for an interview at a specific company+role, or when an evaluation scores 4.0+ and the user updates status to `Interview`, run this mode.
+When the user asks to prep for an interview at a specific company+role, or when status is updated to `Interview`, run this mode.
 
 ## Inputs
 
 1. **Company name** and **role title** (required)
-2. **Evaluation report** in `reports/` (if exists) — read for archetype, gaps, matched proof points
-3. **Story bank** at `interview-prep/story-bank.md` — read for existing prepared stories
-4. **CV** at `cv.md` + `article-digest.md` — read for proof points
-5. **Profile** at `config/profile.yml` + `modes/_profile.md` — read for candidate context
+2. **Application folder** at `applications/{id}/` (if exists):
+   - `job-description.md` — the exact JD used for the evaluation
+   - `resume.md` — the tailored resume used for this application
+   - `cover-letter.md` — the cover letter sent
+   - `score.json` — the evaluation score and gaps
+3. **Evaluation report** in `reports/` (if exists) — read for archetype, gaps, matched proof points
+4. **Story bank** at `interview-prep/story-bank.md` — read for existing prepared stories
+5. **CV** at `cv.md` + `article-digest.md` — read for proof points
+6. **Profile** at `config/profile.yml` + `modes/_profile.md` — read for candidate context
+
+## Finding the Application Folder
+
+To find the application folder for a company+role:
+1. Read `data/applications.json` and find the entry where `company` and `jobTitle` match
+2. Use the `applicationFolder` field to locate the folder
+3. If multiple entries match, use the most recent one (by `createdAt`)
+4. If no entry exists, fall back to just the evaluation report in `reports/`
 
 ## Step 1 — Research
 
@@ -230,6 +243,25 @@ Save the full report to `interview-prep/{company-slug}-{role-slug}.md` with this
 **Sources:** {N} Glassdoor reviews, {N} Blind posts, {N} other
 **Audiences covered:** {recruiter-screen, hiring-manager, peer-tech, panel-mixed}
 ```
+
+## Save to Application Folder
+
+After generating the report, save it in TWO places:
+
+1. **Legacy location** (keep for compatibility): `interview-prep/{company-slug}-{role-slug}.md`
+
+2. **Application folder** (preferred): `applications/{id}/interview.md`
+   - Find `{id}` from `data/applications.json` by matching company + role
+   - If the folder does not exist, create only this file (don't create a full new-application folder)
+
+**Update `applications/{id}/metadata.json`:**
+- Set `interviewPrepPath` → `applications/{id}/interview.md`
+- Set `updatedAt` → today
+
+**Update `data/applications.json`:**
+- Set `interviewPrepPath` → `applications/{id}/interview.md`
+- Set `updatedAt` → today
+- Ensure `status` = `Interview`
 
 ## Post-Research
 

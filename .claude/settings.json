@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(mkdir -p \"c:\\\\Users\\\\giris\\\\OneDrive\\\\Desktop\\\\Projects\\\\Job applications automation\\\\career-ops\\\\frontend\\\\app\\\\api\\\\applications\\\\[id]\\\\status\")",
+      "Bash(mkdir -p \"c:\\\\Users\\\\giris\\\\OneDrive\\\\Desktop\\\\Projects\\\\Job applications automation\\\\career-ops\\\\frontend\\\\app\\\\api\\\\applications\\\\[id]\")",
+      "Bash(mkdir -p \"c:\\\\Users\\\\giris\\\\OneDrive\\\\Desktop\\\\Projects\\\\Job applications automation\\\\career-ops\\\\frontend\\\\app\\\\applications\\\\[id]\")",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3000/api/applications)",
+      "Bash(curl -s http://localhost:3000/api/applications/d2l-new-graduate-software-developer-2026-05-28)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('company:', d['company']\\); print\\('score:', d['score']\\); print\\('resumeMd chars:', len\\(d.get\\('resumeMd'\\) or ''\\)\\); print\\('coverLetterMd chars:', len\\(d.get\\('coverLetterMd'\\) or ''\\)\\); print\\('jobDescription chars:', len\\(d.get\\('jobDescription'\\) or ''\\)\\)\")",
+      "Bash(npx next *)",
+      "Bash(ping -n 4 127.0.0.1)",
+      "Bash(curl -s -o nul -w \"%{http_code}\" http://localhost:3001)",
+      "Bash(curl -s -o nul -w \"%{http_code}\" http://localhost:3000)",
+      "Bash(python -c \"import sys,json; apps=json.load\\(sys.stdin\\); print\\(f'Applications loaded: {len\\(apps\\)}'\\); [print\\(f'  - {a[\\\\\"company\\\\\"]} | {a[\\\\\"status\\\\\"]} | Score: {a[\\\\\"score\\\\\"]}'\\) for a in apps]\")",
+      "Bash(node -e \"require\\('js-yaml'\\); console.log\\('js-yaml ok'\\)\")",
+      "Bash(node list-applications.mjs)",
+      "Bash(dir /b)",
+      "Read(//c/Users/giris/.claude/projects/c--Users-giris-OneDrive-Desktop-Projects-Job-applications-automation-career-ops/memory/**)",
+      "Bash(mkdir -p \"c:/Users/giris/OneDrive/Desktop/Projects/Job applications automation/career-ops/frontend/app/api/generate-docs/[id]\" 2>&1 || true; echo \"done\")",
+      "Bash(node \"c:\\\\Users\\\\giris\\\\OneDrive\\\\Desktop\\\\Projects\\\\Job applications automation\\\\career-ops\\\\update-system.mjs\" check)",
+      "Bash(npx tsc *)",
+      "Bash(powershell -Command \"\\(Get-Content chat\\\\route.ts\\) -replace 'gemini-2.0-flash','gemini-1.5-flash' | Set-Content chat\\\\route.ts; \\(Get-Content evaluate\\\\route.ts\\) -replace 'gemini-2.0-flash','gemini-1.5-flash' | Set-Content evaluate\\\\route.ts; \\(Get-Content 'generate-docs\\\\[id]\\\\route.ts'\\) -replace 'gemini-2.0-flash','gemini-1.5-flash' | Set-Content 'generate-docs\\\\[id]\\\\route.ts'; \\(Get-Content interview\\\\route.ts\\) -replace 'gemini-2.0-flash','gemini-1.5-flash' | Set-Content interview\\\\route.ts\")",
+      "Bash(node -e \"const pkg = require\\('./node_modules/@google/generative-ai/package.json'\\); console.log\\(pkg.version\\)\")",
+      "Bash(npm uninstall *)",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\giris\\\\OneDrive\\\\Desktop\\\\Projects\\\\Job applications automation\\\\career-ops\\\\frontend\\\\app\\\\api\\\\applications\\\\[id]\\\\pdf\")",
+      "Bash(Out-Null)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\giris\\OneDrive\\Desktop\\Projects\\Job applications automation\\career-ops\\frontend\\app\\api\\generate-docs",
+      "c:\\Users\\giris\\OneDrive\\Desktop\\Projects\\Job applications automation\\career-ops\\frontend\\app\\api\\applications\\[id]"
+    ]
+  }
+}

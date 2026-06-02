@@ -10,87 +10,177 @@
    - US/Canada → `letter`
    - Rest of the world → `a4`
 6. Detect role archetype → adapt framing
-7. Rewrite Professional Summary by injecting JD keywords + exit narrative bridge ("Built and sold a business. Now applying systems thinking to [JD domain].")
+7. Rewrite Professional Summary by injecting JD keywords + candidate narrative bridge (use `modes/_profile.md` exit narrative and positioning for the detected archetype)
 8. Select top 3-4 most relevant projects for the job
 9. Reorder experience bullets by JD relevance
 10. Build competency grid from JD requirements (6-8 keyword phrases)
 11. Inject keywords naturally into existing achievements (NEVER invent)
 12. Generate full HTML from template + personalized content
-13. Read `name` from `config/profile.yml` → normalize to kebab-case lowercase (e.g. "John Doe" → "john-doe") → `{candidate}`
+13. Read `name` from `config/profile.yml` → normalize to kebab-case lowercase (e.g. "Girish Bhuteja" → "girish-bhuteja") → `{candidate}`
 14. Write HTML to `/tmp/cv-{candidate}-{company}.html`
 15. Execute: `node generate-pdf.mjs /tmp/cv-{candidate}-{company}.html output/cv-{candidate}-{company}-{YYYY-MM-DD}.pdf --format={letter|a4}`
-16. Report: PDF path, number of pages, keyword coverage %
+16. **Save tailored resume Markdown** to `applications/{id}/resume.md` (the full tailored markdown used to generate this PDF)
+17. **Copy PDF** to `applications/{id}/resume.pdf`
+18. **Update `applications/{id}/metadata.json`**: set `resumePath` → `applications/{id}/resume.pdf`, `updatedAt` → today, `status` → `Resume Generated`
+19. **Update `data/applications.json`**: set `resumePath`, `status`, `updatedAt` for the matching entry
+20. Report: PDF path, application folder path, number of pages, keyword coverage %
+
+**Note on application ID:** When called from the auto-pipeline, the `{id}` is already established in Step 0.5. When called standalone (`/career-ops pdf`), compute `{id}` the same way: `{slugify(company)}-{slugify(role)}-{YYYY-MM-DD}`. If the folder does not exist yet, create it (same structure as auto-pipeline Step 0.5).
 
 ## ATS Rules (clean parsing)
 
 - Single-column layout (no sidebars, no parallel columns)
-- Standard headers: "Professional Summary", "Work Experience", "Education", "Skills", "Certifications", "Projects"
+- Standard section headers: Technical Skills, Education, Professional Experience, Project Experience, Extracurricular Activities
 - No text in images/SVGs
 - No critical info in PDF headers/footers (ATS ignores them)
 - UTF-8, selectable text (not rasterized)
 - No nested tables
-- Distributed JD keywords: Summary (top 5), first bullet of each role, Skills section
+- Distributed JD keywords: Summary paragraph (top 5), first bullet of each role, Skills table
 
 ## PDF Design
 
-- **Fonts**: Space Grotesk (headings, 600-700) + DM Sans (body, 400-500)
+- **Fonts**: Space Grotesk (name + section titles) + DM Sans (all body text)
 - **Fonts self-hosted**: `fonts/`
-- **Header**: name in Space Grotesk 24px bold + gradient line `linear-gradient(to right, hsl(187,74%,32%), hsl(270,70%,45%))` 2px + contact row
-- **Section headers**: Space Grotesk 13px, uppercase, letter-spacing 0.05em, color cyan primary
-- **Body**: DM Sans 11px, line-height 1.5
-- **Company names**: accent purple color `hsl(270,70%,45%)`
-- **Margins**: 0.6in
+- **Header**: name centered (Space Grotesk 22pt bold) + contact line (10pt) with bullet separators: `Location • email • phone • LinkedIn • Portfolio • GitHub`
+- **Rule**: 1.5px solid black below header; 1px solid black below each section title
+- **Section titles**: Space Grotesk 10.5pt bold, ALL CAPS, centered, black
+- **Body**: DM Sans 10.5pt, line-height 1.45, black on white
+- **No colors, no gradients, no colored accents** — plain black and white
+- **Margins**: 0.5in top/bottom, 0.65in left/right
 - **Background**: pure white
 
-## Section order (optimized "6-second recruiter scan")
+## Section order
 
-1. Header (large name, gradient, contact, portfolio link)
-2. Professional Summary (3-4 lines, keyword-dense)
-3. Core Competencies (6-8 keyword phrases in flex-grid)
-4. Work Experience (reverse chronological)
-5. Projects (top 3-4 most relevant)
-6. Education & Certifications
-7. Skills (languages + technical)
+1. Header — centered name + contact line + horizontal rule
+2. Professional Summary — 2-3 lines, no section label, flows directly under header rule
+3. Technical Skills — two-column table: **bold category name** | skills list
+4. Education — degree, institution, location | dates (right-aligned), bullet notes
+5. Professional Experience — reverse chronological, **bold title**, company, location | dates
+6. Project Experience — **bold name**, GitHub link | year, with bullets: **Overview:** / **Technology Stack:** / **Outcome:**
+7. Extracurricular Activities — top 3-4 most relevant to the JD, **bold role**, org | dates
+
+## Content generation rules
+
+**Summary (step 7):** 2-3 sentences. Use the candidate's narrative from `modes/_profile.md` as the base. Inject 3-5 JD keywords naturally. Keep it factual — no claims not backed by `cv.md`.
+
+**Skills (step 10):** Keep the same 5 categories from `cv.md`. Within each category, reorder and front-load the skills most relevant to the JD. Do NOT add skills the candidate doesn't have.
+
+**Experience bullets (step 9):** 2-3 bullets per role on a 2-page resume. Lead each bullet with the JD-relevant action. Keep metrics intact — do not invent or inflate numbers.
+
+**Projects (step 8):** Select top 3 most relevant. Use **Overview / Technology Stack / Outcome** format exactly. Keep Outcome bullet — it has the metrics. Rewrite Technology Stack line to front-load JD-relevant technologies.
+
+**Extracurricular (step 8):** Select top 3-4 most relevant to the JD. One bullet per entry. For technical roles: IT Club and HackTheBrain are usually most relevant.
+
+**2-page rule:** If content exceeds 2 pages in the PDF, trim in this order:
+1. Reduce extracurricular entries from 4 to 3
+2. Reduce each experience entry from 3 bullets to 2
+3. Reduce projects from 3 to 2 (keep the top 2 by JD relevance)
+Never trim Education or the Skills table.
 
 ## Keyword injection strategy (ethical, truth-based)
 
 Examples of legitimate reformulation:
-- JD says "RAG pipelines" and CV says "LLM workflows with retrieval" → change to "RAG pipeline design and LLM orchestration workflows"
-- JD says "MLOps" and CV says "observability, evals, error handling" → change to "MLOps and observability: evals, error handling, cost monitoring"
-- JD says "stakeholder management" and CV says "collaborated with team" → change to "stakeholder management across engineering, operations, and business"
+- JD says "REST APIs" and cv.md says "integrated third-party APIs" → change to "integrated 5+ RESTful APIs"
+- JD says "agile development" and cv.md says "Agile Methodologies" → change to "agile development workflows"
+- JD says "cross-functional collaboration" and cv.md says "collaborated with SMEs and teams" → change to "cross-functional collaboration with subject matter experts and internal teams"
 
-**NEVER add skills that the candidate does not have. Only reword real experience using the exact JD vocabulary.**
+**NEVER add skills, tools, or experience the candidate does not have. Only reword real experience using the exact JD vocabulary.**
 
 ## Template HTML
 
-Use the template in `cv-template.html`. Replace the `{{...}}` placeholders with personalized content:
+Use `templates/cv-template.html`. Replace every `{{...}}` placeholder:
 
 | Placeholder | Content |
-|-------------|-----------|
-| `{{LANG}}` | `en` or `es` |
-| `{{PAGE_WIDTH}}` | `8.5in` (letter) or `210mm` (A4) |
-| `{{NAME}}` | (from profile.yml) |
-| `{{PHONE}}` | (from profile.yml — include with its separator only when `profile.yml` has a non-empty `phone` value; omit both `<span>` and `<span class="separator">` otherwise) |
-| `{{EMAIL}}` | (from profile.yml) |
-| `{{LINKEDIN_URL}}` | [from profile.yml] |
-| `{{LINKEDIN_DISPLAY}}` | [from profile.yml] |
-| `{{PORTFOLIO_URL}}` | [from profile.yml] (or /es depending on language) |
-| `{{PORTFOLIO_DISPLAY}}` | [from profile.yml] (or /es depending on language) |
-| `{{LOCATION}}` | [from profile.yml] |
-| `{{SECTION_SUMMARY}}` | Professional Summary |
-| `{{SUMMARY_TEXT}}` | Personalized summary with keywords |
-| `{{SECTION_COMPETENCIES}}` | Core Competencies |
-| `{{COMPETENCIES}}` | `<span class="competency-tag">keyword</span>` × 6-8 |
-| `{{SECTION_EXPERIENCE}}` | Work Experience |
-| `{{EXPERIENCE}}` | HTML for each job with reordered bullets |
-| `{{SECTION_PROJECTS}}` | Projects |
-| `{{PROJECTS}}` | HTML for top 3-4 projects |
-| `{{SECTION_EDUCATION}}` | Education |
-| `{{EDUCATION}}` | Education HTML |
-| `{{SECTION_CERTIFICATIONS}}` | Certifications |
-| `{{CERTIFICATIONS}}` | Certifications HTML |
-| `{{SECTION_SKILLS}}` | Skills |
-| `{{SKILLS}}` | Skills HTML |
+|-------------|---------|
+| `{{LANG}}` | `en` (or language of JD) |
+| `{{PAGE_WIDTH}}` | `8.5in` for US/Canada; `210mm` for rest of world |
+| `{{NAME}}` | `candidate.full_name` from `config/profile.yml` |
+| `{{LOCATION}}` | `candidate.location` from `config/profile.yml` |
+| `{{EMAIL}}` | `candidate.email` from `config/profile.yml` |
+| `{{PHONE_SPAN}}` | When `candidate.phone` is set: `{phone}<span class="bsep">•</span>` — omit entirely if phone is empty |
+| `{{LINKEDIN_URL}}` | `candidate.linkedin` from `config/profile.yml` |
+| `{{LINKEDIN_DISPLAY}}` | `LinkedIn` (link text) |
+| `{{PORTFOLIO_URL}}` | `candidate.portfolio_url` from `config/profile.yml` |
+| `{{PORTFOLIO_DISPLAY}}` | Hostname only, e.g. `girishbhuteja.com` |
+| `{{GITHUB_URL}}` | `candidate.github` from `config/profile.yml` |
+| `{{GITHUB_DISPLAY}}` | `GitHub` (link text) |
+| `{{SUMMARY_TEXT}}` | 2-3 sentence summary with JD keywords injected |
+| `{{SKILLS}}` | `<table class="skills-table">` with one `<tr>` per category: `<td class="skill-cat">Category:</td><td>skills list</td>` |
+| `{{EDUCATION}}` | One `.entry` div per degree — see HTML format below |
+| `{{EXPERIENCE}}` | One `.entry` div per job (top 3-4 most recent/relevant) |
+| `{{PROJECTS}}` | One `.project` div per project (top 3) |
+| `{{EXTRACURRICULAR}}` | One `.entry` div per activity (top 3-4) |
+
+### HTML formats for each section
+
+**Skills table:**
+```html
+<table class="skills-table">
+  <tr>
+    <td class="skill-cat">Programming Languages:</td>
+    <td>Python, JavaScript, TypeScript, C#, Java, HTML, CSS</td>
+  </tr>
+  <tr>
+    <td class="skill-cat">Frameworks &amp; Technologies:</td>
+    <td>React.js, Node.js, Next.js, Flask, Bootstrap</td>
+  </tr>
+</table>
+```
+
+**Education entry:**
+```html
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left"><span class="entry-title">Bachelor Of Computer Science (Honours)</span>, Conestoga College, Waterloo, ON</div>
+    <div class="entry-right">September 2022 – August 2026</div>
+  </div>
+  <ul>
+    <li>Available for full-time roles starting August 2026</li>
+  </ul>
+</div>
+```
+
+**Experience entry:**
+```html
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left"><span class="entry-title">Web and Tech Integration Intern (Volunteer)</span>, Olive Branch Mentorship Inc., Cambridge, ON</div>
+    <div class="entry-right">May 2025 – Present</div>
+  </div>
+  <ul>
+    <li>Tailored bullet 1 with JD-relevant keyword injected.</li>
+    <li>Tailored bullet 2 with metric preserved.</li>
+  </ul>
+</div>
+```
+
+**Project entry:**
+```html
+<div class="project">
+  <div class="project-header">
+    <div class="project-name">MediTwin, <a href="https://github.com/Girish0744">GitHub</a></div>
+    <div class="project-year">2025</div>
+  </div>
+  <ul>
+    <li><strong>Overview:</strong> Designed an AI-driven health companion app delivering personalized medication insights.</li>
+    <li><strong>Technology Stack:</strong> Next.js, React, Flask, Google Gemini API, OpenFDA API.</li>
+    <li><strong>Outcome:</strong> Reduced manual drug research time by 40% through automated interaction checks.</li>
+  </ul>
+</div>
+```
+
+**Extracurricular entry:**
+```html
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left"><span class="entry-title">President – IT Club</span>, Conestoga College</div>
+    <div class="entry-right">March 2025 – Present</div>
+  </div>
+  <ul>
+    <li>Led 10+ technical workshops, hackathons, and networking events empowering 100+ students with in-demand tech skills.</li>
+  </ul>
+</div>
+```
 
 ## Canva CV Generation (optional)
 

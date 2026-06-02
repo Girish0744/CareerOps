@@ -1,0 +1,38 @@
+{
+  "overallScore": 82,
+  "fitLevel": "Apply",
+  "recommendation": "Apply",
+  "summary": "Girish is a strong fit for the Full Stack Developer role due to his proven experience with React, Next.js, and Node.js, demonstrated through multiple projects like MediTwin and his personal portfolio. His skills in API integration, database management, and agile methodologies align well with the job requirements. While the JD emphasizes \"intermediate to senior,\" Girish's strong project work and quick learning ability make him a viable candidate for this level.",
+  "categories": {
+    "experienceMatch": 22,
+    "skillsMatch": 16,
+    "roleLevelMatch": 10,
+    "locationMatch": 10,
+    "industryMatch": 8,
+    "growthPotential": 8,
+    "riskFactors": 4
+  },
+  "matchedKeywords": [
+    "full stack",
+    "React",
+    "Next.js",
+    "Node.js",
+    "API",
+    "database",
+    "JavaScript",
+    "HTML",
+    "CSS",
+    "agile",
+    "CI/CD"
+  ],
+  "missingKeywords": [
+    "senior",
+    "Docker",
+    "Kubernetes",
+    "AWS",
+    "microservices",
+    "TypeScript"
+  ],
+  "notes": "Girish is a strong fit for the Full Stack Developer role due to his proven experience with React, Next.js, and Node.js, demonstrated through multiple projects like MediTwin and his personal portfolio. His skills in API integration, database management, and agile methodologies align well with the job requirements. While the JD emphasizes \"intermediate to senior,\" Girish's strong project work and quick learning ability make him a viable candidate for this level.",
+  "evaluatedAt": "2026-05-29"
+}

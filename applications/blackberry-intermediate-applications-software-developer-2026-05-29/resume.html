@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Girish Bhuteja — Resume</title>
+<style>
+  @font-face {
+    font-family: 'Space Grotesk';
+    src: url('../../fonts/space-grotesk-latin.woff2') format('woff2');
+    font-weight: 300 700;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: 'Space Grotesk';
+    src: url('../../fonts/space-grotesk-latin-ext.woff2') format('woff2');
+    font-weight: 300 700;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+  @font-face {
+    font-family: 'DM Sans';
+    src: url('../../fonts/dm-sans-latin.woff2') format('woff2');
+    font-weight: 100 1000;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  }
+  @font-face {
+    font-family: 'DM Sans';
+    src: url('../../fonts/dm-sans-latin-ext.woff2') format('woff2');
+    font-weight: 100 1000;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+0100-02AF, U+0304, U+0308, U+0329, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    font-family: 'DM Sans', Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.45;
+    color: #000000;
+    background: #ffffff;
+    width: 8.5in;
+    padding: 0.5in 0.65in;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    text-align: center;
+    margin-bottom: 6px;
+  }
+
+  .header-name {
+    font-family: 'Space Grotesk', Arial, sans-serif;
+    font-size: 22pt;
+    font-weight: 700;
+    color: #000000;
+    letter-spacing: -0.01em;
+    margin-bottom: 5px;
+  }
+
+  .contact-line {
+    font-size: 10pt;
+    color: #000000;
+    line-height: 1.5;
+  }
+
+  .contact-line a {
+    color: #000000;
+    text-decoration: underline;
+  }
+
+  .bsep {
+    margin: 0 5px;
+    color: #000000;
+  }
+
+  /* ── DIVIDERS ── */
+  .header-rule {
+    border: none;
+    border-top: 1.5px solid #000000;
+    margin: 6px 0 7px;
+  }
+
+  .section-rule {
+    border: none;
+    border-top: 1px solid #000000;
+    margin: 2px 0 5px;
+  }
+
+  /* ── SECTION TITLES ── */
+  .section-title {
+    text-align: center;
+    font-family: 'Space Grotesk', Arial, sans-serif;
+    font-size: 10.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #000000;
+    margin: 10px 0 1px;
+  }
+
+  /* ── SUMMARY ── */
+  .summary {
+    font-size: 10.5pt;
+    line-height: 1.5;
+    margin-bottom: 2px;
+  }
+
+  /* ── SKILLS TABLE ── */
+  .skills-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .skills-table td {
+    vertical-align: top;
+    padding: 1.5px 0;
+    font-size: 10.5pt;
+    line-height: 1.45;
+  }
+  .skill-cat {
+    font-weight: 700;
+    width: 185pt;
+    padding-right: 6pt;
+    white-space: nowrap;
+  }
+
+  /* ── ENTRY (Education, Experience, Extracurricular) ── */
+  .entry {
+    margin-bottom: 9px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .entry:last-child { margin-bottom: 0; }
+
+  .entry-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .entry-left {
+    font-size: 10.5pt;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .entry-title {
+    font-weight: 700;
+  }
+
+  .entry-right {
+    font-size: 10.5pt;
+    font-weight: 700;
+    white-space: nowrap;
+    margin-left: 10pt;
+  }
+
+  /* ── BULLET LISTS ── */
+  ul {
+    margin: 3px 0 0 0;
+    padding-left: 18px;
+  }
+
+  li {
+    font-size: 10.5pt;
+    line-height: 1.45;
+    margin-bottom: 2px;
+  }
+
+  li:last-child { margin-bottom: 0; }
+
+  /* ── PROJECTS ── */
+  .project {
+    margin-bottom: 9px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .project:last-child { margin-bottom: 0; }
+
+  .project-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .project-name {
+    font-size: 10.5pt;
+    font-weight: 700;
+    flex: 1;
+  }
+
+  .project-name a {
+    color: #000000;
+    text-decoration: underline;
+    font-weight: 400;
+  }
+
+  .project-year {
+    font-size: 10.5pt;
+    font-weight: 700;
+    white-space: nowrap;
+    margin-left: 10pt;
+  }
+
+  /* ── PRINT ── */
+  @media print {
+    body { padding: 0.5in 0.65in; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-name">Girish Bhuteja</div>
+  <div class="contact-line">
+    Cambridge, ON<span class="bsep">•</span><!--
+    --><a href="mailto:girishbhuteja07@gmail.com">girishbhuteja07@gmail.com</a><span class="bsep">•</span><!--
+    -->(416) 473-8204,<a href="https://linkedin.com/in/girishbhuteja/">LinkedIn</a><span class="bsep">•</span><!--
+    --><a href="https://girishbhuteja.com">girishbhuteja.com</a><span class="bsep">•</span><!--
+    --><a href="https://github.com/Girish0744">GitHub</a>
+  </div>
+</div>
+
+<hr class="header-rule">
+
+<!-- SUMMARY -->
+<div class="summary">A Computer Science Technologist specializing in full-stack and mobile application development, passionate about building secure, intelligent, and user-centric solutions. Experienced in Java, C#, C++, Python, and modern frameworks, with a strong foundation in OOP and agile methodologies. Eager to contribute to cutting-edge cybersecurity applications at BlackBerry and rapidly learn new technologies in a dynamic environment.</div>
+
+<!-- TECHNICAL SKILLS -->
+<div class="section-title">Technical Skills</div>
+<hr class="section-rule">
+<table class="skills-table">
+  <tr>
+    <td class="skill-cat"><strong>Programming Languages</strong></td>
+    <td>Java, C#, Python, C, C++, HTML, CSS, JavaScript, React</td>
+  </tr>
+  <tr>
+    <td class="skill-cat"><strong>Frameworks/Technologies</strong></td>
+    <td>React.js, Next.js, Flask, Android Studio, Node.js, WordPress, Bootstrap</td>
+  </tr>
+  <tr>
+    <td class="skill-cat"><strong>Concepts</strong></td>
+    <td>Object-Oriented Programming (OOP), RESTful APIs, Agile Methodologies, CI/CD, Debugging, Performance Optimization, Mobile Application Development</td>
+  </tr>
+  <tr>
+    <td class="skill-cat"><strong>Developer Tools</strong></td>
+    <td>Visual Studio Code, Eclipse, Unity, Git, Microsoft Azure, Postman, Google Cloud Platform, Selenium</td>
+  </tr>
+  <tr>
+    <td class="skill-cat"><strong>Big Data/Analytics</strong></td>
+    <td>Apache Hadoop, Hive, Pig, Power BI, MySQL</td>
+  </tr>
+</table>
+
+<!-- EDUCATION -->
+<div class="section-title">Education</div>
+<hr class="section-rule">
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left">
+      <div class="entry-title">Bachelor of Computer Science (Honours)</div>
+      <div>Conestoga College -- Waterloo, ON</div>
+    </div>
+    <div class="entry-right">September 2022 - August 2026</div>
+  </div>
+  <ul>
+    <li>Available for full-time roles starting August 2026.</li>
+  </ul>
+</div>
+
+<!-- PROFESSIONAL EXPERIENCE -->
+<div class="section-title">Professional Experience</div>
+<hr class="section-rule">
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left">
+      <div class="entry-title">Web and Tech Integration Intern (Volunteer)</div>
+      <div>Olive Branch Mentorship Inc. -- Cambridge, ON</div>
+    </div>
+    <div class="entry-right">May 2025 - Present</div>
+  </div>
+  <ul>
+    <li>Developed and implemented web features using front-end and back-end technologies, improving site performance and user experience.</li>
+    <li>Identified and resolved front-end and back-end issues, improving performance and cross-platform compatibility.</li>
+    <li>Integrated 5+ third-party APIs and optimized backend workflows, improving data synchronization efficiency and user response time.</li>
+  </ul>
+</div>
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left">
+      <div class="entry-title">Open Education Tech Project Assistant</div>
+      <div>Conestoga College -- Waterloo, ON</div>
+    </div>
+    <div class="entry-right">January 2025 - Present</div>
+  </div>
+  <ul>
+    <li>Developed and published 5+ Open Educational Resources (OER) using HTML, CSS, Pressbooks, H5P, and WordPress, improving usability for 1,000+ students.</li>
+    <li>Reviewed and optimized digital content, increasing engagement by 20% through interactive learning activities.</li>
+    <li>Collaborated with subject matter experts and internal teams through Zoom to support timely delivery of projects and events.</li>
+  </ul>
+</div>
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left">
+      <div class="entry-title">Techno-functional Freight Associate</div>
+      <div>The Home Depot -- Brampton, ON</div>
+    </div>
+    <div class="entry-right">January 2023 - Present</div>
+  </div>
+  <ul>
+    <li>Streamlined inventory management using tools such as My Toolbelt and Article Lookup, improving order processing efficiency by 20%.</li>
+    <li>Lead daily operations and mentor new associates on troubleshooting order processing issues, inventory solutions, and equipment usage.</li>
+    <li>Trained 10+ operators on forklift and reach truck usage while maintaining a 100% safety record.</li>
+  </ul>
+</div>
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left">
+      <div class="entry-title">Student Ambassador - Community Initiatives</div>
+      <div>Conestoga College -- Waterloo, ON</div>
+    </div>
+    <div class="entry-right">October 2024 - May 2025</div>
+  </div>
+  <ul>
+    <li>Engaged 300+ students through outreach programs, increasing activity participation by 25% while promoting inclusivity and cultural awareness.</li>
+    <li>Organized 10+ initiatives, increasing engagement and volunteer participation by 30%.</li>
+    <li>Delivered on-campus support with 95% accuracy, improving the student experience and satisfaction.</li>
+  </ul>
+</div>
+
+<!-- PROJECT EXPERIENCE -->
+<div class="section-title">Project Experience</div>
+<hr class="section-rule">
+<div class="project">
+  <div class="project-header">
+    <div class="project-name">MediTwin</div>
+    <div class="project-year"></div>
+  </div>
+  Designed an AI-driven health companion mobile application providing personalized medication insights by analyzing user health data and prescriptions.
+  <ul>
+    <li>Built with <strong>Next.js, React, Flask, Google Gemini API</strong>, and <strong>OpenFDA API</strong>, demonstrating expertise in modern application systems and API integration.</li>
+    <li>Reduced manual drug research time by 40% through automated interaction checks and personalized reports, highlighting a problem-solving approach.</li>
+  </ul>
+</div>
+<div class="project">
+  <div class="project-header">
+    <div class="project-name">MediNet+</div>
+    <div class="project-year"></div>
+  </div>
+  Led the development of a hospital management system to improve administrative and patient care workflows.
+  <ul>
+    <li>Built with <strong>C#, socket programming</strong>, a multi-user GUI, and automated testing using <strong>Selenium</strong>, showcasing strong proficiency in object-oriented compiled languages.</li>
+    <li>Reduced testing time by 20% and improved efficiency in record management and scheduling, reflecting an empirical approach to development and debugging.</li>
+  </ul>
+</div>
+<div class="project">
+  <div class="project-header">
+    <div class="project-name">DineEase</div>
+    <div class="project-year"></div>
+  </div>
+  Developed a customer-focused omnichannel ordering system to streamline restaurant operations.
+  <ul>
+    <li>Built using <strong>C#</strong>, Guna UI, HTML, CSS, and multiple payment gateway integrations, demonstrating full-stack capabilities and a focus on user experience.</li>
+    <li>Reduced order processing time by 30% and improved customer satisfaction through better payment and tracking features, showcasing impact-driven development.</li>
+  </ul>
+</div>
+<div class="project">
+  <div class="project-header">
+    <div class="project-name">Personal Portfolio</div>
+    <div class="project-year"></div>
+  </div>
+  Created a responsive personal portfolio to highlight professional experience, skills, and projects in a clean and accessible format.
+  <ul>
+    <li>Built with <strong>React, Vite, Tailwind CSS, ShadCN UI, Lucide icons, Google Fonts</strong>, and responsive animations. Deployed on Vercel.</li>
+  </ul>
+</div>
+
+<!-- EXTRACURRICULAR ACTIVITIES -->
+<div class="section-title">Extracurricular Activities</div>
+<hr class="section-rule">
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left">
+      <div class="entry-title">President - IT Club</div>
+      <div>Conestoga College</div>
+    </div>
+    <div class="entry-right">March 2025 - Present</div>
+  </div>
+  <ul>
+    <li>Led 10+ technical workshops, hackathons, and networking events to support 100+ students with in-demand tech skills and industry connections, demonstrating leadership and knowledge sharing.</li>
+  </ul>
+</div>
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left">
+      <div class="entry-title">Director - Student Success Team</div>
+      <div>HackTheBrain</div>
+    </div>
+    <div class="entry-right">March 2025 - Present</div>
+  </div>
+  <ul>
+    <li>Led participant operations for a 250+ attendee AI hackathon, managing onboarding, logistics, and support to create a smooth and inclusive event experience, applying a hackathon mindset to event management.</li>
+  </ul>
+</div>
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left">
+      <div class="entry-title">Leadership Workshop - Challenging Discrimination</div>
+      <div>Conestoga College</div>
+    </div>
+    <div class="entry-right">June 2024</div>
+  </div>
+  <ul>
+    <li>Led interactive discussions and activities with 30 participants to support leadership development and inclusivity, contributing to a 40% increase in participant engagement in diversity initiatives.</li>
+  </ul>
+</div>
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left">
+      <div class="entry-title">Orientation Volunteer</div>
+      <div>Conestoga College</div>
+    </div>
+    <div class="entry-right">January, May, September 2023 - 2024</div>
+  </div>
+  <ul>
+    <li>Collaborated with the tech team to register 500+ new students per term and support ID distribution, contributing to a 25% improvement in new student satisfaction.</li>
+  </ul>
+</div>
+
+</body>
+</html>
