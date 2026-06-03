@@ -34,11 +34,16 @@ mkdirSync(join(CAREER_OPS, 'data'), { recursive: true });
 mkdirSync(REPORTS_DIR, { recursive: true });
 
 const CANONICAL_STATUSES = [
-  'evaluated', 'applied', 'responded', 'interview',
-  'offer', 'rejected', 'discarded', 'skip',
+  'saved', 'evaluated', 'resume generated', 'cover letter generated',
+  'ready to apply', 'applied', 'responded', 'in progress', 'interview',
+  'offer', 'rejected', 'withdrawn', 'discarded', 'skip',
 ];
 
 const ALIASES = {
+  'cv generated': 'resume generated',
+  'letter generated': 'cover letter generated',
+  'ready': 'ready to apply',
+  'active process': 'in progress',
   'evaluada': 'evaluated', 'condicional': 'evaluated', 'hold': 'evaluated', 'evaluar': 'evaluated', 'verificar': 'evaluated',
   'aplicado': 'applied', 'enviada': 'applied', 'aplicada': 'applied', 'applied': 'applied', 'sent': 'applied',
   'respondido': 'responded',

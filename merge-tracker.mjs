@@ -34,7 +34,11 @@ mkdirSync(join(CAREER_OPS, 'data'), { recursive: true });
 mkdirSync(ADDITIONS_DIR, { recursive: true });
 
 // Canonical states and aliases
-const CANONICAL_STATES = ['Evaluated', 'Applied', 'Responded', 'Interview', 'Offer', 'Rejected', 'Discarded', 'SKIP'];
+const CANONICAL_STATES = [
+  'Saved', 'Evaluated', 'Resume Generated', 'Cover Letter Generated',
+  'Ready to Apply', 'Applied', 'Responded', 'In Progress', 'Interview',
+  'Offer', 'Rejected', 'Withdrawn', 'Discarded', 'SKIP',
+];
 
 function validateStatus(status) {
   const clean = status.replace(/\*\*/g, '').replace(/\s+\d{4}-\d{2}-\d{2}.*$/, '').trim();
@@ -46,6 +50,10 @@ function validateStatus(status) {
 
   // Aliases
   const aliases = {
+    'cv generated': 'Resume Generated',
+    'letter generated': 'Cover Letter Generated',
+    'ready': 'Ready to Apply',
+    'active process': 'In Progress',
     // Spanish → English
     'evaluada': 'Evaluated', 'condicional': 'Evaluated', 'hold': 'Evaluated', 'evaluar': 'Evaluated', 'verificar': 'Evaluated',
     'aplicado': 'Applied', 'enviada': 'Applied', 'aplicada': 'Applied', 'applied': 'Applied', 'sent': 'Applied',

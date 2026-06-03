@@ -14,13 +14,16 @@ These files contain your personal data, customizations, and work product. Update
 | `article-digest.md` | Your proof points from portfolio |
 | `interview-prep/story-bank.md` | Your accumulated STAR+R stories |
 | `portals.yml` | Your customized company list |
+| `data/applications.json` | Frontend application index and metadata |
 | `data/applications.md` | Your application tracker |
 | `data/pipeline.md` | Your URL inbox |
 | `data/scan-history.tsv` | Your scan history |
+| `data/scored-queue.json` | Your frontend scan queue and quick-score results |
 | `data/follow-ups.md` | Your follow-up history |
 | `writing-samples/*` | Your personal writing samples for style calibration (except `writing-samples/README.md`, which is system-owned documentation delivered by updates) |
 | `reports/*` | Your evaluation reports |
 | `output/*` | Your generated PDFs |
+| `applications/*` | Per-application job descriptions, scores, resumes, cover letters, PDFs, interview prep, and edit history |
 | `jds/*` | Your saved job descriptions |
 
 ## System Layer (safe to auto-update)

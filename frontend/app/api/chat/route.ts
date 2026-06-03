@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { getApplication } from '@/lib/filesystem';
 import { saveDocumentEdit } from '@/lib/filesystem';
+import { apiErrorMessage } from '@/lib/errors';
+import { generateGeminiContent } from '@/lib/ai-config';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -12,6 +14,7 @@ interface ChatRequest {
 }
 
 export async function POST(req: Request) {
+  try {
   const body = await req.json() as ChatRequest;
   const { applicationId, message, history } = body;
 
@@ -59,15 +62,17 @@ Your job:
     { role: 'user', parts: [{ text: message }] },
   ];
 
-  const result = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
+  const { result } = await generateGeminiContent(ai, 'chat', {
     contents,
     config: {
       systemInstruction: systemPrompt,
-      maxOutputTokens: 4096,
+      maxOutputTokens: 8192,
+      temperature: 0.2,
+      thinkingConfig: { thinkingBudget: 0 },
     },
   });
   const text = result.text ?? '';
+  if (!text.trim()) throw new Error('Gemini returned an empty chat response.');
 
   // Auto-apply document edits if Claude returned an update block
   let appliedEdit: string | null = null;
@@ -88,7 +93,10 @@ Your job:
   const cleanText = text
     .replace(/===RESUME_UPDATE===[\s\S]*?===END_RESUME_UPDATE===/g, '')
     .replace(/===COVERLETTER_UPDATE===[\s\S]*?===END_COVERLETTER_UPDATE===/g, '')
-    .trim();
+    .trim() || (appliedEdit ? `Updated ${appliedEdit}. The live preview has been refreshed.` : 'Done.');
 
   return NextResponse.json({ reply: cleanText, appliedEdit });
+  } catch (err) {
+    return NextResponse.json({ error: apiErrorMessage(err) }, { status: 500 });
+  }
 }

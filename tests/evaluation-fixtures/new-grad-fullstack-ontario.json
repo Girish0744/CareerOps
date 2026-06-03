@@ -1,0 +1,23 @@
+{
+  "id": "new-grad-fullstack-ontario",
+  "description": "Ontario new-grad full-stack role that should remain a strong candidate after guardrails.",
+  "expected": { "min": 75, "max": 90 },
+  "jobDescription": "New Graduate Full Stack Software Developer, Kitchener, ON hybrid. Build user-facing features with React, Next.js, TypeScript, Node.js, REST APIs, SQL, and cloud deployment. Collaborate with designers and product managers, write clean code, participate in code reviews, and improve accessibility and performance. Qualifications: Bachelor's degree in Computer Science or equivalent, graduating students welcome. Experience from co-op, internships, coursework, hackathons, or personal projects is acceptable. Familiarity with C#, Java, Python, GitHub, API integrations, and AI tools is an asset. Must be eligible to work in Canada.",
+  "modelEvaluation": {
+    "score": 84,
+    "fitLevel": "Apply",
+    "recommendation": "Apply",
+    "summary": "Strong full-stack and location fit for Girish.",
+    "gaps": [],
+    "categories": {
+      "experienceMatch": 24,
+      "skillsMatch": 23,
+      "roleLevelMatch": 14,
+      "locationMatch": 10,
+      "industryMatch": 5,
+      "growthPotential": 8,
+      "riskFactors": 0
+    },
+    "missingKeywords": []
+  }
+}

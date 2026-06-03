@@ -483,6 +483,16 @@ func NormalizeStatus(raw string) string {
 	// Most restrictive first — accepts both English and Spanish
 	case strings.Contains(s, "no aplicar") || strings.Contains(s, "no_aplicar") || s == "skip" || strings.Contains(s, "geo blocker"):
 		return "skip"
+	case s == "saved":
+		return "saved"
+	case strings.Contains(s, "resume generated") || strings.Contains(s, "cv generated"):
+		return "resume_generated"
+	case strings.Contains(s, "cover letter generated") || strings.Contains(s, "letter generated"):
+		return "cover_letter_generated"
+	case strings.Contains(s, "ready to apply") || s == "ready":
+		return "ready_to_apply"
+	case strings.Contains(s, "in progress") || strings.Contains(s, "active process"):
+		return "in_progress"
 	case strings.Contains(s, "interview") || strings.Contains(s, "entrevista"):
 		return "interview"
 	case s == "offer" || strings.Contains(s, "oferta"):
@@ -493,6 +503,8 @@ func NormalizeStatus(raw string) string {
 		return "applied"
 	case strings.Contains(s, "rejected") || strings.Contains(s, "rechazado") || s == "rechazada":
 		return "rejected"
+	case strings.Contains(s, "withdrawn"):
+		return "withdrawn"
 	case strings.Contains(s, "discarded") || strings.Contains(s, "descartado") || s == "descartada" || s == "cerrada" || s == "cancelada" ||
 		strings.HasPrefix(s, "duplicado") || strings.HasPrefix(s, "dup"):
 		return "discarded"
@@ -596,20 +608,32 @@ func StatusPriority(status string) int {
 		return 0
 	case "offer":
 		return 1
-	case "responded":
+	case "in_progress":
 		return 2
-	case "applied":
+	case "responded":
 		return 3
-	case "evaluated":
+	case "applied":
 		return 4
-	case "skip":
+	case "ready_to_apply":
 		return 5
-	case "rejected":
+	case "cover_letter_generated":
 		return 6
-	case "discarded":
+	case "resume_generated":
 		return 7
-	default:
+	case "evaluated":
 		return 8
+	case "saved":
+		return 9
+	case "skip":
+		return 10
+	case "rejected":
+		return 11
+	case "withdrawn":
+		return 12
+	case "discarded":
+		return 13
+	default:
+		return 14
 	}
 }
 

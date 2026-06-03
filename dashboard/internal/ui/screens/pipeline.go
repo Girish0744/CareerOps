@@ -82,7 +82,9 @@ type pipelineTab struct {
 
 var pipelineTabs = []pipelineTab{
 	{filterAll, "ALL"},
+	{"saved", "SAVED"},
 	{filterEvaluated, "EVALUATED"},
+	{"ready_to_apply", "READY"},
 	{filterApplied, "APPLIED"},
 	{filterInterview, "INTERVIEW"},
 	{filterTop, "TOP ≥4"},
@@ -93,10 +95,18 @@ var pipelineTabs = []pipelineTab{
 
 var sortCycle = []string{sortScore, sortDate, sortCompany, sortStatus}
 
-var statusOptions = []string{"Evaluated", "Applied", "Responded", "Interview", "Offer", "Rejected", "Discarded", "SKIP"}
+var statusOptions = []string{
+	"Saved", "Evaluated", "Resume Generated", "Cover Letter Generated",
+	"Ready to Apply", "Applied", "Responded", "In Progress", "Interview",
+	"Offer", "Rejected", "Withdrawn", "Discarded", "SKIP",
+}
 
 // statusGroupOrder defines display order for grouped view.
-var statusGroupOrder = []string{"interview", "offer", "responded", "applied", "evaluated", "skip", "rejected", "discarded"}
+var statusGroupOrder = []string{
+	"interview", "offer", "in_progress", "responded", "applied",
+	"ready_to_apply", "cover_letter_generated", "resume_generated",
+	"evaluated", "saved", "skip", "rejected", "withdrawn", "discarded",
+}
 
 // PipelineModel implements the career pipeline dashboard screen.
 type PipelineModel struct {

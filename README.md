@@ -1,4 +1,97 @@
-# Career-Ops
+# Career-Ops — Girish Bhuteja's Personal Fork
+
+> **This is a personalized job search command center forked from [santifer/career-ops](https://github.com/santifer/career-ops) and customized for Girish Bhuteja's job search in Canada.**
+> The upstream README follows below. Personal extensions are documented in the section immediately beneath.
+
+---
+
+## Personal Implementation Status
+
+This fork extends the base career-ops system with a full **web frontend pipeline** powered by the Gemini API. No Claude Code session needed to evaluate jobs or generate documents — everything runs from the browser.
+
+### Completed Phases
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| 0 | Codebase inspection + CLAUDE.md baseline | ✅ Complete |
+| 1 | Profile setup — `profile.yml`, `_profile.md`, `applications/` folder structure, `new-application.mjs` | ✅ Complete |
+| 2 | Cover letter generation — `modes/cover-letter.md` + `templates/cover-letter-template.html` | ✅ Complete |
+| 3 | Full pipeline — evaluation, `score.json`, resume + cover letter saved per application, metadata sync | ✅ Complete |
+| 4 | Resume + cover letter templates redesigned to match candidate's actual PDF format | ✅ Complete |
+| 5 | Status management — `update-status.mjs` syncs all 3 data stores atomically | ✅ Complete |
+| 6 | Interview prep — on-demand only (`modes/interview-prep.md`), never auto-triggered | ✅ Complete |
+| 7 | Chat-based document editing — `modes/edit-application.md`, never touches master profile | ✅ Complete |
+| 8 | CLI dashboard — `list-applications.mjs`, `modes/tracker.md` | ✅ Complete |
+| 9 | Gated pipeline — score gate in `modes/auto-pipeline.md` (score < 80 → ask before proceeding) | ✅ Complete |
+| 10 | Web frontend — Next.js at `frontend/`: Job Discovery, Application Tracker, Application Detail, Chat, Interview Guide | ✅ Complete |
+| 11 | Frontend UI redesign — light theme, polished components, hydration error fix | ✅ Complete |
+| 12 | Self-contained frontend pipeline — paste JD/URL → `/api/evaluate` → score card → user decides → `/api/generate-docs/{id}` → resume PDF + cover letter PDF | ✅ Complete |
+| 15 | PDF download — `GET /api/applications/{id}/pdf?type=resume\|cover-letter` streams PDF; download buttons in Application Detail | ✅ Complete |
+| 20 | Baseline stabilization — frontend statuses accepted by legacy validators, Canada-focused `portals.yml`, initial scan queue files, docs synced | ✅ Complete |
+
+### Current Baseline Notes
+
+- The **frontend workflow statuses are authoritative** in this fork: `Saved`, `Evaluated`, `Resume Generated`, `Cover Letter Generated`, `Ready to Apply`, `Applied`, `In Progress`, `Interview`, `Offer`, `Rejected`, `Withdrawn`.
+- Upstream/legacy statuses still work for compatibility: `Responded`, `Discarded`, `SKIP`.
+- `portals.yml` now exists and is tuned for Girish's Canada/Ontario software, full-stack, and AI application search. Phase 18 will expand it to many more companies.
+- `data/pipeline.md` and `data/scored-queue.json` are initialized so Phase 13 can wire scan results without first creating missing files.
+- Job evaluation now normalizes pasted JD text and direct job URLs through the same cleanup layer. Greenhouse, Ashby, and Lever URLs use structured APIs when possible, then fall back to cleaned HTML.
+- Evaluation uses a deterministic 100-point rubric and strips ATS/legal boilerplate before scoring so pasted text and URL input are much closer and more trustworthy.
+- Evaluation also applies backend score guardrails after the model responds: hard seniority requirements, professional embedded requirements, and missing industrial automation stacks can cap the score and raise risk factors. This prevents the same JD from becoming an 80+ "Apply" only because it came from a URL.
+- Gemini model selection is configurable through `.env.local` (`GEMINI_MODEL`, task-specific overrides, and fallback model lists), so testing can temporarily use a higher-quota model when `gemini-2.5-flash` is exhausted.
+- Offline scoring QA exists at `npm run eval:qa`; it runs known JD fixtures against the backend guardrails without spending API quota.
+- Job Discovery lets the user evaluate another job immediately from any score card, including low-score Maybe/Skip results, without refreshing the page.
+- Application Detail now shows live previews for resume, cover letter, and interview prep in the platform, with a Source toggle for raw Markdown.
+- Current baseline checks: `node doctor.mjs`, `node cv-sync-check.mjs`, `node verify-pipeline.mjs`, `cd frontend && npm run lint`, `cd frontend && npm run build`.
+
+### In Progress / Up Next
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| 13 | **Portal scan → scored job cards** — `POST /api/scan/run` triggers `scan.mjs`, bulk quick-scores all results via Gemini in one call, saves to `data/scored-queue.json`. Job Discovery "Scan" tab shows ranked cards with score badges. Refresh button re-runs scan. Baseline files/config are ready. | 🔜 Next |
+| 14 | **"Generate Application" from scanned cards** — "Evaluate" button on a scan card fetches the full JD and runs `/api/evaluate`; score modal appears; user confirms → `/api/generate-docs` runs. Same two-step gated flow as manual paste. | 🔜 After 13 |
+| 18 | **Expanded portals** — Grow `portals.yml` from ~45 to 150+ companies: Canadian AI startups (Cohere, Waabi, Ada, Darwin AI, Layer6), Ontario tech scale-ups (Shopify, Wealthsimple, Miovision, Faire, Veeva, Lightspeed, Magnet Forensics), and Big Tech Canada offices (Google, Microsoft, Amazon, Apple, Meta Toronto/Waterloo). Categorised by sector so scan results are easier to filter. | 🔜 After 13 |
+| 19 | **Email job alerts** — After each scan run, diff new results against the last scan. Any new job ≥ score threshold (default 70) triggers a Resend API email digest: ranked cards, score badges, one-click "Evaluate" links. `RESEND_API_KEY` in `.env.local`. Free tier: 3,000 emails/month. | 🔜 After 18 |
+| 16 | **Settings / Profile page** — `/settings` in the frontend: view and edit `profile.yml` (name, target roles, comp range, location) and `portals.yml` (add/remove companies, adjust keyword filters). No file editor needed. | 🔜 After 19 |
+| 17 | **Application form assistant** — "Apply" tab in Application Detail: paste the form's questions → AI generates copy-paste answers grounded in the saved resume + cover letter + job description. One copy button per answer. Never auto-submits. | 🔜 After 16 |
+
+### Quick Start (Personal Setup)
+
+```bash
+# 1. Install dependencies
+npm install
+npx playwright install chromium
+
+# 2. Start the web frontend
+cd frontend && npm install
+echo "GEMINI_API_KEY=your_key_here" > .env.local
+npm run dev   # → http://localhost:3000
+
+# 3. Or use Claude Code CLI directly
+cd ..
+claude        # Then paste a job URL or use /career-ops
+```
+
+Get a free Gemini API key (no credit card): https://aistudio.google.com/app/apikey
+
+### Application Folder Structure
+
+Every job application lives in its own folder under `applications/`:
+
+```
+applications/
+  {company-slug}-{role-slug}-{YYYY-MM-DD}/
+    job-description.md    metadata.json    score.json
+    resume.md             resume.pdf
+    cover-letter.md       cover-letter.pdf
+    notes.md              interview.md (when status → Interview)
+```
+
+Generated per-application folders are local work product and gitignored by default; `applications/.gitkeep` preserves the directory.
+
+---
+
+# Career-Ops (Upstream)
 
 [English](README.md) | [Español](README.es.md) | [Português (Brasil)](README.pt-BR.md) | [한국어](README.ko-KR.md) | [日本語](README.ja.md) | [Українська](README.ua.md) | [Русский](README.ru.md) | [繁體中文](README.zh-TW.md)
 

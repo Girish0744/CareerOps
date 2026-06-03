@@ -1,0 +1,23 @@
+{
+  "id": "senior-ai-architect",
+  "description": "Senior AI architect role that should be capped below apply range for current career stage.",
+  "expected": { "min": 35, "max": 59 },
+  "jobDescription": "Senior AI Architect, Toronto, ON. Lead enterprise AI architecture, own multi-team technical strategy, design production LLM platforms, mentor senior engineers, and manage executive stakeholder relationships. Requirements: 8+ years of professional software engineering experience, 5+ years designing production cloud architecture, 3+ years leading AI/ML platform architecture, prior staff/principal/architect-level role, and experience owning architecture standards across multiple teams.",
+  "modelEvaluation": {
+    "score": 82,
+    "fitLevel": "Apply",
+    "recommendation": "Apply",
+    "summary": "Raw model over-scored this because AI projects and Toronto location match.",
+    "gaps": [],
+    "categories": {
+      "experienceMatch": 22,
+      "skillsMatch": 21,
+      "roleLevelMatch": 13,
+      "locationMatch": 10,
+      "industryMatch": 8,
+      "growthPotential": 8,
+      "riskFactors": 0
+    },
+    "missingKeywords": []
+  }
+}

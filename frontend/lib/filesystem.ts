@@ -44,7 +44,9 @@ export interface ApplicationEntry {
 export interface ApplicationDetail extends ApplicationEntry {
   jobDescription: string | null;
   resumeMd: string | null;
+  resumeHtml: string | null;
   coverLetterMd: string | null;
+  coverLetterHtml: string | null;
   interviewMd: string | null;
   notesMd: string | null;
   scoreData: ScoreData | null;
@@ -60,6 +62,15 @@ export interface ScoreData {
   recommendation: string | null;
   notes: string | null;
   categories: Record<string, number | null>;
+  originalScore?: number | null;
+  adjustedByGuardrails?: boolean;
+  guardrails?: Array<{
+    code: string;
+    label: string;
+    reason: string;
+    cap: number;
+    riskMinimum: number;
+  }>;
 }
 
 export interface ScoredJob {
@@ -111,7 +122,9 @@ export function getApplication(id: string): ApplicationDetail | null {
     ...entry,
     jobDescription:    readFile('job-description.md'),
     resumeMd:          readFile('resume.md'),
+    resumeHtml:        readFile('resume.html'),
     coverLetterMd:     readFile('cover-letter.md'),
+    coverLetterHtml:   readFile('cover-letter.html'),
     interviewMd:       readFile('interview.md'),
     notesMd:           readFile('notes.md'),
     scoreData:         readJson('score.json') as ScoreData | null,
@@ -229,26 +242,27 @@ export function createApplication(
 ): void {
   const folderPath = path.join(ROOT, 'applications', id);
 
-  // Skip if already exists (re-run protection)
-  if (fs.existsSync(folderPath)) return;
-
-  fs.mkdirSync(folderPath, { recursive: true });
-
   const jobDescMd = `# Job Description: ${jobTitle} at ${company}\n\n**URL:** ${jobUrl ?? 'Pasted JD'}\n**Location:** ${location ?? 'TBD'}\n**Date saved:** ${today}\n\n---\n\n${jobDescriptionText}`;
-  fs.writeFileSync(path.join(folderPath, 'job-description.md'), jobDescMd);
-  fs.writeFileSync(path.join(folderPath, 'notes.md'), '');
-  fs.writeFileSync(path.join(folderPath, 'score.json'), '{}');
 
-  const meta = {
-    id, company, jobTitle, location, jobUrl,
-    status: 'Saved',
-    createdAt: today, updatedAt: today,
-    resumePath: null, coverLetterPath: null, interviewPrepPath: null,
-    notesPath: `applications/${id}/notes.md`,
-    reportPath: null,
-    scorePath: `applications/${id}/score.json`,
-  };
-  fs.writeFileSync(path.join(folderPath, 'metadata.json'), JSON.stringify(meta, null, 2));
+  if (fs.existsSync(folderPath)) {
+    fs.writeFileSync(path.join(folderPath, 'job-description.md'), jobDescMd);
+  } else {
+    fs.mkdirSync(folderPath, { recursive: true });
+    fs.writeFileSync(path.join(folderPath, 'job-description.md'), jobDescMd);
+    fs.writeFileSync(path.join(folderPath, 'notes.md'), '');
+    fs.writeFileSync(path.join(folderPath, 'score.json'), '{}');
+
+    const meta = {
+      id, company, jobTitle, location, jobUrl,
+      status: 'Saved',
+      createdAt: today, updatedAt: today,
+      resumePath: null, coverLetterPath: null, interviewPrepPath: null,
+      notesPath: `applications/${id}/notes.md`,
+      reportPath: null,
+      scorePath: `applications/${id}/score.json`,
+    };
+    fs.writeFileSync(path.join(folderPath, 'metadata.json'), JSON.stringify(meta, null, 2));
+  }
 
   // Add to data/applications.json
   fs.mkdirSync(path.join(ROOT, 'data'), { recursive: true });

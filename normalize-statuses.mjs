@@ -2,8 +2,9 @@
 /**
  * normalize-statuses.mjs — Clean non-canonical states in applications.md
  *
- * Maps all non-canonical statuses to canonical ones per states.yml:
- *   Evaluada, Aplicado, Respondido, Entrevista, Oferta, Rechazado, Descartado, NO APLICAR
+ * Maps non-canonical statuses to canonical ones per states.yml.
+ * Frontend workflow statuses (Saved, Resume Generated, Cover Letter Generated,
+ * Ready to Apply, In Progress, Withdrawn) are valid in this fork.
  *
  * Also strips markdown bold (**) and dates from the status field,
  * moving DUPLICADO info to the notes column.
@@ -66,12 +67,19 @@ function normalizeStatus(raw) {
 
   // Already canonical (English, per states.yml) — just fix casing/bold
   const canonical = [
-    'Evaluated', 'Applied', 'Responded', 'Interview',
-    'Offer', 'Rejected', 'Discarded', 'SKIP',
+    'Saved', 'Evaluated', 'Resume Generated', 'Cover Letter Generated',
+    'Ready to Apply', 'Applied', 'Responded', 'In Progress', 'Interview',
+    'Offer', 'Rejected', 'Withdrawn', 'Discarded', 'SKIP',
   ];
   for (const c of canonical) {
     if (lower === c.toLowerCase()) return { status: c };
   }
+
+  // Frontend workflow aliases
+  if (['cv generated'].includes(lower)) return { status: 'Resume Generated' };
+  if (['letter generated'].includes(lower)) return { status: 'Cover Letter Generated' };
+  if (['ready'].includes(lower)) return { status: 'Ready to Apply' };
+  if (['active process'].includes(lower)) return { status: 'In Progress' };
 
   // Spanish aliases → English canonicals
   if (['evaluada'].includes(lower)) return { status: 'Evaluated' };

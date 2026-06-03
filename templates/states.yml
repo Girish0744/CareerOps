@@ -2,16 +2,43 @@
 # Source of truth for career-ops (writer) and dashboard (reader).
 # Both systems MUST use these exact states.
 #
-# Rule: The status field in applications.md must contain EXACTLY
-# one of these values (case-insensitive). No markdown bold (**),
-# no dates, no extra text. Dates go in the date column.
+# Rule: The status field in applications.md and applications.json must contain
+# exactly one of these values (case-insensitive). No markdown bold (**), no
+# dates, no extra text. Dates go in the date column.
+
+# Frontend workflow states are authoritative for this fork. The upstream states
+# remain valid for CLI/batch compatibility.
 
 states:
+  - id: saved
+    label: Saved
+    aliases: []
+    description: Application folder exists, evaluation may not be complete
+    dashboard_group: saved
+
   - id: evaluated
     label: Evaluated
     aliases: [evaluada]
     description: Offer evaluated with report, pending decision
     dashboard_group: evaluated
+
+  - id: resume_generated
+    label: Resume Generated
+    aliases: [resume generated, cv generated]
+    description: Tailored resume has been generated
+    dashboard_group: resume_generated
+
+  - id: cover_letter_generated
+    label: Cover Letter Generated
+    aliases: [cover letter generated, letter generated]
+    description: Tailored resume and cover letter are generated
+    dashboard_group: cover_letter_generated
+
+  - id: ready_to_apply
+    label: Ready to Apply
+    aliases: [ready to apply, ready]
+    description: Documents are reviewed and ready for the user to submit
+    dashboard_group: ready_to_apply
 
   - id: applied
     label: Applied
@@ -24,6 +51,12 @@ states:
     aliases: [respondido]
     description: Company has responded (not yet interview)
     dashboard_group: responded
+
+  - id: in_progress
+    label: In Progress
+    aliases: [in progress, active process]
+    description: Application is active between response and interview/decision
+    dashboard_group: in_progress
 
   - id: interview
     label: Interview
@@ -42,6 +75,12 @@ states:
     aliases: [rechazado, rechazada]
     description: Rejected by company
     dashboard_group: rejected
+
+  - id: withdrawn
+    label: Withdrawn
+    aliases: [withdrawn]
+    description: Withdrawn by candidate
+    dashboard_group: withdrawn
 
   - id: discarded
     label: Discarded

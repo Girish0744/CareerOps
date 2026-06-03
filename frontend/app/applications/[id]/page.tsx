@@ -8,10 +8,64 @@ import ChatPanel from '@/components/ChatPanel';
 import type { ApplicationDetail } from '@/lib/filesystem';
 import {
   ArrowLeft, ExternalLink, FileText, Mail, Briefcase,
-  ChevronDown, Loader2, MapPin, Link2, BookOpen, Sparkles, Download,
+  ChevronDown, Loader2, MapPin, Link2, BookOpen, Sparkles, Download, Code2, Eye,
 } from 'lucide-react';
 
 type Tab = 'resume' | 'cover-letter' | 'job-description' | 'interview' | 'notes';
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function inlineMarkdown(value: string) {
+  return escapeHtml(value).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+}
+
+function markdownToHtml(markdown: string) {
+  const lines = markdown.split('\n');
+  const html: string[] = [];
+  let inList = false;
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) {
+      if (inList) { html.push('</ul>'); inList = false; }
+      continue;
+    }
+    if (line.startsWith('# ')) {
+      if (inList) { html.push('</ul>'); inList = false; }
+      html.push(`<h1>${inlineMarkdown(line.slice(2))}</h1>`);
+    } else if (line.startsWith('## ')) {
+      if (inList) { html.push('</ul>'); inList = false; }
+      html.push(`<h2>${inlineMarkdown(line.slice(3))}</h2>`);
+    } else if (line.startsWith('### ')) {
+      if (inList) { html.push('</ul>'); inList = false; }
+      html.push(`<h3>${inlineMarkdown(line.slice(4))}</h3>`);
+    } else if (line.startsWith('- ') || line.startsWith('* ')) {
+      if (!inList) { html.push('<ul>'); inList = true; }
+      html.push(`<li>${inlineMarkdown(line.slice(2))}</li>`);
+    } else {
+      if (inList) { html.push('</ul>'); inList = false; }
+      html.push(`<p>${inlineMarkdown(line)}</p>`);
+    }
+  }
+  if (inList) html.push('</ul>');
+  return html.join('\n');
+}
+
+function DocumentPreview({ content }: { content: string }) {
+  return (
+    <article
+      className="doc-preview"
+      dangerouslySetInnerHTML={{ __html: markdownToHtml(content) }}
+    />
+  );
+}
 
 export default function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -23,6 +77,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const [showLinkedinPrompt, setShowLinkedinPrompt] = useState(false);
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [interviewGenerated, setInterviewGenerated] = useState(false);
+  const [interviewError, setInterviewError] = useState<string | null>(null);
+  const [sourceMode, setSourceMode] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
@@ -46,12 +102,19 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
 
   async function generateInterview() {
     setInterviewLoading(true);
+    setInterviewError(null);
     setShowLinkedinPrompt(false);
-    await fetch('/api/interview', {
+    const res = await fetch('/api/interview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ applicationId: id, linkedinUrl: linkedinUrl || undefined }),
     });
+    const data = await res.json().catch(() => ({})) as { error?: string };
+    if (!res.ok) {
+      setInterviewError(data.error ?? 'Interview guide generation failed.');
+      setInterviewLoading(false);
+      return;
+    }
     setInterviewGenerated(true);
     setInterviewLoading(false);
     setLinkedinUrl('');
@@ -215,6 +278,11 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             </div>
           )}
         </div>
+        {interviewError && (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {interviewError}
+          </div>
+        )}
       </div>
 
       {/* Main layout: doc viewer + chat */}
@@ -223,7 +291,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
         {/* Left: document viewer */}
         <div className="flex flex-col">
           {/* Tabs */}
-          <div className="flex gap-0.5 bg-white border border-slate-200 rounded-t-xl px-2 pt-2">
+          <div className="flex items-end justify-between gap-3 bg-white border border-slate-200 rounded-t-xl px-2 pt-2">
+            <div className="flex gap-0.5 overflow-x-auto">
             {tabs.map(tab => (
               <button
                 key={tab.key}
@@ -237,14 +306,30 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                 {tab.icon}{tab.label}
               </button>
             ))}
+            </div>
+            {(activeTab === 'resume' || activeTab === 'cover-letter' || activeTab === 'interview') && activeContent() && (
+              <button
+                onClick={() => setSourceMode(v => !v)}
+                className="mb-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+              >
+                {sourceMode ? <Eye className="w-3.5 h-3.5" /> : <Code2 className="w-3.5 h-3.5" />}
+                {sourceMode ? 'Preview' : 'Source'}
+              </button>
+            )}
           </div>
 
           {/* Content */}
           <div className="flex-1 bg-white border border-t-0 border-slate-200 rounded-b-xl overflow-hidden min-h-96">
-            {activeContent() ? (
+            {activeContent() && sourceMode ? (
               <pre className="p-6 text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed overflow-y-auto h-full max-h-[700px]">
                 {activeContent()}
               </pre>
+            ) : activeContent() ? (
+              <div className="overflow-y-auto h-full max-h-[760px] bg-slate-50 p-5">
+                <div className="mx-auto max-w-[850px] min-h-[900px] bg-white shadow-sm border border-slate-200 px-10 py-9">
+                  <DocumentPreview content={activeContent() ?? ''} />
+                </div>
+              </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-slate-400 py-20">
                 <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center mb-3">

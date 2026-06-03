@@ -5,6 +5,8 @@ import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getApplication, updateApplicationFields } from '@/lib/filesystem';
+import { apiErrorMessage } from '@/lib/errors';
+import { generateGeminiContent } from '@/lib/ai-config';
 
 export const maxDuration = 120;
 
@@ -29,6 +31,7 @@ export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  try {
   const { id } = await params;
 
   const app = getApplication(id);
@@ -104,8 +107,7 @@ Respond in EXACTLY this format (no other text):
 [Complete filled HTML starting with <!DOCTYPE html>]
 ===END_HTML===`;
 
-  const resumeResult = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+  const { result: resumeResult } = await generateGeminiContent(ai, 'generateDocs', {
     contents: `Tailor this resume for the following job:\n\nCOMPANY: ${app.company}\nROLE: ${app.jobTitle}\nSCORE: ${app.score}/100 (${app.fitLevel})\nMATCHED: ${app.scoreData?.matchedKeywords?.slice(0,8).join(', ') ?? ''}\nGAPS: ${app.scoreData?.missingKeywords?.slice(0,5).join(', ') ?? ''}\n\nJOB DESCRIPTION:\n${app.jobDescription ?? ''}`,
     config: {
       systemInstruction: resumeSystem,
@@ -222,8 +224,7 @@ Respond in EXACTLY this format (no other text):
 [Complete filled HTML starting with <!DOCTYPE html>]
 ===END_HTML===`;
 
-  const clResult = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
+  const { result: clResult } = await generateGeminiContent(ai, 'generateDocs', {
     contents: `Write a cover letter for:\n\nCOMPANY: ${app.company}\nROLE: ${app.jobTitle}\n\nJOB DESCRIPTION:\n${app.jobDescription ?? ''}`,
     config: {
       systemInstruction: clSystem,
@@ -273,4 +274,7 @@ Respond in EXACTLY this format (no other text):
     resumePdfGenerated,
     coverLetterPdfGenerated: clPdfGenerated,
   });
+  } catch (err) {
+    return NextResponse.json({ error: apiErrorMessage(err) }, { status: 500 });
+  }
 }

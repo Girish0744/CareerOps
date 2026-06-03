@@ -14,7 +14,7 @@ There are two layers. Read `DATA_CONTRACT.md` for the full list.
 
 **User Layer (NEVER auto-updated, personalization goes HERE):**
 - `cv.md`, `config/profile.yml`, `modes/_profile.md`, `article-digest.md`, `portals.yml`
-- `data/*`, `reports/*`, `output/*`, `interview-prep/*`
+- `data/*`, `reports/*`, `output/*`, `interview-prep/*`, `applications/*`
 
 **System Layer (auto-updatable, DON'T put user data here):**
 - `modes/_shared.md`, `modes/oferta.md`, all other modes
@@ -337,3 +337,185 @@ Write one TSV file per evaluation to `batch/tracker-additions/{num}-{company-slu
 - No markdown bold (`**`) in status field
 - No dates in status field (use the date column)
 - No extra text (use the notes column)
+
+---
+
+## Personal Job Application Command Center
+
+This project has been customized into a personal job application command center for **Girish Bhuteja** (Cambridge, ON · graduating BCS Conestoga August 2026 · targeting AI/ML roles in Canada).
+
+### Product Goals
+
+- Generate tailored resumes for each job application.
+- Generate tailored cover letters for each job application.
+- Score jobs against the candidate profile.
+- Track every application with status, documents, and notes.
+- Save exact documents (resume + cover letter) used per application, in a dedicated folder.
+- Support chat-based edits to application-specific documents.
+- Generate interview prep when an application reaches Interview status.
+- Keep the user in control — never auto-submit a job application.
+
+### Safety Rules (MANDATORY)
+
+- **NEVER auto-submit a job application.** Fill forms, draft answers, generate PDFs — but always STOP before Submit/Send/Apply. The user clicks last.
+- **NEVER invent candidate experience.** Only use facts from `cv.md`, `config/profile.yml`, `modes/_profile.md`, and `article-digest.md`.
+- **NEVER edit master profile files during job-specific chat edits.** `cv.md`, `config/profile.yml`, and `modes/_profile.md` are the source of truth. Application-specific edits go only into `applications/{id}/resume.md` or `applications/{id}/cover-letter.md`.
+- **ATS-friendly resumes only.** Single-column, standard headings, selectable text, no sidebars.
+- **Two-page max for resume PDFs.** Flag if content exceeds two pages.
+- **Work in phases.** Explain changes before large refactors. Preserve existing functionality unless a change is clearly necessary.
+
+### Application Folder System
+
+Every job application lives in its own folder:
+
+```
+applications/
+  {company-slug}-{role-slug}-{YYYY-MM-DD}/
+    job-description.md
+    metadata.json
+    score.json
+    resume.md
+    resume.pdf
+    cover-letter.md
+    cover-letter.pdf
+    notes.md
+    interview.md          (generated when status → Interview)
+    edit-history.json     (optional, chat edit log)
+```
+
+Folder names: lowercase, hyphens only. Example: `d2l-software-developer-2026-05-28`.
+
+### metadata.json Schema
+
+```json
+{
+  "id": "d2l-software-developer-2026-05-28",
+  "company": "D2L",
+  "jobTitle": "New Graduate Software Developer",
+  "location": "Kitchener, ON / Hybrid",
+  "jobUrl": "https://careers.d2l.com/...",
+  "status": "Cover Letter Generated",
+  "createdAt": "2026-05-28",
+  "updatedAt": "2026-05-28",
+  "resumePath": "applications/d2l-software-developer-2026-05-28/resume.pdf",
+  "coverLetterPath": "applications/d2l-software-developer-2026-05-28/cover-letter.pdf",
+  "interviewPrepPath": null,
+  "notesPath": "applications/d2l-software-developer-2026-05-28/notes.md"
+}
+```
+
+### Supported Application Statuses
+
+```
+Saved → Resume Generated → Cover Letter Generated → Ready to Apply →
+Applied → In Progress → Interview → Offer / Rejected / Withdrawn
+```
+
+Frontend workflow statuses are authoritative for this personalized fork. Legacy upstream statuses
+(`Responded`, `Discarded`, `SKIP`) remain accepted by validation/merge/dashboard tooling for compatibility.
+
+### Phased Implementation Plan
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| 0 | Codebase inspection + baseline | ✅ Complete |
+| 1 | Profile setup — `profile.yml`, `_profile.md`, `applications/` dir, `new-application.mjs` | ✅ Complete |
+| 2 | Cover letter generation — `modes/cover-letter.md` + `templates/cover-letter-template.html` | ✅ Complete |
+| 3 | Full pipeline — evaluation, `score.json`, resume + cover letter saved per application, metadata sync | ✅ Complete |
+| 4 | Resume + cover letter templates redesigned to match candidate's PDF format | ✅ Complete |
+| 5 | Status management — `update-status.mjs` syncs all 3 data stores | ✅ Complete |
+| 6 | Interview prep — on-demand only (`modes/interview-prep.md`), never auto-triggered | ✅ Complete |
+| 7 | Chat-based document editing — `modes/edit-application.md`, never touches master profile | ✅ Complete |
+| 8 | CLI dashboard — `list-applications.mjs`, `modes/tracker.md` | ✅ Complete |
+| 9 | Gated pipeline — score gate (score < 80 → ask before proceeding) | ✅ Complete |
+| 10 | Web frontend — Next.js at `frontend/`: Job Discovery, Application Tracker, Application Detail, Chat, Interview Guide | ✅ Complete |
+| 11 | Frontend UI redesign — light theme, polished components | ✅ Complete |
+| 12 | Self-contained frontend pipeline — paste JD/URL → `/api/evaluate` → score card → user decides → `/api/generate-docs/{id}` → PDFs | ✅ Complete |
+| 15 | PDF download — `GET /api/applications/{id}/pdf?type=resume\|cover-letter` streams PDF; download buttons in UI | ✅ Complete |
+| 20 | Baseline stabilization — frontend statuses accepted by legacy validators, Canada-focused `portals.yml`, initial scan queue files, docs synced | ✅ Complete |
+| 13 | **Portal scan → scored job cards** — `POST /api/scan/run` triggers scan + bulk quick-scores → `data/scored-queue.json` → Job Discovery "Scan Results" tab | 🔜 Next |
+| 14 | **"Generate Application" from scan cards** — Evaluate button on scan card → score modal → user confirms → generate-docs | 🔜 After 13 |
+| 18 | **Expanded portals** — Grow `portals.yml` from ~45 to 150+ companies (Canadian AI, Ontario scale-ups, Big Tech Canada) | 🔜 After 13 |
+| 19 | **Email job alerts** — After scan, diff against last run; new jobs ≥ threshold → Resend API digest email | 🔜 After 18 |
+| 16 | **Settings / Profile page** — `/settings`: edit `profile.yml` and `portals.yml` from the browser | 🔜 After 19 |
+| 17 | **Application form assistant** — "Apply" tab: paste form questions → AI generates copy-paste answers | 🔜 After 16 |
+
+### Gated Pipeline — How It Works
+
+**In the frontend (primary flow):**
+1. User pastes JD or URL → clicks **Evaluate** → `POST /api/evaluate` → score card shown (0–100)
+2. User decides — no automatic doc generation
+3. If user clicks **Generate Resume & Cover Letter** → `POST /api/generate-docs/{id}` → PDFs created
+
+**Score thresholds:** 85+ Strong Apply (emerald) · 70–84 Apply (blue) · 50–69 Maybe (amber) · <50 Skip (red). Gate is informational, not blocking.
+
+**Evaluation reliability rule:** pasted JD text and direct job URLs must pass through the same normalization layer before scoring. The evaluator strips ATS/legal boilerplate, uses structured Greenhouse/Ashby/Lever data when available, and scores with deterministic settings plus a fixed 100-point rubric. After Gemini responds, backend guardrails recompute/cap the score for hard requirements such as 4+ years professional software experience, 2+ years professional embedded software experience, or missing industrial automation stacks (SCADA/MES/CAN/LIN/automotive standards). If URL and pasted-text results diverge, inspect the saved `applications/{id}/job-description.md` first — the URL may not have exposed the full JD.
+
+**Model routing:** frontend Gemini routes use configurable model selection. `.env.local` may set `GEMINI_MODEL` for all routes or task-specific overrides (`GEMINI_EVALUATE_MODEL`, `GEMINI_DOCS_MODEL`, `GEMINI_CHAT_MODEL`, `GEMINI_INTERVIEW_MODEL`) plus comma-separated fallback lists (`GEMINI_FALLBACK_MODELS` or task-specific fallback variables). Restart `npm run dev` after changing model env vars.
+
+**Scoring QA:** run `npm run eval:qa` from the repo root before Phase 13 or scoring changes. It uses `tests/evaluation-fixtures/*.json` and the same guardrail core as the app, without calling Gemini.
+
+**Job Discovery reset:** every evaluated score card should let the user evaluate another job without refreshing the page. Keep this available for Maybe/Skip outcomes as well as Apply outcomes.
+
+**Application detail previews:** resume, cover letter, and interview prep are viewable inside the platform with a Preview/Source toggle. Chat edits refresh the live Markdown preview immediately.
+
+### Scan Queue — How It Works (Phase 13)
+
+Baseline is ready: `portals.yml` exists with Canada/Ontario-focused provider-compatible companies,
+`data/pipeline.md` has the scanner's expected sections, and `data/scored-queue.json` exists as `[]`.
+
+1. User clicks "Refresh" on Scan Results tab → `POST /api/scan/run` → `scan.mjs` runs
+2. All new job titles + descriptions sent to `gemini-2.0-flash` in one batched call → scores returned
+3. Results saved to `data/scored-queue.json`, shown as ranked cards
+4. User clicks "Evaluate" on a card → full `/api/evaluate` → score modal → confirm → generate-docs
+
+### Interview Prep — Exact Behaviour
+
+- **Block F in evaluation report** = STAR stories table inside the report. Always generated with A-G evaluation. Planning notes only.
+- **Full interview prep** = `modes/interview-prep.md` → `applications/{id}/interview.md`. Runs ONLY when user explicitly requests it OR status changes to `Interview`.
+- **Never runs during auto-pipeline or initial evaluation.**
+
+### Frontend Architecture
+
+```
+frontend/                        Next.js app — run with: cd frontend && npm run dev
+  app/page.tsx                   Job Discovery (localhost:3000/) — paste JD + scan results tab
+  app/applications/page.tsx      Application Tracker (localhost:3000/applications)
+  app/applications/[id]/page.tsx Application Detail — resume, cover letter, chat, interview guide
+  app/api/evaluate/route.ts      POST — Gemini 2.5 Flash: score JD, extract info, create app folder
+  app/api/generate-docs/[id]/    POST — Gemini 2.5 Flash ×2 + Playwright: resume PDF + cover letter PDF
+  app/api/applications/          GET all / GET one / PUT status / GET pdf
+  app/api/chat/                  POST — Gemini 2.0 Flash: multi-turn chat for document editing
+  app/api/interview/             POST — Gemini 2.0 Flash: generate interview.md
+  app/api/scan/                  GET — reads data/scored-queue.json
+  app/api/scan/run/              POST — runs scan.mjs + bulk quick-scores (Phase 13)
+  lib/filesystem.ts              All file reads/writes — single swap point for DB migration
+  .env.local                     GEMINI_API_KEY=... (required) · RESEND_API_KEY=... (Phase 19)
+```
+
+### AI Model Strategy
+
+| Route | Model | Reason |
+|-------|-------|--------|
+| `/api/evaluate` | `gemini-2.5-flash` | Best reasoning for scoring |
+| `/api/generate-docs` | `gemini-2.5-flash` | Best output for document generation |
+| `/api/chat` | `gemini-2.5-flash` | Reliability for document edits and application Q&A |
+| `/api/interview` | `gemini-2.5-flash` | Reliability for complete interview guide generation |
+| `/api/scan/run` quick-score | `gemini-2.0-flash` | Bulk — uses 200 req/day quota not 20 |
+
+`gemini-2.5-flash` MUST use `thinkingConfig: { thinkingBudget: 0 }` — without this, thinking tokens truncate JSON/HTML output mid-response.
+
+Response parsing uses a 3-fallback chain: `===DELIMITERS===` → markdown code blocks → raw `{...}` object.
+
+Font paths in generated HTML use `../../fonts/` (relative to `applications/{id}/`) → resolves to `career-ops/fonts/` when Playwright renders via `file://`.
+
+`export const maxDuration = 120` on generate-docs route (PDF gen takes 45–90s).
+
+### Key Scripts
+
+| Script | Usage |
+|--------|-------|
+| `new-application.mjs` | `node new-application.mjs --company="..." --role="..." [--url="..."] [--location="..."]` |
+| `update-status.mjs` | `node update-status.mjs --id="..." --status="..."` — syncs metadata.json + applications.json + applications.md |
+| `update-status.mjs` | `node update-status.mjs --list` — list all application IDs |
+| `list-applications.mjs` | `node list-applications.mjs [--id="..."] [--open="..."]` |

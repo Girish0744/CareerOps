@@ -21,6 +21,13 @@ interface EvalResult {
   summary: string;
   matched: string[];
   gaps: string[];
+  adjustedByGuardrails?: boolean;
+  guardrails?: Array<{
+    code: string;
+    label: string;
+    reason: string;
+    cap: number;
+  }>;
 }
 
 type Stage =
@@ -47,11 +54,12 @@ function isUrl(s: string) {
 // ── Score Card ────────────────────────────────────────────────────────────────
 
 function ScoreCard({
-  result, stage, onGenerate,
+  result, stage, onGenerate, onReset,
 }: {
   result: EvalResult;
   stage: Stage;
   onGenerate: () => void;
+  onReset: () => void;
 }) {
   const [showDetails, setShowDetails] = useState(false);
   const color = fitColor(result.score);
@@ -100,26 +108,45 @@ function ScoreCard({
         </button>
 
         {showDetails && (
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Matched</p>
-              <ul className="space-y-1">
-                {result.matched.map((m, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />{m}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Gaps</p>
-              <ul className="space-y-1">
-                {result.gaps.map((g, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
-                    <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />{g}
-                  </li>
-                ))}
-              </ul>
+          <div className="mt-3 space-y-4">
+            {result.adjustedByGuardrails && result.guardrails && result.guardrails.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-2">Score guardrails</p>
+                <ul className="space-y-1">
+                  {result.guardrails.map(guardrail => (
+                    <li key={guardrail.code} className="flex items-start gap-2 text-sm text-amber-900">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                      <span>
+                        <span className="font-semibold">{guardrail.label}</span>
+                        <span className="text-amber-800"> — capped at {guardrail.cap}/100. {guardrail.reason}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Matched</p>
+                <ul className="space-y-1">
+                  {result.matched.map((m, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />{m}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Gaps</p>
+                <ul className="space-y-1">
+                  {result.gaps.map((g, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-slate-700">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />{g}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           </div>
         )}
@@ -148,6 +175,13 @@ function ScoreCard({
                 : <span className="text-slate-600">Ready to generate a tailored resume and cover letter.</span>}
             </div>
             <div className="flex items-center gap-3 flex-wrap">
+              <button
+                onClick={onReset}
+                disabled={generating}
+                className="text-sm text-slate-500 hover:text-slate-800 font-medium transition-colors underline underline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Evaluate another job
+              </button>
               <Link
                 href={`/applications/${result.applicationId}`}
                 className="text-sm text-slate-500 hover:text-slate-800 font-medium transition-colors underline underline-offset-2"
@@ -321,6 +355,7 @@ export default function JobDiscoveryPage() {
             result={(stage as { kind: string; result: EvalResult }).result}
             stage={stage}
             onGenerate={handleGenerate}
+            onReset={handleReset}
           />
           {/* Allow evaluating another job */}
           {(stage.kind === 'done') && (

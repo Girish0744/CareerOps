@@ -1,0 +1,23 @@
+{
+  "id": "ats-automation-embedded",
+  "description": "ATS Automation style embedded/industrial automation role with 5 years professional and 3 years embedded requirements.",
+  "expected": { "min": 55, "max": 65 },
+  "jobDescription": "Software Developer, Woodbridge, ON. Develop C# and .NET code for test software products. Develop software in C/C++ code for microcontroller hardware targets including Arduino and Raspberry Pi. Design and implement SCADA systems using data collection from PLC, instrumentation, barcode scanners, vision systems, and third-party equipment. Qualifications: Bachelor's Degree in Computer Science, Software, Electrical or Computer Engineering. 5 years of professional software engineering experience in production systems, including full software development life cycle, source control management, build processes, testing, and operations experience. Minimum 3 years of embedded software development experience using C/C++; prior working experience with automotive software standards, test procedures and build processes. Experience deciphering TCP/IP, CAN and LIN packet traces. Experience with Supervisory Control and Data Acquisition (SCADA) and Manufacturing Execution Systems (MES) systems.",
+  "modelEvaluation": {
+    "score": 88,
+    "fitLevel": "Strong Apply",
+    "recommendation": "Strong Apply",
+    "summary": "Raw model over-scored this because it focused on C#, .NET, C/C++, and Ontario location.",
+    "gaps": [],
+    "categories": {
+      "experienceMatch": 25,
+      "skillsMatch": 22,
+      "roleLevelMatch": 13,
+      "locationMatch": 10,
+      "industryMatch": 9,
+      "growthPotential": 9,
+      "riskFactors": 0
+    },
+    "missingKeywords": []
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "id": "remote-us-only-fullstack",
+  "description": "Good technical match but US-only remote location should block high-confidence recommendation.",
+  "expected": { "min": 35, "max": 49 },
+  "jobDescription": "Full Stack Developer, Remote US only. Build React, TypeScript, Node.js, REST API, and Python services for an AI workflow product. Qualifications: 1+ years software development experience through internship, co-op, or production projects; strong GitHub portfolio; API integration experience; comfort with AI tools. Candidates must be located in the United States and authorized to work in the United States. This role is remote within the United States only.",
+  "modelEvaluation": {
+    "score": 86,
+    "fitLevel": "Strong Apply",
+    "recommendation": "Strong Apply",
+    "summary": "Raw model over-scored this because the technical stack is a strong match.",
+    "gaps": [],
+    "categories": {
+      "experienceMatch": 25,
+      "skillsMatch": 24,
+      "roleLevelMatch": 13,
+      "locationMatch": 9,
+      "industryMatch": 7,
+      "growthPotential": 8,
+      "riskFactors": 0
+    },
+    "missingKeywords": []
+  }
+}

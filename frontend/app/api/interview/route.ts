@@ -3,6 +3,8 @@ import { GoogleGenAI } from '@google/genai';
 import { getApplication, saveInterviewPrep } from '@/lib/filesystem';
 import fs from 'fs';
 import path from 'path';
+import { apiErrorMessage } from '@/lib/errors';
+import { generateGeminiContent } from '@/lib/ai-config';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
@@ -12,6 +14,7 @@ interface InterviewRequest {
 }
 
 export async function POST(req: Request) {
+  try {
   const body = await req.json() as InterviewRequest;
   const { applicationId, linkedinUrl } = body;
 
@@ -94,15 +97,20 @@ How to handle the gaps identified in the score — honest, confident framing.
 
 Be specific. Reference real details from the resume and job description. Do not be generic.`;
 
-  const result = await ai.models.generateContent({
-    model: 'gemini-2.0-flash',
+  const { result } = await generateGeminiContent(ai, 'interview', {
     contents: prompt,
     config: {
-      maxOutputTokens: 8192,
+      maxOutputTokens: 12000,
+      temperature: 0.2,
+      thinkingConfig: { thinkingBudget: 0 },
     },
   });
   const content = result.text ?? '';
+  if (!content.trim()) throw new Error('Gemini returned an empty interview guide.');
   const savedPath = saveInterviewPrep(applicationId, content);
 
   return NextResponse.json({ success: true, path: savedPath, content });
+  } catch (err) {
+    return NextResponse.json({ error: apiErrorMessage(err) }, { status: 500 });
+  }
 }

@@ -32,3 +32,53 @@ html, body {
 ::-webkit-scrollbar-track  { background: transparent; }
 ::-webkit-scrollbar-thumb  { background: #cbd5e1; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* In-app document preview for resumes, cover letters, and interview guides. */
+.doc-preview {
+  color: #0f172a;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.doc-preview h1 {
+  font-size: 24px;
+  line-height: 1.15;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.doc-preview h2 {
+  font-size: 14px;
+  line-height: 1.25;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  border-bottom: 1px solid #cbd5e1;
+  padding-bottom: 4px;
+  margin-top: 18px;
+  margin-bottom: 8px;
+}
+
+.doc-preview h3 {
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+
+.doc-preview p {
+  margin: 5px 0;
+}
+
+.doc-preview ul {
+  margin: 5px 0 8px 18px;
+  list-style: disc;
+}
+
+.doc-preview li {
+  margin: 3px 0;
+}
+
+.doc-preview strong {
+  font-weight: 700;
+}

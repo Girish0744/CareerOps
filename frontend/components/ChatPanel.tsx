@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Bot, User } from 'lucide-react';
+import { Send, Bot, User } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -45,15 +45,17 @@ export default function ChatPanel({ applicationId, onDocumentUpdated }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ applicationId, message: msg, history: messages }),
       });
-      const data = await res.json() as { reply: string; appliedEdit: string | null };
+      const data = await res.json() as { reply?: string; appliedEdit?: string | null; error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Chat request failed');
+      if (!data.reply) throw new Error('The assistant returned an empty response.');
       setMessages([...newHistory, { role: 'assistant', content: data.reply }]);
       if (data.appliedEdit) {
         onDocumentUpdated?.(data.appliedEdit);
       }
-    } catch {
+    } catch (err) {
       setMessages([...newHistory, {
         role: 'assistant',
-        content: 'Something went wrong. Check that your GEMINI_API_KEY is set in frontend/.env.local.',
+        content: err instanceof Error ? err.message : 'Something went wrong.',
       }]);
     } finally {
       setLoading(false);

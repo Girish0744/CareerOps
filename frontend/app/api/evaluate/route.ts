@@ -3,6 +3,10 @@ import { GoogleGenAI } from '@google/genai';
 import fs from 'fs';
 import path from 'path';
 import { createApplication, updateApplicationFields } from '@/lib/filesystem';
+import { apiErrorMessage } from '@/lib/errors';
+import { applyEvaluationGuardrails } from '@/lib/evaluation-guardrails';
+import { extractJobDescriptionFromUrl, normalizeJobDescriptionText } from '@/lib/job-description';
+import { generateGeminiContent } from '@/lib/ai-config';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 const ROOT = path.resolve(process.cwd(), '..');
@@ -14,23 +18,6 @@ function readFile(rel: string): string {
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-}
-
-async function fetchJdFromUrl(url: string): Promise<string> {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; career-ops/1.0)' },
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok) throw new Error(`Failed to fetch URL: ${res.status}`);
-  const html = await res.text();
-  // Strip HTML tags to get readable text
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s{2,}/g, ' ')
-    .trim()
-    .slice(0, 12000); // cap to avoid massive token counts
 }
 
 export async function POST(req: Request) {
@@ -47,9 +34,16 @@ export async function POST(req: Request) {
 
     if (url) {
       jobUrl = url;
-      jdText = await fetchJdFromUrl(url);
+      const extracted = await extractJobDescriptionFromUrl(url);
+      jdText = extracted.text;
     } else {
-      jdText = text!;
+      jdText = normalizeJobDescriptionText(text!);
+    }
+
+    if (jdText.length < 500) {
+      return NextResponse.json({
+        error: 'The job description looks too short after cleanup. Paste the full posting text or use a direct ATS job URL.',
+      }, { status: 400 });
     }
 
     const cv = readFile('cv.md');
@@ -100,16 +94,35 @@ Write 2-3 sentences explaining the fit. Be direct and specific — reference act
 }
 ===END_JSON===
 
-Score categories add up to 78 max (riskFactors subtracts from a base of 78, min 0 max 5 deduction). Final score = sum of positive categories minus riskFactors deduction.
+Use this exact 100-point rubric:
+- experienceMatch: 0-30
+- skillsMatch: 0-25
+- roleLevelMatch: 0-15
+- locationMatch: 0-10
+- industryMatch: 0-10
+- growthPotential: 0-10
+- riskFactors: 0-10 deduction
+
+Final score = experienceMatch + skillsMatch + roleLevelMatch + locationMatch + industryMatch + growthPotential - riskFactors, clamped to 0-100.
 fitLevel: Strong Apply (85+), Apply (70-84), Maybe (50-69), Skip (<50).
+Ignore ATS/legal/EEO boilerplate and score only the actual role requirements against the candidate profile.
+Be conservative: do not award points for skills that are not in the candidate files.
+Hard requirement guardrails:
+- If the candidate is early-career and the JD requires 4+ years of professional software engineering experience, the score cannot exceed 69.
+- If the JD requires 2+ years of professional embedded software experience and the candidate only has project/course exposure, the score cannot exceed 69.
+- If both of those are true, the score cannot exceed 62.
+- If the JD is senior/staff/principal/architect/lead and requires 6+ years, the score cannot exceed 55.
+- If the JD is US-only and does not allow Canada/Ontario/Remote Canada, the score cannot exceed 49.
+- Missing SCADA/MES, CAN/LIN traces, or automotive software standards must increase riskFactors and appear in gaps.
 Do not add any text before ===SUMMARY=== or after ===END_JSON===.`;
 
-    const result = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+    const { result, modelUsed } = await generateGeminiContent(ai, 'evaluate', {
       contents: `Evaluate this job description:\n\n${jdText}`,
       config: {
         systemInstruction: systemPrompt,
         maxOutputTokens: 8192,
+        temperature: 0,
+        topP: 0.1,
         thinkingConfig: { thinkingBudget: 0 },
       },
     });
@@ -154,9 +167,14 @@ Do not add any text before ===SUMMARY=== or after ===END_JSON===.`;
       return NextResponse.json({ error: 'Malformed JSON in evaluation response', debug: jsonString.slice(0, 300) }, { status: 500 });
     }
 
+    const candidateContext = [cv, profile, profileMd].join('\n\n');
+    const evaluation = applyEvaluationGuardrails({
+      ...parsed,
+      summary: summaryMatch?.[1]?.trim() ?? parsed.summary,
+    }, jdText, candidateContext);
+
     const { company, jobTitle, location, score, fitLevel, recommendation, matched, gaps,
-            categories, matchedKeywords, missingKeywords } = parsed;
-    const summary = summaryMatch?.[1]?.trim() ?? parsed.summary;
+            categories, matchedKeywords, missingKeywords, summary } = evaluation;
 
     // Build application ID
     const id = `${slugify(company)}-${slugify(jobTitle)}-${today}`;
@@ -167,6 +185,10 @@ Do not add any text before ===SUMMARY=== or after ===END_JSON===.`;
     // Write score.json
     const scoreData = {
       overallScore: score, fitLevel, recommendation, summary,
+      originalScore: evaluation.originalScore,
+      adjustedByGuardrails: evaluation.adjustedByGuardrails,
+      guardrails: evaluation.guardrails,
+      modelUsed,
       categories, matchedKeywords, missingKeywords,
       notes: summary,
       evaluatedAt: today,
@@ -178,9 +200,10 @@ Do not add any text before ===SUMMARY=== or after ===END_JSON===.`;
       company, jobTitle, location,
       score, fitLevel, recommendation,
       summary, matched, gaps,
+      guardrails: evaluation.guardrails,
+      adjustedByGuardrails: evaluation.adjustedByGuardrails,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: apiErrorMessage(err) }, { status: 500 });
   }
 }
