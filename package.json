@@ -17,7 +17,9 @@
     "scan": "node scan.mjs",
     "patterns": "node analyze-patterns.mjs",
     "gemini:eval": "node gemini-eval.mjs",
-    "eval:qa": "node test-evaluation-guardrails.mjs"
+    "eval:qa": "node test-evaluation-guardrails.mjs",
+    "scan:qa": "node --no-warnings test-scan-utils.mjs",
+    "contacts:qa": "node --no-warnings test-contact-intel.mjs"
   },
   "keywords": [
     "ai",

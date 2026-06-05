@@ -30,6 +30,11 @@ export default {
       url: j.hostedUrl || '',
       company: entry.name,
       location: j.categories?.location || '',
+      postedAt: typeof j.createdAt === 'number' ? new Date(j.createdAt).toISOString() : null,
+      directApplyUrl: j.applyUrl || j.hostedUrl || '',
+      sourceType: 'lever',
+      sourceName: 'Lever',
+      recencyConfidence: typeof j.createdAt === 'number' ? 'exact' : 'unknown',
     }));
   },
 };

@@ -9,9 +9,28 @@ import type { ApplicationDetail } from '@/lib/filesystem';
 import {
   ArrowLeft, ExternalLink, FileText, Mail, Briefcase,
   ChevronDown, Loader2, MapPin, Link2, BookOpen, Sparkles, Download, Code2, Eye,
+  UserSearch,
 } from 'lucide-react';
 
-type Tab = 'resume' | 'cover-letter' | 'job-description' | 'interview' | 'notes';
+type Tab = 'resume' | 'cover-letter' | 'job-description' | 'interview' | 'outreach' | 'notes';
+
+interface ContactLead {
+  id: string;
+  name: string;
+  title: string;
+  company: string;
+  linkedinUrl: string | null;
+  email: string | null;
+  sourceUrl: string | null;
+  confidence: string;
+  rationale: string;
+  outreach?: {
+    linkedinConnectionNote?: string;
+    linkedinFollowUp?: string;
+    coldEmailSubject?: string;
+    coldEmailBody?: string;
+  };
+}
 
 function escapeHtml(value: string) {
   return value
@@ -80,6 +99,11 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const [interviewError, setInterviewError] = useState<string | null>(null);
   const [sourceMode, setSourceMode] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [contacts, setContacts] = useState<ContactLead[]>([]);
+  const [contactLoading, setContactLoading] = useState(false);
+  const [contactError, setContactError] = useState<string | null>(null);
+  const [contactLinkedinUrls, setContactLinkedinUrls] = useState('');
+  const [contactPublicNotes, setContactPublicNotes] = useState('');
 
   useEffect(() => {
     fetch(`/api/applications/${id}`)
@@ -87,6 +111,13 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       .then((data: ApplicationDetail) => { setApp(data); setLoading(false); })
       .catch(() => setLoading(false));
   }, [id, refreshTick]);
+
+  useEffect(() => {
+    fetch(`/api/applications/${id}/contacts`)
+      .then(r => r.json())
+      .then((data: { contacts?: ContactLead[] }) => setContacts(Array.isArray(data.contacts) ? data.contacts : []))
+      .catch(() => setContacts([]));
+  }, [id]);
 
   async function changeStatus(newStatus: string) {
     if (!app) return;
@@ -122,6 +153,31 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     setRefreshTick(t => t + 1);
   }
 
+  async function generateContacts() {
+    setContactLoading(true);
+    setContactError(null);
+    const linkedinUrls = contactLinkedinUrls
+      .split(/\s+/)
+      .map(url => url.trim())
+      .filter(Boolean);
+    const res = await fetch(`/api/applications/${id}/contacts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ linkedinUrls, publicNotes: contactPublicNotes }),
+    });
+    const data = await res.json().catch(() => ({})) as { contacts?: ContactLead[]; error?: string };
+    if (!res.ok) {
+      setContactError(data.error ?? 'Outreach generation failed.');
+      setContactLoading(false);
+      return;
+    }
+    setContacts(Array.isArray(data.contacts) ? data.contacts : []);
+    setContactLinkedinUrls('');
+    setContactPublicNotes('');
+    setContactLoading(false);
+    setActiveTab('outreach');
+  }
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-3">
@@ -145,6 +201,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     { key: 'cover-letter',    label: 'Cover Letter',    icon: <Mail className="w-3.5 h-3.5" />,       available: !!app.coverLetterMd },
     { key: 'job-description', label: 'Job Description', icon: <Briefcase className="w-3.5 h-3.5" />, available: !!app.jobDescription },
     { key: 'interview',       label: 'Interview Prep',  icon: <BookOpen className="w-3.5 h-3.5" />,  available: !!app.interviewMd || interviewGenerated },
+    { key: 'outreach',        label: 'Outreach',        icon: <UserSearch className="w-3.5 h-3.5" />, available: contacts.length > 0 },
     { key: 'notes',           label: 'Notes',           icon: <FileText className="w-3.5 h-3.5" />,  available: !!app.notesMd },
   ];
 
@@ -154,9 +211,61 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       case 'cover-letter':    return app.coverLetterMd;
       case 'job-description': return app.jobDescription;
       case 'interview':       return app.interviewMd;
+      case 'outreach':        return null;
       case 'notes':           return app.notesMd;
     }
   };
+
+  const outreachPanel = (
+    <div className="p-5 space-y-4">
+      <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        Public-source and user-provided contacts only. No automated LinkedIn scraping, no auto-messaging, and no hidden phone-number collection.
+      </div>
+      {contacts.length === 0 ? (
+        <div className="py-12 text-center text-slate-500">
+          <UserSearch className="w-10 h-10 mx-auto mb-3 text-slate-300" />
+          <p className="font-semibold">No outreach contacts generated yet</p>
+          <p className="text-xs mt-1">Use the Outreach button above to create contact leads and drafts.</p>
+        </div>
+      ) : contacts.map(contact => (
+        <div key={contact.id} className="border border-slate-200 rounded-xl p-4 bg-white">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-semibold text-slate-900">{contact.name}</p>
+              <p className="text-sm text-slate-500">{contact.title}</p>
+              <p className="text-xs text-slate-400 mt-1">Confidence: {contact.confidence} · {contact.rationale}</p>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              {contact.linkedinUrl && (
+                <a href={contact.linkedinUrl} target="_blank" rel="noopener noreferrer"
+                  className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-50">LinkedIn</a>
+              )}
+              {contact.email && (
+                <a href={`mailto:${contact.email}`} className="text-xs border border-slate-200 rounded-lg px-3 py-1.5 text-slate-600 hover:bg-slate-50">Email</a>
+              )}
+            </div>
+          </div>
+          {contact.outreach && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-4">
+              <div className="rounded-lg bg-slate-50 border border-slate-100 p-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase mb-1">LinkedIn note</p>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap">{contact.outreach.linkedinConnectionNote}</p>
+              </div>
+              <div className="rounded-lg bg-slate-50 border border-slate-100 p-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase mb-1">LinkedIn follow-up</p>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap">{contact.outreach.linkedinFollowUp}</p>
+              </div>
+              <div className="lg:col-span-2 rounded-lg bg-slate-50 border border-slate-100 p-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase mb-1">Cold email</p>
+                <p className="text-sm font-semibold text-slate-800">{contact.outreach.coldEmailSubject}</p>
+                <p className="text-sm text-slate-700 whitespace-pre-wrap mt-2">{contact.outreach.coldEmailBody}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-8">
@@ -277,10 +386,43 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
               </div>
             </div>
           )}
+
+          <div className="w-px h-6 bg-slate-200 hidden sm:block" />
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+            <input
+              type="text"
+              placeholder="Optional LinkedIn/profile URLs"
+              value={contactLinkedinUrls}
+              onChange={e => setContactLinkedinUrls(e.target.value)}
+              className="w-64 text-sm px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white text-slate-800"
+            />
+            <input
+              type="text"
+              placeholder="Optional public notes/source"
+              value={contactPublicNotes}
+              onChange={e => setContactPublicNotes(e.target.value)}
+              className="w-64 text-sm px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white text-slate-800"
+            />
+            <button
+              onClick={generateContacts}
+              disabled={contactLoading}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+            >
+              {contactLoading
+                ? <><Loader2 className="w-4 h-4 animate-spin" />Generating outreach...</>
+                : <><UserSearch className="w-4 h-4" />Outreach</>}
+            </button>
+          </div>
         </div>
         {interviewError && (
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             {interviewError}
+          </div>
+        )}
+        {contactError && (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {contactError}
           </div>
         )}
       </div>
@@ -320,7 +462,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
 
           {/* Content */}
           <div className="flex-1 bg-white border border-t-0 border-slate-200 rounded-b-xl overflow-hidden min-h-96">
-            {activeContent() && sourceMode ? (
+            {activeTab === 'outreach' ? outreachPanel : activeContent() && sourceMode ? (
               <pre className="p-6 text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed overflow-y-auto h-full max-h-[700px]">
                 {activeContent()}
               </pre>

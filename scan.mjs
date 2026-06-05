@@ -33,6 +33,13 @@ import path from 'path';
 import yaml from 'js-yaml';
 
 import { makeHttpCtx } from './providers/_http.mjs';
+import {
+  classifyRolePriority,
+  employmentTypeForRole,
+  freshnessBucket,
+  postedAgeHours,
+  rolePriorityRank,
+} from './scan-utils.mjs';
 
 const parseYaml = yaml.load;
 
@@ -48,6 +55,7 @@ const PROVIDERS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)),
 mkdirSync('data', { recursive: true });
 
 const CONCURRENCY = 10;
+const DEFAULT_FRESHNESS_WINDOW_HOURS = 24;
 
 // ── Provider loading ────────────────────────────────────────────────
 
@@ -128,6 +136,28 @@ function buildTitleFilter(titleFilter) {
     const hasNegative = negative.some(k => lower.includes(k));
     return hasPositive && !hasNegative;
   };
+}
+
+function sourceRank(sourceType) {
+  if (sourceType === 'greenhouse' || sourceType === 'ashby' || sourceType === 'lever') return 0;
+  if (sourceType === 'eluta') return 1;
+  if (sourceType === 'manual-import') return 2;
+  return 3;
+}
+
+function offerFreshnessTime(offer) {
+  const value = offer.postedAt || offer.firstSeenAt || offer.scannedAt;
+  const time = value ? Date.parse(value) : 0;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function sortOffersRecentFirst(offers) {
+  return [...offers].sort((a, b) =>
+    offerFreshnessTime(b) - offerFreshnessTime(a)
+    || rolePriorityRank(a.rolePriority) - rolePriorityRank(b.rolePriority)
+    || sourceRank(a.sourceType) - sourceRank(b.sourceType)
+    || a.company.localeCompare(b.company)
+  );
 }
 
 // ── Location filter ─────────────────────────────────────────────────
@@ -378,6 +408,7 @@ async function main() {
   const args = process.argv.slice(2);
   const dryRun = args.includes('--dry-run');
   const verify = args.includes('--verify');
+  const jsonOutput = args.includes('--json');
   const companyFlag = args.indexOf('--company');
   const filterCompany = companyFlag !== -1 ? args[companyFlag + 1]?.toLowerCase() : null;
 
@@ -396,6 +427,7 @@ async function main() {
 
   const config = parseYaml(readFileSync(PORTALS_PATH, 'utf-8'));
   const companies = config.tracked_companies || [];
+  const freshnessWindowHours = Number(config.scan?.freshnessWindowHours ?? DEFAULT_FRESHNESS_WINDOW_HOURS);
   const titleFilter = buildTitleFilter(config.title_filter);
   const locationFilter = buildLocationFilter(config.location_filter);
 
@@ -480,7 +512,22 @@ async function main() {
         // Mark as seen to avoid intra-scan dupes
         seenUrls.add(job.url);
         seenCompanyRoles.add(key);
-        newOffers.push({ ...job, source: sourceName });
+        const rolePriority = classifyRolePriority(job.title, job.location);
+        const ageHours = postedAgeHours(job.postedAt);
+        newOffers.push({
+          ...job,
+          source: sourceName,
+          sourceType: job.sourceType || provider.id,
+          sourceName: job.sourceName || (provider.id === 'local-parser' ? 'Local parser' : provider.id),
+          directApplyUrl: job.directApplyUrl || job.url,
+          postedAt: job.postedAt || null,
+          postedAgeHours: ageHours,
+          freshnessBucket: freshnessBucket(job.postedAt),
+          rolePriority,
+          employmentType: employmentTypeForRole(rolePriority),
+          freshnessWindowHours,
+          recencyConfidence: job.recencyConfidence || (job.postedAt ? 'exact' : 'unknown'),
+        });
       }
     } catch (err) {
       errors.push({ company: company.name, error: err.message });
@@ -490,14 +537,14 @@ async function main() {
   await parallelFetch(tasks, CONCURRENCY);
 
   // 5.5. Optional liveness verification — drop expired and guard-rejected postings
-  let verifiedOffers = newOffers;
+  let verifiedOffers = sortOffersRecentFirst(newOffers);
   let expiredOffers = [];
   let droppedOffers = [];
   let invalidOffers = [];
   if (verify && newOffers.length > 0) {
     console.log(`\nVerifying liveness of ${newOffers.length} new offer(s) with Playwright (sequential)...`);
     const result = await verifyOffers(newOffers);
-    verifiedOffers = result.verified;
+    verifiedOffers = sortOffersRecentFirst(result.verified);
     expiredOffers = result.expired;
     droppedOffers = result.dropped;
     invalidOffers = result.invalid;
@@ -569,6 +616,27 @@ async function main() {
 
   console.log(`\n→ Run /career-ops pipeline to evaluate new offers.`);
   console.log('→ Share results and get help: https://discord.gg/8pRpHETxa4');
+
+  if (jsonOutput) {
+    console.log('__CAREER_OPS_SCAN_JSON__' + JSON.stringify({
+      date,
+      dryRun,
+      verify,
+      summary: {
+        companiesScanned: targets.length,
+        totalFound,
+        filteredByTitle: totalFilteredTitle,
+        filteredByLocation: totalFilteredLocation,
+        duplicates: totalDupes,
+        expired: expiredOffers.length,
+        noApplyControl: droppedOffers.length,
+        invalid: invalidOffers.length,
+        newOffers: verifiedOffers.length,
+      },
+      offers: verifiedOffers,
+      errors,
+    }));
+  }
 }
 
 // Only run main() when invoked directly (`node scan.mjs`), not when imported by tests.

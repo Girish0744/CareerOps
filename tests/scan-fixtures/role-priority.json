@@ -1,0 +1,42 @@
+[
+  {
+    "title": "New Graduate Software Developer",
+    "location": "Toronto, ON",
+    "expected": "full_time_new_grad"
+  },
+  {
+    "title": "Junior Full Stack Developer",
+    "location": "Waterloo, ON",
+    "expected": "full_time_entry"
+  },
+  {
+    "title": "Software Development Engineer",
+    "location": "Toronto, ON",
+    "expected": "full_time_general"
+  },
+  {
+    "title": "Java Developer",
+    "location": "Mississauga, ON",
+    "expected": "full_time_general"
+  },
+  {
+    "title": "Software Developer Intern",
+    "location": "Kitchener, ON",
+    "expected": "intern_coop"
+  },
+  {
+    "title": "Sr. Java/React Full Stack Developer",
+    "location": "Mississauga, ON",
+    "expected": "stretch"
+  },
+  {
+    "title": "Senior AI Architect",
+    "location": "Remote Canada",
+    "expected": "stretch"
+  },
+  {
+    "title": "Salesforce Administrator",
+    "location": "Toronto, ON",
+    "expected": "skip"
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "company": "OntarioApps",
+  "jobTitle": "Full Stack Developer",
+  "jobUrl": "https://example.com/jobs/full-stack",
+  "jobDescription": "Join our product engineering team in Toronto.",
+  "publicNotes": "",
+  "linkedinUrls": ["https://www.linkedin.com/in/example-recruiter"],
+  "expected": {
+    "minContacts": 1,
+    "linkedinUrl": "https://www.linkedin.com/in/example-recruiter",
+    "allowedSourceTypes": ["user-provided-linkedin"]
+  }
+}

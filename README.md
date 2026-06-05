@@ -28,13 +28,23 @@ This fork extends the base career-ops system with a full **web frontend pipeline
 | 12 | Self-contained frontend pipeline — paste JD/URL → `/api/evaluate` → score card → user decides → `/api/generate-docs/{id}` → resume PDF + cover letter PDF | ✅ Complete |
 | 15 | PDF download — `GET /api/applications/{id}/pdf?type=resume\|cover-letter` streams PDF; download buttons in Application Detail | ✅ Complete |
 | 20 | Baseline stabilization — frontend statuses accepted by legacy validators, Canada-focused `portals.yml`, initial scan queue files, docs synced | ✅ Complete |
+| 13 | Portal scan → scored job cards — `POST /api/scan/run` runs `scan.mjs --dry-run --json`, quick-scores results, saves ranked cards to `data/scored-queue.json`, and Job Discovery can refresh/evaluate scan cards | ✅ Complete |
+| 14 | Generate application from scan cards — scan card Evaluate runs full `/api/evaluate`; user confirms with the same score-card button to generate resume + cover letter | ✅ Complete |
+| 18A | Canada source expansion, first batch — verified additional Ashby/Greenhouse/Lever sources in `portals.yml` | ✅ First batch |
+| 18B | Rich scan metadata — posted/first-seen/last-seen/source/direct-apply metadata plus Job Discovery filters and quality lanes | ✅ First batch |
+| 21 | Compliant contact/outreach assistant — public-source/user-provided contact leads and personalized drafts saved to `applications/{id}/contacts.json` | ✅ First batch |
+| 22 | Recent-first discovery — Eluta Canada search adapter, 24h freshness mode, role-priority ranking, and manual job-alert/URL import for LinkedIn/Indeed/Glassdoor signals without scraping those platforms | ✅ First batch |
 
 ### Current Baseline Notes
 
 - The **frontend workflow statuses are authoritative** in this fork: `Saved`, `Evaluated`, `Resume Generated`, `Cover Letter Generated`, `Ready to Apply`, `Applied`, `In Progress`, `Interview`, `Offer`, `Rejected`, `Withdrawn`.
 - Upstream/legacy statuses still work for compatibility: `Responded`, `Discarded`, `SKIP`.
-- `portals.yml` now exists and is tuned for Girish's Canada/Ontario software, full-stack, and AI application search. Phase 18 will expand it to many more companies.
-- `data/pipeline.md` and `data/scored-queue.json` are initialized so Phase 13 can wire scan results without first creating missing files.
+- `portals.yml` is tuned for Girish's Canada/Ontario software, full-stack, and AI application search. It now includes structured Ashby/Greenhouse/Lever sources plus an Eluta Canada IT/software search adapter.
+- Scanner default freshness mode is `scan.freshnessWindowHours: 24`. Results rank by recent posting/first-seen time, then role priority, then score/source quality.
+- `data/pipeline.md` and `data/scored-queue.json` are initialized; Job Discovery can refresh scanned jobs, import saved job-board URLs/alerts, filter by score/company/source/recency/role type, and show ranked quality lanes.
+- Scan cards store richer metadata: `postedAt`, `postedAgeHours`, `freshnessBucket`, `firstSeenAt`/`lastSeenAt`, source labels, source type, direct apply URLs, `rolePriority`, `employmentType`, and recency confidence.
+- Role priority values are `full_time_new_grad`, `full_time_entry`, `full_time_general`, `intern_coop`, `stretch`, and `skip`. Full-time new-grad/entry roles rank above internships/co-ops by default.
+- LinkedIn, Indeed, and Glassdoor are import/signal sources only. The app does not scrape them, auto-connect, auto-message, or submit applications automatically.
 - Job evaluation now normalizes pasted JD text and direct job URLs through the same cleanup layer. Greenhouse, Ashby, and Lever URLs use structured APIs when possible, then fall back to cleaned HTML.
 - Evaluation uses a deterministic 100-point rubric and strips ATS/legal boilerplate before scoring so pasted text and URL input are much closer and more trustworthy.
 - Evaluation also applies backend score guardrails after the model responds: hard seniority requirements, professional embedded requirements, and missing industrial automation stacks can cap the score and raise risk factors. This prevents the same JD from becoming an 80+ "Apply" only because it came from a URL.
@@ -42,15 +52,15 @@ This fork extends the base career-ops system with a full **web frontend pipeline
 - Offline scoring QA exists at `npm run eval:qa`; it runs known JD fixtures against the backend guardrails without spending API quota.
 - Job Discovery lets the user evaluate another job immediately from any score card, including low-score Maybe/Skip results, without refreshing the page.
 - Application Detail now shows live previews for resume, cover letter, and interview prep in the platform, with a Source toggle for raw Markdown.
-- Current baseline checks: `node doctor.mjs`, `node cv-sync-check.mjs`, `node verify-pipeline.mjs`, `cd frontend && npm run lint`, `cd frontend && npm run build`.
+- Application Detail includes a compliant Outreach section. It uses public job/application context and user-provided URLs only; it does not automate LinkedIn scraping, connecting, or messaging. LinkedIn notes should be warm, specific, and low-pressure, never a first-message referral ask.
+- Current baseline checks: `npm run scan:qa`, `npm run eval:qa`, `npm run contacts:qa`, `node doctor.mjs`, `node cv-sync-check.mjs`, `node verify-pipeline.mjs`, `cd frontend && npm run lint`, `cd frontend && npm run build`.
+- Frontend builds use the local system font stack, so production builds do not depend on fetching Google Fonts. Turbopack may still print a trace warning because API routes intentionally read career-ops root files outside `frontend/`.
 
 ### In Progress / Up Next
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| 13 | **Portal scan → scored job cards** — `POST /api/scan/run` triggers `scan.mjs`, bulk quick-scores all results via Gemini in one call, saves to `data/scored-queue.json`. Job Discovery "Scan" tab shows ranked cards with score badges. Refresh button re-runs scan. Baseline files/config are ready. | 🔜 Next |
-| 14 | **"Generate Application" from scanned cards** — "Evaluate" button on a scan card fetches the full JD and runs `/api/evaluate`; score modal appears; user confirms → `/api/generate-docs` runs. Same two-step gated flow as manual paste. | 🔜 After 13 |
-| 18 | **Expanded portals** — Grow `portals.yml` from ~45 to 150+ companies: Canadian AI startups (Cohere, Waabi, Ada, Darwin AI, Layer6), Ontario tech scale-ups (Shopify, Wealthsimple, Miovision, Faire, Veeva, Lightspeed, Magnet Forensics), and Big Tech Canada offices (Google, Microsoft, Amazon, Apple, Meta Toronto/Waterloo). Categorised by sector so scan results are easier to filter. | 🔜 After 13 |
+| 18 | **Expanded portals, next batch** — Continue growing `portals.yml` toward 150+ companies, adding Workday/Teamtailor/BambooHR/custom parsers only for high-value Canadian sources where structured endpoints are verified. | 🔜 Next |
 | 19 | **Email job alerts** — After each scan run, diff new results against the last scan. Any new job ≥ score threshold (default 70) triggers a Resend API email digest: ranked cards, score badges, one-click "Evaluate" links. `RESEND_API_KEY` in `.env.local`. Free tier: 3,000 emails/month. | 🔜 After 18 |
 | 16 | **Settings / Profile page** — `/settings` in the frontend: view and edit `profile.yml` (name, target roles, comp range, location) and `portals.yml` (add/remove companies, adjust keyword filters). No file editor needed. | 🔜 After 19 |
 | 17 | **Application form assistant** — "Apply" tab in Application Detail: paste the form's questions → AI generates copy-paste answers grounded in the saved resume + cover letter + job description. One copy button per answer. Never auto-submits. | 🔜 After 16 |

@@ -83,7 +83,25 @@ export interface ScoredJob {
   fitLevel: string;
   recommendation: string;
   summary: string;
+  matched?: string[];
+  gaps?: string[];
+  source?: string | null;
+  sourceType?: string | null;
+  sourceName?: string | null;
+  sourceSearchUrl?: string | null;
+  employerHost?: string | null;
+  directApplyUrl?: string | null;
+  firstSeenAt?: string;
+  lastSeenAt?: string;
+  recencyConfidence?: 'exact' | 'first_seen' | 'unknown';
+  isNew?: boolean;
+  scoringMode?: 'ai-quick-score' | 'local-fallback';
   postedAt: string | null;
+  postedAgeHours?: number | null;
+  freshnessBucket?: '24h' | '72h' | '7d' | 'older' | 'unknown';
+  rolePriority?: 'full_time_new_grad' | 'full_time_entry' | 'full_time_general' | 'intern_coop' | 'stretch' | 'skip';
+  employmentType?: string | null;
+  freshnessWindowHours?: number;
   scannedAt: string;
 }
 
@@ -227,6 +245,11 @@ export function saveDocumentEdit(id: string, filename: 'resume.md' | 'cover-lett
 
 export function getPdfAbsPath(relativePath: string): string {
   return path.join(ROOT, relativePath);
+}
+
+export function saveScoredQueue(queue: ScoredJob[]): void {
+  fs.mkdirSync(path.dirname(PATHS.scoredQueue), { recursive: true });
+  fs.writeFileSync(PATHS.scoredQueue, JSON.stringify(queue, null, 2));
 }
 
 // ── CREATE / UPDATE ───────────────────────────────────────────────────────────

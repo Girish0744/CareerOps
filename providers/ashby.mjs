@@ -25,11 +25,22 @@ export default {
     if (!apiUrl) throw new Error(`ashby: cannot derive API URL for ${entry.name}`);
     const json = await ctx.fetchJson(apiUrl);
     const jobs = Array.isArray(json?.jobs) ? json.jobs : [];
-    return jobs.map(j => ({
-      title: j.title || '',
-      url: j.jobUrl || '',
-      company: entry.name,
-      location: j.location || '',
-    }));
+    return jobs.map(j => {
+      const secondaryLocations = Array.isArray(j.secondaryLocations)
+        ? j.secondaryLocations.map(loc => loc?.location).filter(Boolean)
+        : [];
+      const locations = [j.location, ...secondaryLocations].filter(Boolean);
+      return {
+        title: j.title || '',
+        url: j.jobUrl || '',
+        company: entry.name,
+        location: [...new Set(locations)].join(' / '),
+        postedAt: j.publishedAt || null,
+        directApplyUrl: j.applyUrl || j.jobUrl || '',
+        sourceType: 'ashby',
+        sourceName: 'Ashby',
+        recencyConfidence: j.publishedAt ? 'exact' : 'unknown',
+      };
+    });
   },
 };

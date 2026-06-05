@@ -1,0 +1,12 @@
+{
+  "company": "QuietCo",
+  "jobTitle": "AI Application Developer",
+  "jobUrl": "https://example.com/jobs/ai-app-dev",
+  "jobDescription": "Apply through our careers page. No recruiter contact is listed.",
+  "publicNotes": "",
+  "linkedinUrls": [],
+  "expected": {
+    "minContacts": 1,
+    "allowedSourceTypes": ["manual-research-needed"]
+  }
+}

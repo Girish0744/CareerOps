@@ -196,7 +196,11 @@ Each URL gets a verdict: `active`, `expired`, or `uncertain` with a reason.
 
 ## scan
 
-Zero-token portal scanner. Runs configured local parsers for SSR/static career pages and hits ATS APIs (Greenhouse, Ashby, Lever) directly — no LLM tokens consumed. Reads `portals.yml` for target companies, outputs matching listings to stdout, and optionally appends to `data/pipeline.md`. Phase 13 will bridge these discovered jobs into `data/scored-queue.json`, which is local generated queue data and gitignored.
+Zero-token portal scanner. Runs configured local parsers for SSR/static career pages, hits ATS APIs (Greenhouse, Ashby, Lever), and reads the Eluta Canada IT/software search adapter directly — no LLM tokens consumed. Reads `portals.yml` for target companies, outputs matching listings to stdout, and optionally appends to `data/pipeline.md`. The frontend uses `node scan.mjs --dry-run --json` from `/api/scan/run` to capture discovered jobs, quick-score them, and write `data/scored-queue.json`, which is local generated queue data and gitignored.
+
+When a provider exposes metadata, scan JSON includes `postedAt`, `postedAgeHours`, `freshnessBucket`, `directApplyUrl`, `sourceType`, `sourceName`, `rolePriority`, `employmentType`, and `recencyConfidence`. The frontend queue adds `firstSeenAt` and `lastSeenAt`. If exact posting time is unavailable, the UI labels the job by first-seen date instead of inventing a posted date.
+
+Recent-first behavior is configured in `portals.yml` under `scan.freshnessWindowHours` and defaults to `24`. Sorting favors fresh postings, then full-time new-grad/entry-level roles, then score/source quality. Role priority values are `full_time_new_grad`, `full_time_entry`, `full_time_general`, `intern_coop`, `stretch`, and `skip`.
 
 For custom SSR pages, configure a tracked company with `scan_method: local_parser` and a `parser` block. The parser can be written in JavaScript, Python, or any language available as a local executable. Company-specific parsers usually already know their source URL and only need to print JSON jobs to stdout:
 
@@ -213,6 +217,12 @@ If a parser writes full extraction artifacts for debugging or audit, store them 
 
 ```bash
 npm run scan
+npm run scan:qa
+node scan.mjs --dry-run --json
 ```
+
+`--json` appends a machine-readable payload after the `__CAREER_OPS_SCAN_JSON__` marker. It is intended for the frontend scan API and can be combined with `--dry-run` to avoid mutating `pipeline.md` or `scan-history.tsv`.
+
+`npm run scan:qa` validates Eluta-style relative timestamps and role-priority ordering fixtures before scanner/ranking changes.
 
 **Exit codes:** `0` scan completed, `1` configuration error or no portals.yml found.

@@ -18,6 +18,17 @@
  * @property {string} company  May be empty when the source can't expose it
  *                             at the list-page level; populated downstream.
  * @property {string} location May be empty.
+ * @property {(string|null)} [postedAt]       ISO timestamp/date when the source exposes it.
+ * @property {(string|null)} [directApplyUrl] Direct apply URL when different from the posting URL.
+ * @property {(string|null)} [sourceType]     Provider/source family, e.g. `greenhouse`.
+ * @property {(string|null)} [sourceName]     Human-facing source name, e.g. `Greenhouse`.
+ * @property {(string|null)} [sourceSearchUrl] Search/result page that produced this job.
+ * @property {(string|null)} [employerHost]   Employer host hint when a discovery source exposes it.
+ * @property {(number|null)} [postedAgeHours]
+ * @property {(string|null)} [freshnessBucket]
+ * @property {(string|null)} [rolePriority]
+ * @property {(string|null)} [employmentType]
+ * @property {('exact'|'first_seen'|'unknown')} [recencyConfidence]
  */
 
 /**

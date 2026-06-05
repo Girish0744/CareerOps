@@ -61,6 +61,11 @@ export default {
       url: j.absolute_url,
       company: entry.name,
       location: j.location?.name || '',
+      postedAt: j.first_published || j.updated_at || null,
+      directApplyUrl: j.absolute_url,
+      sourceType: 'greenhouse',
+      sourceName: 'Greenhouse',
+      recencyConfidence: j.first_published ? 'exact' : 'unknown',
     }));
   },
 };

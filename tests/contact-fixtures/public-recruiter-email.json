@@ -1,0 +1,13 @@
+{
+  "company": "ExampleAI",
+  "jobTitle": "New Grad Software Developer",
+  "jobUrl": "https://example.com/jobs/new-grad-software-developer",
+  "jobDescription": "Questions? Contact the talent team at careers@example.ai. We review applications weekly.",
+  "publicNotes": "",
+  "linkedinUrls": [],
+  "expected": {
+    "minContacts": 1,
+    "email": "careers@example.ai",
+    "allowedSourceTypes": ["public-job-context"]
+  }
+}

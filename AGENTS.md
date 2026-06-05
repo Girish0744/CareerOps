@@ -433,9 +433,13 @@ Frontend workflow statuses are authoritative for this personalized fork. Legacy 
 | 12 | Self-contained frontend pipeline — paste JD/URL → `/api/evaluate` → score card → user decides → `/api/generate-docs/{id}` → PDFs | ✅ Complete |
 | 15 | PDF download — `GET /api/applications/{id}/pdf?type=resume\|cover-letter` streams PDF; download buttons in UI | ✅ Complete |
 | 20 | Baseline stabilization — frontend statuses accepted by legacy validators, Canada-focused `portals.yml`, initial scan queue files, docs synced | ✅ Complete |
-| 13 | **Portal scan → scored job cards** — `POST /api/scan/run` triggers scan + bulk quick-scores → `data/scored-queue.json` → Job Discovery "Scan Results" tab | 🔜 Next |
-| 14 | **"Generate Application" from scan cards** — Evaluate button on scan card → score modal → user confirms → generate-docs | 🔜 After 13 |
-| 18 | **Expanded portals** — Grow `portals.yml` from ~45 to 150+ companies (Canadian AI, Ontario scale-ups, Big Tech Canada) | 🔜 After 13 |
+| 13 | Portal scan → scored job cards — `POST /api/scan/run` runs `scan.mjs --dry-run --json`, quick-scores results, writes `data/scored-queue.json`, and Job Discovery can refresh/evaluate scan cards | ✅ Complete |
+| 14 | Generate application from scan cards — scan card Evaluate runs full `/api/evaluate`; user confirms from the score card → generate-docs | ✅ Complete |
+| 18A | Expanded portals, first batch — added verified provider-compatible Canadian/Ontario sources to `portals.yml` | ✅ First batch |
+| 18B | Rich scan metadata — posted/first-seen/last-seen/source/direct-apply metadata plus filters and quality lanes | ✅ First batch |
+| 21 | Compliant outreach assistant — public-source/user-provided contact leads + LinkedIn/email drafts in Application Detail | ✅ First batch |
+| 22 | Recent-first discovery — Eluta Canada search adapter, 24h freshness mode, role-priority ranking, and manual job-alert/URL import without scraping LinkedIn/Indeed/Glassdoor | ✅ First batch |
+| 18 | **Expanded portals, next batch** — continue toward 150+ companies; add Workday/Teamtailor/BambooHR/custom parsers only for verified high-value Canadian sources | 🔜 Next |
 | 19 | **Email job alerts** — After scan, diff against last run; new jobs ≥ threshold → Resend API digest email | 🔜 After 18 |
 | 16 | **Settings / Profile page** — `/settings`: edit `profile.yml` and `portals.yml` from the browser | 🔜 After 19 |
 | 17 | **Application form assistant** — "Apply" tab: paste form questions → AI generates copy-paste answers | 🔜 After 16 |
@@ -453,7 +457,11 @@ Frontend workflow statuses are authoritative for this personalized fork. Legacy 
 
 **Model routing:** frontend Gemini routes use configurable model selection. `.env.local` may set `GEMINI_MODEL` for all routes or task-specific overrides (`GEMINI_EVALUATE_MODEL`, `GEMINI_DOCS_MODEL`, `GEMINI_CHAT_MODEL`, `GEMINI_INTERVIEW_MODEL`) plus comma-separated fallback lists (`GEMINI_FALLBACK_MODELS` or task-specific fallback variables). Restart `npm run dev` after changing model env vars.
 
-**Scoring QA:** run `npm run eval:qa` from the repo root before Phase 13 or scoring changes. It uses `tests/evaluation-fixtures/*.json` and the same guardrail core as the app, without calling Gemini.
+**Scoring QA:** run `npm run eval:qa` from the repo root before bulk scanning sessions or scoring changes. It uses `tests/evaluation-fixtures/*.json` and the same guardrail core as the app, without calling Gemini.
+
+**Scan QA:** run `npm run scan:qa` before changing scanner ranking, Eluta parsing, or role-priority logic. It checks Eluta-style relative timestamps and verifies full-time new-grad/entry roles outrank internships/co-ops.
+
+**Contact QA:** run `npm run contacts:qa` before changing outreach extraction. It verifies that contact leads come only from public job context, user-provided LinkedIn URLs, or an explicit manual-research placeholder.
 
 **Job Discovery reset:** every evaluated score card should let the user evaluate another job without refreshing the page. Keep this available for Maybe/Skip outcomes as well as Apply outcomes.
 
@@ -461,13 +469,24 @@ Frontend workflow statuses are authoritative for this personalized fork. Legacy 
 
 ### Scan Queue — How It Works (Phase 13)
 
-Baseline is ready: `portals.yml` exists with Canada/Ontario-focused provider-compatible companies,
-`data/pipeline.md` has the scanner's expected sections, and `data/scored-queue.json` exists as `[]`.
+Phase 13 is implemented. `portals.yml` exists with Canada/Ontario-focused provider-compatible companies plus an Eluta Canada IT/software search adapter,
+`data/pipeline.md` has the scanner's expected sections, and `data/scored-queue.json` is the local ranked scan queue.
 
-1. User clicks "Refresh" on Scan Results tab → `POST /api/scan/run` → `scan.mjs` runs
-2. All new job titles + descriptions sent to `gemini-2.0-flash` in one batched call → scores returned
-3. Results saved to `data/scored-queue.json`, shown as ranked cards
-4. User clicks "Evaluate" on a card → full `/api/evaluate` → score modal → confirm → generate-docs
+1. User clicks Refresh in Job Discovery → `POST /api/scan/run`
+2. API runs `node scan.mjs --dry-run --json` so scanner discovery is machine-readable without mutating `pipeline.md`
+3. New job metadata is quick-scored in one Gemini call through the configurable evaluate model; if AI scoring fails, local fallback scoring keeps the queue usable
+4. Results merge into `data/scored-queue.json`, sorted by posting/first-seen freshness, then `rolePriority`, score, and source quality. Cards store `postedAt`, `postedAgeHours`, `freshnessBucket`, `firstSeenAt`, `lastSeenAt`, `directApplyUrl`, `sourceType`, `sourceName`, `rolePriority`, `employmentType`, and `recencyConfidence`
+5. User clicks Evaluate on a card → full `/api/evaluate` fetches the JD and applies the trusted evaluation/guardrails
+6. User confirms from the score card → `/api/generate-docs/{id}` creates the tailored resume and cover letter
+7. Job Discovery shows Strong Apply / Apply / Maybe / Skip lanes plus score, company, source, role type, and freshness filters. Default operating mode is last-24-hours first.
+8. User can paste LinkedIn/Indeed/Glassdoor/Eluta/employer URLs or job-alert text into `POST /api/scan/import`. This preserves job-board signals without scraping restricted platforms.
+
+### Outreach Assistant — Exact Behaviour
+
+- Contact leads are stored per application in `applications/{id}/contacts.json`.
+- Allowed sources: public job/application text, public company/team/recruiting notes pasted by the user, and user-provided LinkedIn/profile URLs.
+- Forbidden behavior: automated LinkedIn scraping, auto-connecting, auto-messaging, hidden phone-number collection, or invented contact facts.
+- Drafts generated: LinkedIn connection note, LinkedIn follow-up, cold email subject, and cold email body. User sends everything manually. Connection notes should be warm, specific, and low-pressure; do not ask for a referral or favor in the first note.
 
 ### Interview Prep — Exact Behaviour
 
@@ -485,10 +504,12 @@ frontend/                        Next.js app — run with: cd frontend && npm ru
   app/api/evaluate/route.ts      POST — Gemini 2.5 Flash: score JD, extract info, create app folder
   app/api/generate-docs/[id]/    POST — Gemini 2.5 Flash ×2 + Playwright: resume PDF + cover letter PDF
   app/api/applications/          GET all / GET one / PUT status / GET pdf
-  app/api/chat/                  POST — Gemini 2.0 Flash: multi-turn chat for document editing
-  app/api/interview/             POST — Gemini 2.0 Flash: generate interview.md
+  app/api/chat/                  POST — configurable Gemini chat model: multi-turn chat for document editing
+  app/api/interview/             POST — configurable Gemini interview model: generate interview.md
   app/api/scan/                  GET — reads data/scored-queue.json
-  app/api/scan/run/              POST — runs scan.mjs + bulk quick-scores (Phase 13)
+  app/api/scan/run/              POST — runs scan.mjs + bulk quick-scores with scan metadata
+  app/api/scan/import/           POST — imports pasted job-board URLs or job-alert text without scraping restricted platforms
+  app/api/applications/[id]/contacts/ GET/POST — compliant contact leads + outreach drafts
   lib/filesystem.ts              All file reads/writes — single swap point for DB migration
   .env.local                     GEMINI_API_KEY=... (required) · RESEND_API_KEY=... (Phase 19)
 ```
@@ -501,13 +522,15 @@ frontend/                        Next.js app — run with: cd frontend && npm ru
 | `/api/generate-docs` | `gemini-2.5-flash` | Best output for document generation |
 | `/api/chat` | `gemini-2.5-flash` | Reliability for document edits and application Q&A |
 | `/api/interview` | `gemini-2.5-flash` | Reliability for complete interview guide generation |
-| `/api/scan/run` quick-score | `gemini-2.0-flash` | Bulk — uses 200 req/day quota not 20 |
+| `/api/scan/run` quick-score | Configurable evaluate model (`GEMINI_EVALUATE_MODEL`/fallbacks) | Bulk preliminary ranking; local fallback if AI quota/model fails |
 
 `gemini-2.5-flash` MUST use `thinkingConfig: { thinkingBudget: 0 }` — without this, thinking tokens truncate JSON/HTML output mid-response.
 
 Response parsing uses a 3-fallback chain: `===DELIMITERS===` → markdown code blocks → raw `{...}` object.
 
 Font paths in generated HTML use `../../fonts/` (relative to `applications/{id}/`) → resolves to `career-ops/fonts/` when Playwright renders via `file://`.
+
+The frontend shell uses the local system font stack rather than `next/font/google`, so `npm run build` does not depend on Google Fonts network access. Turbopack may still print a trace warning because API routes intentionally read career-ops root files outside `frontend/`.
 
 `export const maxDuration = 120` on generate-docs route (PDF gen takes 45–90s).
 

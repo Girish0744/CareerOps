@@ -1,0 +1,7 @@
+[
+  { "label": "55 minutes ago", "expectedMaxHours": 1 },
+  { "label": "1 hour ago", "expectedMinHours": 1, "expectedMaxHours": 1 },
+  { "label": "5 hours ago", "expectedMinHours": 5, "expectedMaxHours": 5 },
+  { "label": "1 day ago", "expectedMinHours": 24, "expectedMaxHours": 24 },
+  { "label": "7 days ago", "expectedMinHours": 168, "expectedMaxHours": 168 }
+]
