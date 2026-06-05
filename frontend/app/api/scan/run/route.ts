@@ -336,15 +336,34 @@ function recencyRank(job: ScoredJob): number {
   return Number.isFinite(time) ? time : 0;
 }
 
+function freshnessRank(job: ScoredJob): number {
+  const ranks: Record<string, number> = { '24h': 0, '72h': 1, '7d': 2, older: 3, unknown: 4 };
+  return ranks[job.freshnessBucket ?? 'unknown'] ?? ranks.unknown;
+}
+
 function roleRank(job: ScoredJob): number {
   return ROLE_PRIORITY_RANK[job.rolePriority ?? 'skip'] ?? ROLE_PRIORITY_RANK.skip;
 }
 
 function sourceRank(job: ScoredJob): number {
   if (job.sourceType === 'greenhouse' || job.sourceType === 'ashby' || job.sourceType === 'lever') return 0;
+  if (job.employerHost && job.sourceType !== 'eluta') return 0;
   if (job.sourceType === 'eluta') return 1;
   if (job.sourceType === 'manual-import') return 2;
   return 3;
+}
+
+function sourceSummary(queue: ScoredJob[]) {
+  const map = new Map<string, { sourceType: string; sourceName: string; count: number }>();
+  for (const job of queue) {
+    const sourceType = job.sourceType ?? 'unknown';
+    const sourceName = job.sourceName ?? job.source ?? sourceType;
+    const key = `${sourceType}:${sourceName}`;
+    const existing = map.get(key) ?? { sourceType, sourceName, count: 0 };
+    existing.count += 1;
+    map.set(key, existing);
+  }
+  return Array.from(map.values()).sort((a, b) => b.count - a.count || a.sourceName.localeCompare(b.sourceName));
 }
 
 function mergeQueue(existing: ScoredJob[], incoming: ScoredJob[]): ScoredJob[] {
@@ -363,10 +382,11 @@ function mergeQueue(existing: ScoredJob[], incoming: ScoredJob[]): ScoredJob[] {
   }
   return Array.from(map.values())
     .sort((a, b) => (
-      recencyRank(b) - recencyRank(a)
+      freshnessRank(a) - freshnessRank(b)
       || roleRank(a) - roleRank(b)
-      || b.score - a.score
       || sourceRank(a) - sourceRank(b)
+      || b.score - a.score
+      || recencyRank(b) - recencyRank(a)
       || a.company.localeCompare(b.company)
     ))
     .slice(0, 300);
@@ -433,6 +453,7 @@ export async function POST() {
       added: incoming.filter(job => job.isNew).length,
       total: queue.length,
       scanSummary: scan.summary,
+      sourceSummary: sourceSummary(queue),
       scannerErrors: scan.errors,
     });
   } catch (err) {

@@ -81,6 +81,32 @@ function recencyRank(job: ScoredJob) {
   return Number.isFinite(time) ? time : 0;
 }
 
+function freshnessRank(job: ScoredJob) {
+  const ranks: Record<string, number> = { '24h': 0, '72h': 1, '7d': 2, older: 3, unknown: 4 };
+  return ranks[job.freshnessBucket ?? 'unknown'] ?? ranks.unknown;
+}
+
+function sourceRank(job: ScoredJob) {
+  if (job.sourceType === 'greenhouse' || job.sourceType === 'ashby' || job.sourceType === 'lever') return 0;
+  if (job.employerHost && job.sourceType !== 'eluta') return 0;
+  if (job.sourceType === 'eluta') return 1;
+  if (job.sourceType === 'manual-import') return 2;
+  return 3;
+}
+
+function sourceSummary(queue: ScoredJob[]) {
+  const map = new Map<string, { sourceType: string; sourceName: string; count: number }>();
+  for (const job of queue) {
+    const sourceType = job.sourceType ?? 'unknown';
+    const sourceName = job.sourceName ?? job.source ?? sourceType;
+    const key = `${sourceType}:${sourceName}`;
+    const existing = map.get(key) ?? { sourceType, sourceName, count: 0 };
+    existing.count += 1;
+    map.set(key, existing);
+  }
+  return Array.from(map.values()).sort((a, b) => b.count - a.count || a.sourceName.localeCompare(b.sourceName));
+}
+
 function firstSeenFreshness(firstSeenAt: string): ScoredJob['freshnessBucket'] {
   const age = Math.max(0, (Date.now() - Date.parse(firstSeenAt)) / HOUR_MS);
   if (age <= 24) return '24h';
@@ -173,7 +199,14 @@ function mergeQueue(existing: ScoredJob[], incoming: ScoredJob[]) {
     });
   }
   return Array.from(map.values())
-    .sort((a, b) => recencyRank(b) - recencyRank(a) || roleRank(a) - roleRank(b) || b.score - a.score || a.company.localeCompare(b.company))
+    .sort((a, b) => (
+      freshnessRank(a) - freshnessRank(b)
+      || roleRank(a) - roleRank(b)
+      || sourceRank(a) - sourceRank(b)
+      || b.score - a.score
+      || recencyRank(b) - recencyRank(a)
+      || a.company.localeCompare(b.company)
+    ))
     .slice(0, 300);
 }
 
@@ -194,6 +227,7 @@ export async function POST(req: Request) {
       queue,
       imported: imported.length,
       added: imported.filter(job => !existingKeys.has(keyForJob(job))).length,
+      sourceSummary: sourceSummary(queue),
     });
   } catch (err) {
     return NextResponse.json({ error: apiErrorMessage(err) }, { status: 500 });

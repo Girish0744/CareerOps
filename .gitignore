@@ -26,6 +26,10 @@ applications/*
 writing-samples/*
 !writing-samples/README.md
 
+# Private application upload files (transcripts, IDs, certificates — never committed)
+private-docs/*
+!private-docs/.gitkeep
+
 # User config and customization (never auto-updated)
 config/profile.yml
 portals.yml

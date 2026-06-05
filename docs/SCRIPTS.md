@@ -200,7 +200,7 @@ Zero-token portal scanner. Runs configured local parsers for SSR/static career p
 
 When a provider exposes metadata, scan JSON includes `postedAt`, `postedAgeHours`, `freshnessBucket`, `directApplyUrl`, `sourceType`, `sourceName`, `rolePriority`, `employmentType`, and `recencyConfidence`. The frontend queue adds `firstSeenAt` and `lastSeenAt`. If exact posting time is unavailable, the UI labels the job by first-seen date instead of inventing a posted date.
 
-Recent-first behavior is configured in `portals.yml` under `scan.freshnessWindowHours` and defaults to `24`. Sorting favors fresh postings, then full-time new-grad/entry-level roles, then score/source quality. Role priority values are `full_time_new_grad`, `full_time_entry`, `full_time_general`, `intern_coop`, `stretch`, and `skip`.
+Recent-first behavior is configured in `portals.yml` under `scan.freshnessWindowHours` and defaults to `24`. Sorting favors freshness bucket, then full-time new-grad/entry-level roles, source quality, score, exact recency, and company name. This source-balanced ranking keeps Eluta useful for fresh discovery without letting it overwhelm ATS/direct-employer cards. Role priority values are `full_time_new_grad`, `full_time_entry`, `full_time_general`, `intern_coop`, `stretch`, and `skip`.
 
 For custom SSR pages, configure a tracked company with `scan_method: local_parser` and a `parser` block. The parser can be written in JavaScript, Python, or any language available as a local executable. Company-specific parsers usually already know their source URL and only need to print JSON jobs to stdout:
 
@@ -218,11 +218,14 @@ If a parser writes full extraction artifacts for debugging or audit, store them 
 ```bash
 npm run scan
 npm run scan:qa
+npm run apply:qa
 node scan.mjs --dry-run --json
 ```
 
 `--json` appends a machine-readable payload after the `__CAREER_OPS_SCAN_JSON__` marker. It is intended for the frontend scan API and can be combined with `--dry-run` to avoid mutating `pipeline.md` or `scan-history.tsv`.
 
 `npm run scan:qa` validates Eluta-style relative timestamps and role-priority ordering fixtures before scanner/ranking changes.
+
+`npm run apply:qa` validates apply-assistant profile extraction, natural field labels like "where do you stay?", posting-page search/filter fields being ignored before Apply navigation, work authorization/sponsorship truth-table answers, safe checkbox/radio handling, address/postal-code review flags, current-application document upload guards, the local written-answer fallback, provider detection, restricted-host blocking, posting-page Apply CTA resolution, unsafe final-submit/login CTA rejection, and Greenhouse/Lever/Ashby apply-form fixture mapping without calling an AI model.
 
 **Exit codes:** `0` scan completed, `1` configuration error or no portals.yml found.

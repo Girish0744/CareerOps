@@ -439,10 +439,13 @@ Frontend workflow statuses are authoritative for this personalized fork. Legacy 
 | 18B | Rich scan metadata — posted/first-seen/last-seen/source/direct-apply metadata plus filters and quality lanes | ✅ First batch |
 | 21 | Compliant outreach assistant — public-source/user-provided contact leads + LinkedIn/email drafts in Application Detail | ✅ First batch |
 | 22 | Recent-first discovery — Eluta Canada search adapter, 24h freshness mode, role-priority ranking, and manual job-alert/URL import without scraping LinkedIn/Indeed/Glassdoor | ✅ First batch |
+| 17A | Human-reviewed Apply foundation — Apply tab, apply-session answers, profile truth table, upload paths, and final-submit guard | ✅ First batch |
+| 17B | Visible ATS apply filling — Playwright opens a visible browser, resolves posting-page Apply links, fills high-confidence fields/uploads, and stops before final Submit/Apply | ✅ First batch |
+| 17B.2 | Reliable apply-fill hardening — source-balanced scan ranking, multi-hop Apply resolver, natural field matching, checkbox/radio safety, and current-application upload guard | ✅ Complete |
 | 18 | **Expanded portals, next batch** — continue toward 150+ companies; add Workday/Teamtailor/BambooHR/custom parsers only for verified high-value Canadian sources | 🔜 Next |
 | 19 | **Email job alerts** — After scan, diff against last run; new jobs ≥ threshold → Resend API digest email | 🔜 After 18 |
 | 16 | **Settings / Profile page** — `/settings`: edit `profile.yml` and `portals.yml` from the browser | 🔜 After 19 |
-| 17 | **Application form assistant** — "Apply" tab: paste form questions → AI generates copy-paste answers | 🔜 After 16 |
+| 17C | **Chrome extension companion** — reuse the shared apply engine for current-tab convenience where permissions allow it | 🔜 Later |
 
 ### Gated Pipeline — How It Works
 
@@ -459,9 +462,11 @@ Frontend workflow statuses are authoritative for this personalized fork. Legacy 
 
 **Scoring QA:** run `npm run eval:qa` from the repo root before bulk scanning sessions or scoring changes. It uses `tests/evaluation-fixtures/*.json` and the same guardrail core as the app, without calling Gemini.
 
-**Scan QA:** run `npm run scan:qa` before changing scanner ranking, Eluta parsing, or role-priority logic. It checks Eluta-style relative timestamps and verifies full-time new-grad/entry roles outrank internships/co-ops.
+**Scan QA:** run `npm run scan:qa` before changing scanner ranking, Eluta parsing, source balancing, or role-priority logic. It checks Eluta-style relative timestamps and verifies full-time new-grad/entry roles outrank internships/co-ops.
 
 **Contact QA:** run `npm run contacts:qa` before changing outreach extraction. It verifies that contact leads come only from public job context, user-provided LinkedIn URLs, or an explicit manual-research placeholder.
+
+**Apply QA:** run `npm run apply:qa` before changing apply-answer truth tables, private apply profile parsing, field matching, checkbox/radio handling, or upload-path handling. It verifies work authorization, sponsorship, natural labels, safe review-only fields, current-application document paths, and missing-field review flags without calling Gemini.
 
 **Job Discovery reset:** every evaluated score card should let the user evaluate another job without refreshing the page. Keep this available for Maybe/Skip outcomes as well as Apply outcomes.
 
@@ -475,11 +480,12 @@ Phase 13 is implemented. `portals.yml` exists with Canada/Ontario-focused provid
 1. User clicks Refresh in Job Discovery → `POST /api/scan/run`
 2. API runs `node scan.mjs --dry-run --json` so scanner discovery is machine-readable without mutating `pipeline.md`
 3. New job metadata is quick-scored in one Gemini call through the configurable evaluate model; if AI scoring fails, local fallback scoring keeps the queue usable
-4. Results merge into `data/scored-queue.json`, sorted by posting/first-seen freshness, then `rolePriority`, score, and source quality. Cards store `postedAt`, `postedAgeHours`, `freshnessBucket`, `firstSeenAt`, `lastSeenAt`, `directApplyUrl`, `sourceType`, `sourceName`, `rolePriority`, `employmentType`, and `recencyConfidence`
-5. User clicks Evaluate on a card → full `/api/evaluate` fetches the JD and applies the trusted evaluation/guardrails
-6. User confirms from the score card → `/api/generate-docs/{id}` creates the tailored resume and cover letter
-7. Job Discovery shows Strong Apply / Apply / Maybe / Skip lanes plus score, company, source, role type, and freshness filters. Default operating mode is last-24-hours first.
-8. User can paste LinkedIn/Indeed/Glassdoor/Eluta/employer URLs or job-alert text into `POST /api/scan/import`. This preserves job-board signals without scraping restricted platforms.
+4. Results merge into `data/scored-queue.json`, sorted by freshness bucket, `rolePriority`, source quality, score, exact recency, and company name. This keeps fresh Eluta findings useful without letting one source overwhelm ATS/direct-employer cards. Cards store `postedAt`, `postedAgeHours`, `freshnessBucket`, `firstSeenAt`, `lastSeenAt`, `directApplyUrl`, `sourceType`, `sourceName`, `rolePriority`, `employmentType`, and `recencyConfidence`
+5. Job Discovery shows a source-count summary for Eluta, Greenhouse, Ashby, Lever, manual import, and unknown sources when present
+6. User clicks Evaluate on a card → full `/api/evaluate` fetches the JD and applies the trusted evaluation/guardrails. If the card has a better `directApplyUrl`, the application metadata saves that employer/ATS URL while keeping the source URL in `score.json` for audit
+7. User confirms from the score card → `/api/generate-docs/{id}` creates the tailored resume and cover letter
+8. Job Discovery shows Strong Apply / Apply / Maybe / Skip lanes plus score, company, source, role type, and freshness filters. Default operating mode is last-24-hours first.
+9. User can paste LinkedIn/Indeed/Glassdoor/Eluta/employer URLs or job-alert text into `POST /api/scan/import`. This preserves job-board signals without scraping restricted platforms.
 
 ### Outreach Assistant — Exact Behaviour
 
@@ -487,6 +493,20 @@ Phase 13 is implemented. `portals.yml` exists with Canada/Ontario-focused provid
 - Allowed sources: public job/application text, public company/team/recruiting notes pasted by the user, and user-provided LinkedIn/profile URLs.
 - Forbidden behavior: automated LinkedIn scraping, auto-connecting, auto-messaging, hidden phone-number collection, or invented contact facts.
 - Drafts generated: LinkedIn connection note, LinkedIn follow-up, cold email subject, and cold email body. User sends everything manually. Connection notes should be warm, specific, and low-pressure; do not ask for a referral or favor in the first note.
+
+### Apply Assistant — Exact Behaviour
+
+- Apply sessions are stored per application in `applications/{id}/apply-session.json`.
+- Private apply facts live in gitignored `config/profile.yml` under `apply:`. Address fields are `address_line1`, `address_line2`, and `postal_code`. Private uploads such as transcripts live in gitignored `private-docs/` and are referenced with `transcript_path`.
+- The Apply button may generate missing resume/cover-letter PDFs, prepare known profile fields, generate answers for pasted form questions, and open the employer apply link.
+- `POST /api/applications/{id}/apply/automate` starts Phase 17B visible-browser filling for the saved employer/ATS URL. It blocks LinkedIn/Indeed/Glassdoor URLs; if no form fields are visible, it may follow up to 3 safe Apply hops (`Apply`, `Apply Now`, `Apply for this job`, `Start Application`, `Continue to application`). It never clicks final-submit/login/share/referral controls.
+- Field matching reads labels, placeholders, aria labels, field names/ids, fieldset legends, and nearby question text. The resolver should only stop on pages where visible fields look like an application form; posting-page search/filter boxes must be ignored so safe Apply navigation can continue. Natural wording such as "where do you stay?" can map to location/country when confidence is high; unclear fields stay review-only.
+- Checkboxes and radios are answered only from profile truth: Canadian work authorization can be Yes, sponsorship required can be No, and voluntary demographic/terms/certification/ambiguous choices stay for manual review.
+- Resume and cover-letter uploads must come from the current `applications/{id}/` folder. Generic/root/output resumes are blocked so assisted fill uses the role-specific PDFs.
+- Written answers should sound like Girish: practical, warm, professional, role-specific, early-career but confident, and grounded in saved proof points. Avoid generic AI phrasing, flattery, or invented experience.
+- Use a truth table for yes/no fields. Answer from profile facts when known; mark uncertain fields for review instead of guessing.
+- Forbidden behavior: final Submit/Apply clicks, false answers, invented candidate facts, hidden account activity, or automated LinkedIn/Indeed/Glassdoor activity.
+- Phase 17C may add a Chrome extension front door later, but it must reuse the same conservative apply engine and final-submit guard.
 
 ### Interview Prep — Exact Behaviour
 
@@ -510,6 +530,8 @@ frontend/                        Next.js app — run with: cd frontend && npm ru
   app/api/scan/run/              POST — runs scan.mjs + bulk quick-scores with scan metadata
   app/api/scan/import/           POST — imports pasted job-board URLs or job-alert text without scraping restricted platforms
   app/api/applications/[id]/contacts/ GET/POST — compliant contact leads + outreach drafts
+  app/api/applications/[id]/apply/ GET/POST — human-reviewed apply-session fields + answers
+  app/api/applications/[id]/apply/automate/ POST — visible Playwright assisted fill, stops before submit
   lib/filesystem.ts              All file reads/writes — single swap point for DB migration
   .env.local                     GEMINI_API_KEY=... (required) · RESEND_API_KEY=... (Phase 19)
 ```

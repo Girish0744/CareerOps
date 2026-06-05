@@ -1,0 +1,30 @@
+candidate:
+  full_name: "Girish Bhuteja"
+  email: "girish@example.com"
+  phone: "(416) 555-0101"
+  location: "Cambridge, ON"
+  linkedin: "linkedin.com/in/girishbhuteja/"
+  portfolio_url: "https://girishbhuteja.com"
+  github: "github.com/Girish0744"
+
+availability:
+  note: "Available for co-op/internship immediately; full-time from August 2026."
+
+location:
+  country: "Canada"
+  city: "Cambridge, ON"
+  visa_status: "Eligible to work in Canada"
+
+apply:
+  legal_name: "Girish Bhuteja"
+  preferred_name: "Girish"
+  address_line1: ""
+  address_line2: ""
+  city: "Cambridge"
+  province: "ON"
+  postal_code: ""
+  country: "Canada"
+  work_authorization: "Eligible to work in Canada"
+  needs_sponsorship: false
+  availability: "Available for co-op/internship immediately; full-time from August 2026."
+  transcript_path: "private-docs/transcript.pdf"

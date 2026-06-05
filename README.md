@@ -34,15 +34,18 @@ This fork extends the base career-ops system with a full **web frontend pipeline
 | 18B | Rich scan metadata — posted/first-seen/last-seen/source/direct-apply metadata plus Job Discovery filters and quality lanes | ✅ First batch |
 | 21 | Compliant contact/outreach assistant — public-source/user-provided contact leads and personalized drafts saved to `applications/{id}/contacts.json` | ✅ First batch |
 | 22 | Recent-first discovery — Eluta Canada search adapter, 24h freshness mode, role-priority ranking, and manual job-alert/URL import for LinkedIn/Indeed/Glassdoor signals without scraping those platforms | ✅ First batch |
+| 17A | Human-reviewed Apply foundation — Apply tab, apply-session answers, profile truth table, upload paths, and final-submit guard | ✅ First batch |
+| 17B | Visible ATS apply filling — Playwright opens a visible browser, resolves posting-page Apply links, fills high-confidence ATS fields, uploads generated documents, and stops before final Submit/Apply | ✅ First batch |
+| 17B.2 | Reliable apply-fill hardening — source-balanced scan ranking, multi-hop Apply resolver, natural field matching, checkbox/radio safety, and current-application upload guard | ✅ Complete |
 
 ### Current Baseline Notes
 
 - The **frontend workflow statuses are authoritative** in this fork: `Saved`, `Evaluated`, `Resume Generated`, `Cover Letter Generated`, `Ready to Apply`, `Applied`, `In Progress`, `Interview`, `Offer`, `Rejected`, `Withdrawn`.
 - Upstream/legacy statuses still work for compatibility: `Responded`, `Discarded`, `SKIP`.
 - `portals.yml` is tuned for Girish's Canada/Ontario software, full-stack, and AI application search. It now includes structured Ashby/Greenhouse/Lever sources plus an Eluta Canada IT/software search adapter.
-- Scanner default freshness mode is `scan.freshnessWindowHours: 24`. Results rank by recent posting/first-seen time, then role priority, then score/source quality.
+- Scanner default freshness mode is `scan.freshnessWindowHours: 24`. Results rank by freshness bucket, role priority, source quality, score, exact recency, and company name so Eluta remains useful for fresh discovery without overwhelming ATS/direct-employer cards.
 - `data/pipeline.md` and `data/scored-queue.json` are initialized; Job Discovery can refresh scanned jobs, import saved job-board URLs/alerts, filter by score/company/source/recency/role type, and show ranked quality lanes.
-- Scan cards store richer metadata: `postedAt`, `postedAgeHours`, `freshnessBucket`, `firstSeenAt`/`lastSeenAt`, source labels, source type, direct apply URLs, `rolePriority`, `employmentType`, and recency confidence.
+- Scan cards store richer metadata: `postedAt`, `postedAgeHours`, `freshnessBucket`, `firstSeenAt`/`lastSeenAt`, source labels, source type, direct apply URLs, `rolePriority`, `employmentType`, and recency confidence. Job Discovery shows a source summary so source mix is visible after scans/imports.
 - Role priority values are `full_time_new_grad`, `full_time_entry`, `full_time_general`, `intern_coop`, `stretch`, and `skip`. Full-time new-grad/entry roles rank above internships/co-ops by default.
 - LinkedIn, Indeed, and Glassdoor are import/signal sources only. The app does not scrape them, auto-connect, auto-message, or submit applications automatically.
 - Job evaluation now normalizes pasted JD text and direct job URLs through the same cleanup layer. Greenhouse, Ashby, and Lever URLs use structured APIs when possible, then fall back to cleaned HTML.
@@ -53,7 +56,13 @@ This fork extends the base career-ops system with a full **web frontend pipeline
 - Job Discovery lets the user evaluate another job immediately from any score card, including low-score Maybe/Skip results, without refreshing the page.
 - Application Detail now shows live previews for resume, cover letter, and interview prep in the platform, with a Source toggle for raw Markdown.
 - Application Detail includes a compliant Outreach section. It uses public job/application context and user-provided URLs only; it does not automate LinkedIn scraping, connecting, or messaging. LinkedIn notes should be warm, specific, and low-pressure, never a first-message referral ask.
-- Current baseline checks: `npm run scan:qa`, `npm run eval:qa`, `npm run contacts:qa`, `node doctor.mjs`, `node cv-sync-check.mjs`, `node verify-pipeline.mjs`, `cd frontend && npm run lint`, `cd frontend && npm run build`.
+- Application Detail includes an Apply tab. It prepares known fields, generated answers, resume/cover-letter upload paths, optional transcript path, and must stop before final Submit/Apply. Written answers should sound like Girish: practical, warm, professional, role-specific, and grounded in saved proof points rather than generic AI phrasing.
+- Application Detail also includes **Start Assisted Fill**. It launches a visible Playwright browser for Greenhouse, Lever, Ashby, and conservative generic employer forms. If the saved URL is a posting page with no form fields, it may follow up to 3 safe Apply hops (`Apply`, `Apply Now`, `Apply for this job`, `Start Application`, `Continue to application`), but it never clicks final submit/login/share/referral controls.
+- Assisted fill reads labels, placeholders, aria labels, field names/ids, fieldset legends, and nearby question text. It first checks whether visible fields actually look like an application form, so posting-page search/filter boxes do not stop the Apply resolver. Natural wording such as "where do you stay?" can map to location/country when confidence is high; unclear fields stay review-only.
+- Checkboxes/radios are answered only from profile truth, such as Canadian work authorization = yes and sponsorship required = no. Terms, certifications, voluntary demographic questions, and ambiguous options stay for manual review.
+- Resume and cover-letter uploads must come from the current `applications/{id}/` folder. Generic/root/output resumes are blocked so the assistant uses the job-specific PDFs generated for that role.
+- Private apply data lives in gitignored `config/profile.yml` under `apply:`. Use `address_line1`, `address_line2`, `postal_code`, and `transcript_path` there; put transcript files under gitignored `private-docs/`.
+- Current baseline checks: `npm run scan:qa`, `npm run eval:qa`, `npm run contacts:qa`, `npm run apply:qa`, `node doctor.mjs`, `node cv-sync-check.mjs`, `node verify-pipeline.mjs`, `cd frontend && npm run lint`, `cd frontend && npm run build`.
 - Frontend builds use the local system font stack, so production builds do not depend on fetching Google Fonts. Turbopack may still print a trace warning because API routes intentionally read career-ops root files outside `frontend/`.
 
 ### In Progress / Up Next
@@ -63,7 +72,7 @@ This fork extends the base career-ops system with a full **web frontend pipeline
 | 18 | **Expanded portals, next batch** — Continue growing `portals.yml` toward 150+ companies, adding Workday/Teamtailor/BambooHR/custom parsers only for high-value Canadian sources where structured endpoints are verified. | 🔜 Next |
 | 19 | **Email job alerts** — After each scan run, diff new results against the last scan. Any new job ≥ score threshold (default 70) triggers a Resend API email digest: ranked cards, score badges, one-click "Evaluate" links. `RESEND_API_KEY` in `.env.local`. Free tier: 3,000 emails/month. | 🔜 After 18 |
 | 16 | **Settings / Profile page** — `/settings` in the frontend: view and edit `profile.yml` (name, target roles, comp range, location) and `portals.yml` (add/remove companies, adjust keyword filters). No file editor needed. | 🔜 After 19 |
-| 17 | **Application form assistant** — "Apply" tab in Application Detail: paste the form's questions → AI generates copy-paste answers grounded in the saved resume + cover letter + job description. One copy button per answer. Never auto-submits. | 🔜 After 16 |
+| 17C | **Chrome extension companion** — Reuse the shared apply automation engine from a browser extension for current-tab convenience where extension permissions allow it. | 🔜 Later |
 
 ### Quick Start (Personal Setup)
 

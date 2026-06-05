@@ -22,8 +22,8 @@ function slugify(s: string): string {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json() as { text?: string; url?: string };
-    const { text, url } = body;
+    const body = await req.json() as { text?: string; url?: string; applyUrl?: string; sourceUrl?: string };
+    const { text, url, applyUrl, sourceUrl } = body;
 
     if (!text && !url) {
       return NextResponse.json({ error: 'Provide text or url' }, { status: 400 });
@@ -31,9 +31,11 @@ export async function POST(req: Request) {
 
     let jdText: string;
     let jobUrl: string | null = null;
+    let savedApplyUrl: string | null = null;
 
     if (url) {
       jobUrl = url;
+      savedApplyUrl = applyUrl || url;
       const extracted = await extractJobDescriptionFromUrl(url);
       jdText = extracted.text;
     } else {
@@ -180,7 +182,7 @@ Do not add any text before ===SUMMARY=== or after ===END_JSON===.`;
     const id = `${slugify(company)}-${slugify(jobTitle)}-${today}`;
 
     // Create application folder + data/applications.json entry
-    createApplication(id, company, jobTitle, location, jobUrl, jdText, today);
+    createApplication(id, company, jobTitle, location, savedApplyUrl ?? jobUrl, jdText, today);
 
     // Write score.json
     const scoreData = {
@@ -191,9 +193,11 @@ Do not add any text before ===SUMMARY=== or after ===END_JSON===.`;
       modelUsed,
       categories, matchedKeywords, missingKeywords,
       notes: summary,
+      sourceUrl: sourceUrl ?? jobUrl,
+      applyUrl: savedApplyUrl ?? jobUrl,
       evaluatedAt: today,
     };
-    updateApplicationFields(id, { score, fitLevel, status: 'Evaluated' }, scoreData);
+    updateApplicationFields(id, { score, fitLevel, status: 'Evaluated', jobUrl: savedApplyUrl ?? jobUrl }, scoreData);
 
     return NextResponse.json({
       applicationId: id,

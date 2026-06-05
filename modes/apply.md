@@ -1,11 +1,16 @@
 # Mode: apply — Live Application Assistant
 
-Interactive mode for when the candidate is filling out an application form in Chrome. It reads what is on the screen, loads the previous context of the job, and generates personalized responses for each form question.
+Interactive mode for when the candidate is filling out an application form. In the frontend, Phase 17A stores a human-reviewed `applications/{id}/apply-session.json` with known fields, generated answers, upload paths, and review flags. Phase 17B can open a visible Playwright browser, follow bounded safe Apply hops when needed, fill high-confidence ATS fields, upload generated job-specific documents, and stop before final Submit/Apply. A later Phase 17C may add a Chrome extension companion that reuses the same apply engine.
 
 ## Requirements
 
-- **Best with Playwright in visible mode**: In visible mode, the candidate sees the browser and Claude can interact with the page.
-- **Without Playwright**: the candidate shares a screenshot or pastes the questions manually.
+- **Frontend Apply tab**: paste form questions, generate answers, copy/review fields, and open the apply link.
+- **Visible Playwright mode**: the candidate sees the browser while the assistant fills supported Greenhouse, Lever, Ashby, or conservative generic employer forms.
+- **Chrome extension later**: an extension may become a current-tab front door after Playwright filling is hardened, but it must reuse the same final-submit guard.
+- **Without browser automation**: the candidate shares a screenshot or pastes the questions manually.
+- **Final submit rule**: never click Submit/Send/Apply. The candidate reviews and clicks the final button.
+- **Voice**: written answers should sound like Girish - practical, warm, professional, role-specific, and grounded in saved proof points. Avoid generic AI phrasing, empty company praise, and invented experience.
+- **Private facts**: address fields live in gitignored `config/profile.yml` under `apply.address_line1`, `apply.address_line2`, and `apply.postal_code`. Transcript files live in gitignored `private-docs/` and are referenced by `apply.transcript_path`.
 
 ## Workflow
 
@@ -67,6 +72,23 @@ For each question, generate the response following:
 3. **"I'm choosing you" tone**: Same auto-pipeline framework
 4. **Specificity**: Reference something specific from the JD visible on screen
 5. **career-ops proof point**: Include in "Additional info" if there is a field for it
+6. **Natural voice**: Keep it concise and human. Prefer specific examples like MediTwin, OER tools, DineEase, portfolio work, or IT Club leadership when they fit the question. Do not use phrases like "perfect fit", "leverage", "dynamic team", or "I am passionate about".
+
+## Step 5B — Assisted fill
+
+When using `POST /api/applications/{id}/apply/automate`:
+
+1. Open the saved employer/ATS URL in a visible Playwright browser
+2. Detect provider: Greenhouse, Lever, Ashby, or generic
+3. Block restricted job-board hosts such as LinkedIn, Indeed, and Glassdoor
+4. If no form fields are visible yet, follow up to 3 safe Apply hops such as `Apply`, `Apply Now`, `Apply for this job`, `Start Application`, or `Continue to application`; never treat `Submit Application`, login, share, or referral controls as safe apply-page resolvers
+5. Stop navigation only when visible fields look like an application form. Ignore posting-page search/filter fields so safe Apply navigation can continue
+6. Match fields using labels, placeholders, aria labels, field names/ids, fieldset legends, and nearby question text. Natural wording such as "where do you stay?" may map to country/location only when confidence is high
+7. Fill only high-confidence fields from `apply-session.json`
+8. Answer checkboxes/radios only from known profile truth, such as Canada work authorization = yes and sponsorship required = no. Leave terms, certification, voluntary demographic, and ambiguous options for review
+9. Upload generated resume/cover-letter PDFs only when they belong to the current `applications/{id}/` folder. Upload the configured transcript file only when it exists
+10. Leave uncertain fields unchanged and record them in `apply-session.json`
+11. Stop with the browser open for human review before final Submit/Apply
 
 **Output format:**
 

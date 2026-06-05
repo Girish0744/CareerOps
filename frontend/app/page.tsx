@@ -62,6 +62,12 @@ interface ScannedJob {
   scannedAt: string;
 }
 
+interface SourceSummaryItem {
+  sourceType: string;
+  sourceName: string;
+  count: number;
+}
+
 type Stage =
   | { kind: 'idle' }
   | { kind: 'evaluating' }
@@ -357,7 +363,11 @@ export default function JobDiscoveryPage() {
       const res = await fetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: job.jobUrl }),
+        body: JSON.stringify({
+          url: job.jobUrl,
+          applyUrl: job.directApplyUrl ?? job.jobUrl,
+          sourceUrl: job.jobUrl,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Evaluation failed');
@@ -425,6 +435,18 @@ export default function JobDiscoveryPage() {
     () => Array.from(new Set(scannedJobs.map(job => sourceTypeLabel(job.sourceType)).filter(Boolean))).sort(),
     [scannedJobs],
   );
+  const sourceSummary = useMemo<SourceSummaryItem[]>(() => {
+    const map = new Map<string, SourceSummaryItem>();
+    for (const job of scannedJobs) {
+      const sourceType = job.sourceType ?? 'unknown';
+      const sourceName = job.sourceName ?? job.source ?? sourceTypeLabel(sourceType);
+      const key = `${sourceType}:${sourceName}`;
+      const existing = map.get(key) ?? { sourceType, sourceName, count: 0 };
+      existing.count += 1;
+      map.set(key, existing);
+    }
+    return Array.from(map.values()).sort((a, b) => b.count - a.count || a.sourceName.localeCompare(b.sourceName));
+  }, [scannedJobs]);
   const filteredScannedJobs = useMemo(() => {
     return scannedJobs.filter(job => {
       if (fitFilter !== 'all' && job.fitLevel !== fitFilter) return false;
@@ -683,6 +705,16 @@ export default function JobDiscoveryPage() {
                 <option value="all">Any recency</option>
               </select>
             </div>
+            {sourceSummary.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {sourceSummary.map(source => (
+                  <span key={`${source.sourceType}:${source.sourceName}`} className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-500">
+                    {source.sourceName}
+                    <span className="text-slate-400">{source.count}</span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
