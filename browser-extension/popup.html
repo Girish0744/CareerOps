@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Career-Ops Apply Companion</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main>
+    <header>
+      <strong>Career-Ops</strong>
+      <span>Apply Companion</span>
+    </header>
+
+    <label>
+      Local app URL
+      <input id="baseUrl" type="url" value="http://localhost:3000">
+    </label>
+
+    <label>
+      Application ID
+      <input id="applicationId" type="text" placeholder="company-role-2026-06-05">
+    </label>
+
+    <button id="fillButton">Fill Current Page</button>
+    <button id="captureButton" class="secondary">Save Apply Link Only</button>
+    <p id="status" role="status"></p>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>

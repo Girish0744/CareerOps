@@ -42,6 +42,7 @@ modes/_profile.md
 
 # Generated
 .resolved-prompt-*
+frontend/dev-server*.log
 node_modules/
 bun.lock
 

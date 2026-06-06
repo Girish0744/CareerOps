@@ -182,7 +182,7 @@ Do not add any text before ===SUMMARY=== or after ===END_JSON===.`;
     const id = `${slugify(company)}-${slugify(jobTitle)}-${today}`;
 
     // Create application folder + data/applications.json entry
-    createApplication(id, company, jobTitle, location, savedApplyUrl ?? jobUrl, jdText, today);
+    const applicationId = createApplication(id, company, jobTitle, location, savedApplyUrl ?? jobUrl, jdText, today);
 
     // Write score.json
     const scoreData = {
@@ -197,10 +197,10 @@ Do not add any text before ===SUMMARY=== or after ===END_JSON===.`;
       applyUrl: savedApplyUrl ?? jobUrl,
       evaluatedAt: today,
     };
-    updateApplicationFields(id, { score, fitLevel, status: 'Evaluated', jobUrl: savedApplyUrl ?? jobUrl }, scoreData);
+    updateApplicationFields(applicationId, { score, fitLevel, status: 'Evaluated', jobUrl: savedApplyUrl ?? jobUrl }, scoreData);
 
     return NextResponse.json({
-      applicationId: id,
+      applicationId,
       company, jobTitle, location,
       score, fitLevel, recommendation,
       summary, matched, gaps,

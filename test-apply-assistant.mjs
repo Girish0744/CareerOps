@@ -111,6 +111,17 @@ assert(greenhousePlan.items.some(item => item.resolution.key === 'first_name' &&
 assert(greenhousePlan.items.some(item => item.resolution.action === 'upload' && item.resolution.key === 'resume_upload'), 'plans resume upload for Greenhouse fixture');
 assert(greenhousePlan.items.some(item => item.resolution.key === 'written_response'), 'plans written answer fill for Greenhouse fixture');
 
+const lastNameResolution = automation.resolveAutomationValue({ tag: 'input', type: 'text', label: 'Last Name', name: 'last_name' }, applySession);
+assert(lastNameResolution.key === 'last_name' && lastNameResolution.value === 'Bhuteja', 'fills last name from legal name instead of first name');
+const emailResolution = automation.resolveAutomationValue({ tag: 'input', type: 'email', label: 'Email Address', name: 'email' }, applySession);
+assert(emailResolution.key === 'email' && emailResolution.value === 'girish@example.com', 'fills email from email field');
+const broadSectionResolution = automation.resolveAutomationValue({
+  tag: 'input',
+  type: 'text',
+  label: 'Required First Name Last Name Email Address Phone Address City Province Postal Code',
+}, applySession);
+assert(broadSectionResolution.action === 'review', 'does not guess from broad mixed contact-section labels');
+
 const leverHtml = fs.readFileSync(path.resolve('tests/apply-fixtures/lever-form.html'), 'utf-8');
 const leverPlan = automation.buildAutomationPlan(automation.extractFixtureFieldsFromHtml(leverHtml), applySession);
 assert(leverPlan.items.some(item => item.resolution.key === 'linkedin'), 'plans LinkedIn fill for Lever fixture');

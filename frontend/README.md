@@ -75,6 +75,7 @@ npx playwright install chromium
 | `/api/applications/[id]/contacts` | GET/POST | Reads or generates compliant contact leads and outreach drafts from public job context plus user-provided URLs. |
 | `/api/applications/[id]/apply` | GET/POST | Reads or generates `apply-session.json` with known fields, reviewable answers, upload paths, and final-submit guard. |
 | `/api/applications/[id]/apply/automate` | POST | Starts a visible Playwright apply-fill session for the saved employer/ATS URL and updates `apply-session.json` with automation status. |
+| `/api/applications/[id]/apply/current-tab` | POST | Browser extension bridge: saves a safe current-tab Apply link or existing application-form URL into the application session. |
 
 ## Current Baseline
 
@@ -206,7 +207,7 @@ Applied → In Progress → Interview → Offer / Rejected / Withdrawn
 | 18 | **Expanded portals, next batch** — Continue growing verified Canadian source coverage and add Workday/Teamtailor/BambooHR/custom parsers only where useful. | 🔜 Next | `portals.yml`, `providers/` |
 | 19 | **Email job alerts** — After each scan, diff against last run. New jobs ≥ score threshold → Resend API digest email with ranked cards and one-click Evaluate links. Add `RESEND_API_KEY` to `.env.local`. | 🔜 After 18 | `app/api/scan/run/route.ts`, `lib/email.ts` |
 | 16 | **Settings / Profile page** — `/settings`: edit `profile.yml` (name, roles, comp, location) and `portals.yml` (companies, keyword filters) from the browser. No file editing needed. | 🔜 After 19 | `app/settings/page.tsx`, `app/api/settings/route.ts` |
-| 17C | **Chrome extension companion** — Reuse the shared apply automation engine from a browser extension for current-tab convenience where extension permissions allow it. | 🔜 Later | extension package, `app/api/applications/[id]/apply` |
+| 17C | **Chrome extension companion** — MV3 current-tab companion captures safe employer/ATS Apply links into the local app when Playwright cannot click through a user-handled posting page; final-submit guard remains mandatory. | ✅ First foundation | `browser-extension/`, `app/api/applications/[id]/apply/current-tab` |
 
 ## Switching to Claude API
 

@@ -153,9 +153,26 @@ function valueFromStandard(label, session) {
     return { key, value, source, confidence: value ? 'high' : 'needs_review' };
   };
 
+  const standardSignals = [
+    /\bfirst\b.*\bname\b|given name/,
+    /\blast\b.*\bname\b|family name|surname/,
+    /legal name|full name|your name|\bname\b/,
+    /email/,
+    /phone|mobile|telephone/,
+    /linkedin/,
+    /portfolio|website|personal site/,
+    /github/,
+    /street address|address line 1|address 1|home address|mailing address|residential address|\baddress\b/,
+    /postal|postcode|zip/,
+    /country|which country|country.*stay|country.*live|residence country/,
+    /\bcity\b|where are you located|current location|where do you live|where do you stay|where are you based/,
+    /province|state/,
+  ];
+  const signalCount = standardSignals.filter(pattern => pattern.test(text)).length;
+  if (signalCount >= 3 && text.length > 80) return null;
+
   if (/\bfirst\b.*\bname\b|given name/.test(text)) return pick('first_name');
   if (/\blast\b.*\bname\b|family name|surname/.test(text)) return pick('last_name');
-  if (/legal name|full name|your name|\bname\b/.test(text)) return pick('legal_name');
   if (/email/.test(text)) return pick('email');
   if (/phone|mobile|telephone/.test(text)) return pick('phone');
   if (/linkedin/.test(text)) return pick('linkedin');
@@ -167,6 +184,7 @@ function valueFromStandard(label, session) {
   if (/country|which country|country.*stay|country.*live|residence country/.test(text)) return pick('country');
   if (/\bcity\b|where are you located|current location|where do you live|where do you stay|where are you based/.test(text)) return pick('city');
   if (/province|state/.test(text)) return pick('province');
+  if (/legal name|full name|your name|\bname\b/.test(text)) return pick('legal_name');
   if (/authorized|eligible|legally.*work|work.*canada/.test(text)) return pick('work_authorization');
   if (/sponsor|sponsorship|visa/.test(text)) return pick('sponsorship');
   if (/availability|available|start date/.test(text)) return pick('availability');
@@ -354,7 +372,16 @@ async function collectPageFields(page) {
       const labelFor = id ? document.querySelector(`label[for="${CSS.escape(id)}"]`) : null;
       const parentLabel = el.closest('label');
       const fieldset = el.closest('fieldset');
-      const surrounding = el.closest('[class*="field"], [class*="question"], [data-qa], .application-question');
+      const surrounding = el.closest('[class*="field"], [class*="question"], .application-question');
+      const label = [
+        fieldset?.querySelector('legend')?.textContent || '',
+        labelFor?.textContent || '',
+        parentLabel?.textContent || '',
+        input.getAttribute('aria-label') || '',
+        input.getAttribute('placeholder') || '',
+        input.getAttribute('name') || '',
+        id,
+      ].join(' ').replace(/\s+/g, ' ').trim();
       return {
         tag: el.tagName.toLowerCase(),
         type,
@@ -363,12 +390,7 @@ async function collectPageFields(page) {
         placeholder: input.getAttribute('placeholder') || '',
         ariaLabel: input.getAttribute('aria-label') || '',
         value: input.getAttribute('value') || '',
-        label: [
-          fieldset?.querySelector('legend')?.textContent || '',
-          labelFor?.textContent || '',
-          parentLabel?.textContent || '',
-          surrounding?.textContent || '',
-        ].join(' ').replace(/\s+/g, ' ').trim(),
+        label: label || (surrounding?.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 140),
         disabled: input.disabled || input.getAttribute('aria-disabled') === 'true',
         visible: rect.width > 0 && rect.height > 0,
         domIndex,
@@ -530,7 +552,7 @@ async function resolveApplyFormPage(page, maxHops = 3) {
 
 function absoluteUploadPath(rootDir, relativePath) {
   if (!relativePath) return '';
-  return path.isAbsolute(relativePath) ? relativePath : path.join(rootDir, relativePath);
+  return path.isAbsolute(relativePath) ? relativePath : path.join(/*turbopackIgnore: true*/ rootDir, relativePath);
 }
 
 export function validateUploadPath(rootDir, applicationId, relativePath, key = '') {

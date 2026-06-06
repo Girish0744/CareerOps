@@ -6,9 +6,10 @@
 
 import fs from 'fs';
 import path from 'path';
+import { isValidStatus } from './status';
 
 // Career-ops root is one level up from the frontend directory
-const ROOT = path.resolve(process.cwd(), '..');
+const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
 
 export const PATHS = {
   applicationsJson: path.join(ROOT, 'data', 'applications.json'),
@@ -164,6 +165,8 @@ export function getScoredQueue(): ScoredJob[] {
 // ── WRITE ─────────────────────────────────────────────────────────────────────
 
 export function updateApplicationStatus(id: string, newStatus: string): boolean {
+  if (!isValidStatus(newStatus)) return false;
+
   const apps = getAllApplications();
   const idx = apps.findIndex(a => a.id === id);
   if (idx === -1) return false;
@@ -262,13 +265,35 @@ export function createApplication(
   jobUrl: string | null,
   jobDescriptionText: string,
   today: string,
-): void {
-  const folderPath = path.join(ROOT, 'applications', id);
+): string {
+  const normalizeKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const apps = getAllApplications();
+  const existing = apps.find(app =>
+    normalizeKey(app.company) === normalizeKey(company) &&
+    normalizeKey(app.jobTitle) === normalizeKey(jobTitle)
+  );
+  const actualId = existing?.id ?? id;
+  const applicationFolder = existing?.applicationFolder ?? `applications/${actualId}`;
+  const folderPath = path.join(ROOT, applicationFolder);
 
   const jobDescMd = `# Job Description: ${jobTitle} at ${company}\n\n**URL:** ${jobUrl ?? 'Pasted JD'}\n**Location:** ${location ?? 'TBD'}\n**Date saved:** ${today}\n\n---\n\n${jobDescriptionText}`;
 
   if (fs.existsSync(folderPath)) {
     fs.writeFileSync(path.join(folderPath, 'job-description.md'), jobDescMd);
+    const metaPath = path.join(folderPath, 'metadata.json');
+    if (fs.existsSync(metaPath)) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        Object.assign(meta, {
+          company,
+          jobTitle,
+          location,
+          jobUrl,
+          updatedAt: today,
+        });
+        fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+      } catch { /* non-fatal */ }
+    }
   } else {
     fs.mkdirSync(folderPath, { recursive: true });
     fs.writeFileSync(path.join(folderPath, 'job-description.md'), jobDescMd);
@@ -276,32 +301,45 @@ export function createApplication(
     fs.writeFileSync(path.join(folderPath, 'score.json'), '{}');
 
     const meta = {
-      id, company, jobTitle, location, jobUrl,
+      id: actualId, company, jobTitle, location, jobUrl,
       status: 'Saved',
       createdAt: today, updatedAt: today,
       resumePath: null, coverLetterPath: null, interviewPrepPath: null,
-      notesPath: `applications/${id}/notes.md`,
+      notesPath: `${applicationFolder}/notes.md`,
       reportPath: null,
-      scorePath: `applications/${id}/score.json`,
+      scorePath: `${applicationFolder}/score.json`,
     };
     fs.writeFileSync(path.join(folderPath, 'metadata.json'), JSON.stringify(meta, null, 2));
   }
 
   // Add to data/applications.json
   fs.mkdirSync(path.join(ROOT, 'data'), { recursive: true });
-  const apps = getAllApplications();
-  if (apps.some(a => a.id === id)) return; // already present
+  if (existing) {
+    const idx = apps.findIndex(app => app.id === existing.id);
+    apps[idx] = {
+      ...apps[idx],
+      company,
+      jobTitle,
+      location,
+      jobUrl,
+      updatedAt: today,
+    };
+    fs.writeFileSync(PATHS.applicationsJson, JSON.stringify({ applications: apps }, null, 2));
+    return actualId;
+  }
+  if (apps.some(a => a.id === actualId)) return actualId; // already present
   apps.push({
-    id, company, jobTitle, location, jobUrl,
+    id: actualId, company, jobTitle, location, jobUrl,
     status: 'Saved',
     score: null, fitLevel: null,
-    applicationFolder: `applications/${id}`,
+    applicationFolder,
     resumePath: null, coverLetterPath: null, interviewPrepPath: null,
-    notesPath: `applications/${id}/notes.md`,
+    notesPath: `${applicationFolder}/notes.md`,
     reportPath: null,
     createdAt: today, updatedAt: today, appliedAt: null,
   });
   fs.writeFileSync(PATHS.applicationsJson, JSON.stringify({ applications: apps }, null, 2));
+  return actualId;
 }
 
 export function updateApplicationFields(

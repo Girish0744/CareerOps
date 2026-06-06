@@ -2,15 +2,16 @@ import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { getApplication, updateApplicationFields } from '@/lib/filesystem';
 import { apiErrorMessage } from '@/lib/errors';
 import { generateGeminiContent } from '@/lib/ai-config';
+import { extractApplicantProfile } from '@/lib/apply-assistant';
 
 export const maxDuration = 120;
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 const ROOT = path.resolve(process.cwd(), '..');
 
@@ -21,10 +22,34 @@ function readRoot(rel: string): string {
 
 async function generatePdf(htmlPath: string, pdfPath: string, format = 'letter') {
   const script = path.join(ROOT, 'generate-pdf.mjs');
-  await execAsync(`node "${script}" "${htmlPath}" "${pdfPath}" --format=${format}`, {
+  await execFileAsync(process.execPath, [script, htmlPath, pdfPath, `--format=${format}`], {
     cwd: ROOT,
     timeout: 60000,
   });
+}
+
+function displayFromUrl(value: string, fallback: string): string {
+  if (!value) return fallback;
+  return value
+    .replace(/^https?:\/\//, '')
+    .replace(/\/$/, '');
+}
+
+function contactPlaceholders(profileYml: string) {
+  const profile = extractApplicantProfile(profileYml);
+  const phone = profile.phone ? `${profile.phone},` : '';
+  return {
+    name: profile.fullName || profile.legalName || 'Candidate',
+    location: [profile.city, profile.province].filter(Boolean).join(', ') || profile.country || '',
+    email: profile.email || '',
+    phoneSpan: phone,
+    linkedinUrl: displayFromUrl(profile.linkedin || '', ''),
+    linkedinDisplay: profile.linkedin ? 'LinkedIn' : '',
+    portfolioUrl: profile.portfolioUrl || '',
+    portfolioDisplay: displayFromUrl(profile.portfolioUrl || '', 'Portfolio'),
+    githubUrl: displayFromUrl(profile.github || '', ''),
+    githubDisplay: profile.github ? 'GitHub' : '',
+  };
 }
 
 export async function POST(
@@ -42,6 +67,7 @@ export async function POST(
   const profileMd  = readRoot('modes/_profile.md');
   const cvTemplate = readRoot('templates/cv-template.html');
   const clTemplate = readRoot('templates/cover-letter-template.html');
+  const contact = contactPlaceholders(profile);
 
   const today = new Date().toISOString().split('T')[0];
   const folderPath = path.join(ROOT, app.applicationFolder);
@@ -70,16 +96,16 @@ ${cvTemplate}
 PLACEHOLDER VALUES from profile:
 - {{LANG}} → en
 - {{PAGE_WIDTH}} → 8.5in
-- {{NAME}} → Girish Bhuteja
-- {{LOCATION}} → Cambridge, ON
-- {{EMAIL}} → girishbhuteja07@gmail.com
-- {{PHONE_SPAN}} → (416) 473-8204,
-- {{LINKEDIN_URL}} → linkedin.com/in/girishbhuteja/
-- {{LINKEDIN_DISPLAY}} → LinkedIn
-- {{PORTFOLIO_URL}} → https://girishbhuteja.com
-- {{PORTFOLIO_DISPLAY}} → girishbhuteja.com
-- {{GITHUB_URL}} → github.com/Girish0744
-- {{GITHUB_DISPLAY}} → GitHub
+- {{NAME}} → ${contact.name}
+- {{LOCATION}} → ${contact.location}
+- {{EMAIL}} → ${contact.email}
+- {{PHONE_SPAN}} → ${contact.phoneSpan}
+- {{LINKEDIN_URL}} → ${contact.linkedinUrl}
+- {{LINKEDIN_DISPLAY}} → ${contact.linkedinDisplay}
+- {{PORTFOLIO_URL}} → ${contact.portfolioUrl}
+- {{PORTFOLIO_DISPLAY}} → ${contact.portfolioDisplay}
+- {{GITHUB_URL}} → ${contact.githubUrl}
+- {{GITHUB_DISPLAY}} → ${contact.githubDisplay}
 - {{SUMMARY_TEXT}} → [YOU GENERATE: tailored 2-3 line summary]
 - {{SKILLS}} → [YOU GENERATE: tailored <table class="skills-table"> HTML]
 - {{EDUCATION}} → [YOU GENERATE: education <div class="entry"> HTML]
@@ -98,7 +124,7 @@ ${profileMd}
 
 Respond in EXACTLY this format (no other text):
 ===MARKDOWN===
-# Girish Bhuteja
+# ${contact.name}
 
 [Full tailored resume in clean markdown with standard headings]
 ===END_MARKDOWN===
@@ -186,16 +212,16 @@ ${clTemplate}
 PLACEHOLDER VALUES:
 - {{LANG}} → en
 - {{PAGE_WIDTH}} → 8.5in
-- {{NAME}} → Girish Bhuteja
-- {{LOCATION}} → Cambridge, ON
-- {{EMAIL}} → girishbhuteja07@gmail.com
-- {{PHONE_SPAN}} → (416) 473-8204,
-- {{LINKEDIN_URL}} → linkedin.com/in/girishbhuteja/
-- {{LINKEDIN_DISPLAY}} → LinkedIn
-- {{PORTFOLIO_URL}} → https://girishbhuteja.com
-- {{PORTFOLIO_DISPLAY}} → girishbhuteja.com
-- {{GITHUB_URL}} → github.com/Girish0744
-- {{GITHUB_DISPLAY}} → GitHub
+- {{NAME}} → ${contact.name}
+- {{LOCATION}} → ${contact.location}
+- {{EMAIL}} → ${contact.email}
+- {{PHONE_SPAN}} → ${contact.phoneSpan}
+- {{LINKEDIN_URL}} → ${contact.linkedinUrl}
+- {{LINKEDIN_DISPLAY}} → ${contact.linkedinDisplay}
+- {{PORTFOLIO_URL}} → ${contact.portfolioUrl}
+- {{PORTFOLIO_DISPLAY}} → ${contact.portfolioDisplay}
+- {{GITHUB_URL}} → ${contact.githubUrl}
+- {{GITHUB_DISPLAY}} → ${contact.githubDisplay}
 - {{DATE}} → ${dateFormatted}
 - {{HIRING_MANAGER}} → Hiring Manager
 - {{RECIPIENT_TITLE_LINE}} → (empty — leave blank)
@@ -260,11 +286,24 @@ Respond in EXACTLY this format (no other text):
   const resumeRelPath = `${app.applicationFolder}/resume.pdf`;
   const clRelPath     = `${app.applicationFolder}/cover-letter.pdf`;
 
-  updateApplicationFields(id, {
-    resumePath: resumeRelPath,
-    coverLetterPath: clRelPath,
-    status: 'Cover Letter Generated',
-  });
+  const updates: Parameters<typeof updateApplicationFields>[1] = {};
+  if (resumePdfGenerated) updates.resumePath = resumeRelPath;
+  if (clPdfGenerated) updates.coverLetterPath = clRelPath;
+  if (resumePdfGenerated && clPdfGenerated) {
+    updates.status = 'Cover Letter Generated';
+  } else if (resumePdfGenerated) {
+    updates.status = 'Resume Generated';
+  }
+
+  if (Object.keys(updates).length > 0) {
+    updateApplicationFields(id, updates);
+  }
+
+  if (!resumePdfGenerated || !clPdfGenerated) {
+    throw new Error(
+      `Document source was generated, but PDF generation was incomplete. Resume PDF: ${resumePdfGenerated ? 'ok' : 'failed'}; cover letter PDF: ${clPdfGenerated ? 'ok' : 'failed'}.`,
+    );
+  }
 
   return NextResponse.json({
     success: true,

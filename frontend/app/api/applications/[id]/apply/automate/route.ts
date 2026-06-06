@@ -4,7 +4,7 @@ import path from 'path';
 import { getApplication } from '@/lib/filesystem';
 import { apiErrorMessage } from '@/lib/errors';
 import { extractApplicantProfile, standardApplyFields } from '@/lib/apply-assistant';
-import { isRestrictedApplyHost, runVisibleApplyAutomation } from '@/lib/apply-automation';
+import { isRestrictedApplyHost } from '@/lib/apply-automation-core';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -93,6 +93,7 @@ export async function POST(
       updatedAt: new Date().toISOString(),
     };
 
+    const { runVisibleApplyAutomation } = await import('@/lib/apply-automation');
     const automation = await runVisibleApplyAutomation({
       url: applyUrl,
       session,
