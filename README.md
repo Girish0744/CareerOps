@@ -72,7 +72,7 @@ This fork extends the base career-ops system with a full **web frontend pipeline
 | 18 | **Expanded portals, next batch** — Continue growing `portals.yml` toward 150+ companies, adding Workday/Teamtailor/BambooHR/custom parsers only for high-value Canadian sources where structured endpoints are verified. | 🔜 Next |
 | 19 | **Email job alerts** — After each scan run, diff new results against the last scan. Any new job ≥ score threshold (default 70) triggers a Resend API email digest: ranked cards, score badges, one-click "Evaluate" links. `RESEND_API_KEY` in `.env.local`. Free tier: 3,000 emails/month. | 🔜 After 18 |
 | 16 | **Settings / Profile page** — `/settings` in the frontend: view and edit `profile.yml` (name, target roles, comp range, location) and `portals.yml` (add/remove companies, adjust keyword filters). No file editor needed. | 🔜 After 19 |
-| 17C | **Chrome extension companion** — MV3 current-tab companion captures safe employer/ATS Apply links into the local app when Playwright cannot click through a user-handled posting page; final-submit guard remains mandatory. | ✅ First foundation |
+| 17C | **Chrome extension companion** — MV3 current-tab companion fills high-confidence fields on the active employer/ATS tab, opens safe posting-page Apply links when needed, saves the apply URL for audit, and keeps the final-submit guard mandatory. | ✅ First foundation |
 
 ### Quick Start (Personal Setup)
 

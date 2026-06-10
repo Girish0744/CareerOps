@@ -1,12 +1,12 @@
 # Mode: apply — Live Application Assistant
 
-Interactive mode for when the candidate is filling out an application form. In the frontend, Phase 17A stores a human-reviewed `applications/{id}/apply-session.json` with known fields, generated answers, upload paths, and review flags. Phase 17B can open a visible Playwright browser, follow bounded safe Apply hops when needed, fill high-confidence ATS fields, upload generated job-specific documents, and stop before final Submit/Apply. A later Phase 17C may add a Chrome extension companion that reuses the same apply engine.
+Interactive mode for when the candidate is filling out an application form. In the frontend, Phase 17A stores a human-reviewed `applications/{id}/apply-session.json` with known fields, generated answers, upload paths, and review flags. Phase 17B can open a visible Playwright browser, follow bounded safe Apply hops when needed, fill high-confidence ATS fields, upload generated job-specific documents, and stop before final Submit/Apply. Phase 17C has a first Chrome/Edge extension companion that fills the current employer/ATS tab where browser permissions allow, reusing the same conservative matching and final-submit guard.
 
 ## Requirements
 
 - **Frontend Apply tab**: paste form questions, generate answers, copy/review fields, and open the apply link.
 - **Visible Playwright mode**: the candidate sees the browser while the assistant fills supported Greenhouse, Lever, Ashby, or conservative generic employer forms.
-- **Chrome extension later**: an extension may become a current-tab front door after Playwright filling is hardened, but it must reuse the same final-submit guard.
+- **Chrome extension companion**: the MV3 extension in `browser-extension/` can read the current employer/ATS tab after the candidate clicks it, open a safe posting-page Apply link when needed, fill high-confidence fields, and save the current apply URL back to the local app. It cannot upload local files directly, and it must never click final Submit/Send/Apply.
 - **Without browser automation**: the candidate shares a screenshot or pastes the questions manually.
 - **Final submit rule**: never click Submit/Send/Apply. The candidate reviews and clicks the final button.
 - **Voice**: written answers should sound like Girish - practical, warm, professional, role-specific, and grounded in saved proof points. Avoid generic AI phrasing, empty company praise, and invented experience.
@@ -89,6 +89,18 @@ When using `POST /api/applications/{id}/apply/automate`:
 9. Upload generated resume/cover-letter PDFs only when they belong to the current `applications/{id}/` folder. Upload the configured transcript file only when it exists
 10. Leave uncertain fields unchanged and record them in `apply-session.json`
 11. Stop with the browser open for human review before final Submit/Apply
+
+## Step 5C — Extension companion
+
+When using the Chrome/Edge extension:
+
+1. Require the frontend to be running locally so the extension can call `/api/applications/{id}/apply`
+2. Read the current tab only after the candidate clicks **Fill Current Page**
+3. Block LinkedIn, Indeed, Glassdoor, login walls, and restricted job-board DOM extraction
+4. If the current tab is a posting page, open only a safe Apply link (`Apply`, `Apply Now`, `Start Application`, etc.)
+5. Fill only high-confidence text/select/checkbox/radio fields from the saved apply session
+6. Leave uploads, ambiguous fields, demographics, consent/certification, and final-submit controls for human review
+7. Save the selected/current apply URL back through `/api/applications/{id}/apply/current-tab` for audit
 
 **Output format:**
 

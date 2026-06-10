@@ -445,7 +445,7 @@ Frontend workflow statuses are authoritative for this personalized fork. Legacy 
 | 18 | **Expanded portals, next batch** — continue toward 150+ companies; add Workday/Teamtailor/BambooHR/custom parsers only for verified high-value Canadian sources | 🔜 Next |
 | 19 | **Email job alerts** — After scan, diff against last run; new jobs ≥ threshold → Resend API digest email | 🔜 After 18 |
 | 16 | **Settings / Profile page** — `/settings`: edit `profile.yml` and `portals.yml` from the browser | 🔜 After 19 |
-| 17C | **Chrome extension companion** — MV3 current-tab companion captures safe employer/ATS Apply links into the local app when Playwright cannot click through a user-handled posting page; final-submit guard remains mandatory | ✅ First foundation |
+| 17C | **Chrome extension companion** — MV3 current-tab companion fills high-confidence fields on the active employer/ATS tab, opens safe posting-page Apply links when needed, saves the apply URL for audit, and keeps the final-submit guard mandatory | ✅ First foundation |
 
 ### Gated Pipeline — How It Works
 
@@ -506,7 +506,7 @@ Phase 13 is implemented. `portals.yml` exists with Canada/Ontario-focused provid
 - Written answers should sound like Girish: practical, warm, professional, role-specific, early-career but confident, and grounded in saved proof points. Avoid generic AI phrasing, flattery, or invented experience.
 - Use a truth table for yes/no fields. Answer from profile facts when known; mark uncertain fields for review instead of guessing.
 - Forbidden behavior: final Submit/Apply clicks, false answers, invented candidate facts, hidden account activity, or automated LinkedIn/Indeed/Glassdoor activity.
-- Phase 17C has a first MV3 companion in `browser-extension/`. It captures safe employer/ATS Apply links from the current tab into `/api/applications/{id}/apply/current-tab` when Playwright cannot click through a user-handled posting page. It must keep reusing the conservative apply engine and final-submit guard.
+- Phase 17C has a first MV3 companion in `browser-extension/`. It fills high-confidence fields on the current employer/ATS tab, opens safe posting-page Apply links when needed, and saves the selected/current apply URL into `/api/applications/{id}/apply/current-tab` for audit. It must keep reusing the conservative apply engine and final-submit guard.
 
 ### Interview Prep — Exact Behaviour
 
