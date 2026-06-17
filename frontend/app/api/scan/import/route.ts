@@ -41,14 +41,18 @@ function classifyRolePriority(title: string, location?: string | null): RolePrio
   if (/\b(intern|internship|co-?op|co op)\b/.test(text)) return 'intern_coop';
   if (/\b(new grad|new graduate|graduate program|university graduate|early career|campus)\b/.test(text)) return 'full_time_new_grad';
   if (/\b(entry level|entry-level|junior|jr\.)\b/.test(text)) return 'full_time_entry';
-  if (/\b(software developer|software engineer|software development engineer|full[ -]?stack|frontend|front end|backend|back end|application developer|web developer|java developer|python developer|\.net developer|ai application|applied ai)\b/.test(text)) return 'full_time_general';
+  if (/\b(software developer|software engineer|software development engineer|full[ -]?stack|frontend|front end|backend|back end|application developer|web developer|java developer|python developer|\.net developer|ai application|applied ai|machine learning|data analyst|business analyst|systems analyst|system analyst|it analyst|qa analyst|quality assurance|software tester|test analyst|it help desk|help desk|it technician|technical support|support analyst|application support)\b/.test(text)
+    || /\b(?:system|systems|architecture|technical|technology|it|application|software|web|data|business|process|operations|quality|qa|support|solution|solutions)[\w\s/.-]{0,50}analyst\b/.test(text)
+    || /\banalyst[\w\s/.-]{0,50}(?:system|systems|architecture|technical|technology|it|application|software|web|data|business|process|operations|quality|qa|support|solution|solutions)\b/.test(text)
+    || /\b(?:it|technical|application|desktop|service desk|help desk|systems?)[\w\s/.-]{0,50}(?:support|technician|specialist|associate)\b/.test(text)
+    || /\b(?:support|technician|specialist|associate)[\w\s/.-]{0,50}(?:it|technical|application|desktop|service desk|help desk|systems?)\b/.test(text)) return 'full_time_general';
   return 'skip';
 }
 
 function employmentTypeForRole(rolePriority: RolePriority): string {
   if (rolePriority === 'intern_coop') return 'intern/co-op';
   if (rolePriority === 'stretch') return 'stretch full-time';
-  if (rolePriority === 'skip') return 'non-target';
+  if (rolePriority === 'skip') return 'needs review';
   return 'full-time';
 }
 
@@ -66,7 +70,6 @@ function quickImportScore(rolePriority: RolePriority, text: string) {
   if (rolePriority === 'full_time_general') score += 14;
   if (rolePriority === 'intern_coop') score += 4;
   if (rolePriority === 'stretch') score = Math.min(score, 62);
-  if (rolePriority === 'skip') score = Math.min(score, 49);
   if (/ontario|toronto|waterloo|kitchener|cambridge|canada|remote canada/i.test(text)) score += 8;
   return Math.max(0, Math.min(100, Math.round(score)));
 }

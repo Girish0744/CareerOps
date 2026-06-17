@@ -3,6 +3,13 @@ interface ExtractedJobDescription {
   source: 'structured' | 'html';
 }
 
+export class JobDescriptionExtractionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'JobDescriptionExtractionError';
+  }
+}
+
 function decodeHtmlEntities(value: string): string {
   return value
     .replace(/&nbsp;/g, ' ')
@@ -62,6 +69,32 @@ export function normalizeJobDescriptionText(raw: string): string {
     });
 
   return lines.join('\n').slice(0, 16000).trim();
+}
+
+function blockedPageReason(text: string): string | null {
+  const lower = text.toLowerCase();
+  const signals = [
+    'user verification',
+    'verify you are human',
+    'are you a human',
+    'unusual requests',
+    'recaptcha',
+    'captcha',
+    'javascript is required by the recaptcha',
+    'you will be unable to access eluta',
+    'complete the challenge',
+  ];
+
+  if (signals.some(signal => lower.includes(signal))) {
+    return 'The URL returned a human-verification or captcha page instead of a job posting.';
+  }
+
+  return null;
+}
+
+export function assertUsableJobDescription(text: string): void {
+  const reason = blockedPageReason(text);
+  if (reason) throw new JobDescriptionExtractionError(reason);
 }
 
 function formatStructuredJob(fields: {
@@ -176,5 +209,7 @@ export async function extractJobDescriptionFromUrl(rawUrl: string): Promise<Extr
   });
   if (!res.ok) throw new Error(`Failed to fetch URL: ${res.status}`);
   const html = await res.text();
-  return { text: normalizeJobDescriptionText(html), source: 'html' };
+  const text = normalizeJobDescriptionText(html);
+  assertUsableJobDescription(text);
+  return { text, source: 'html' };
 }

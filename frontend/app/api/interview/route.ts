@@ -22,7 +22,7 @@ export async function POST(req: Request) {
   if (!app) return NextResponse.json({ error: 'Application not found' }, { status: 404 });
 
   // Read story bank if it exists
-  const storyBankPath = path.resolve(process.cwd(), '..', 'interview-prep', 'story-bank.md');
+  const storyBankPath = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..', 'interview-prep', 'story-bank.md');
   const storyBank = fs.existsSync(storyBankPath)
     ? fs.readFileSync(storyBankPath, 'utf-8')
     : 'No story bank found.';

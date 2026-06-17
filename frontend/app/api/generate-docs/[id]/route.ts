@@ -13,15 +13,15 @@ export const maxDuration = 120;
 
 const execFileAsync = promisify(execFile);
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-const ROOT = path.resolve(process.cwd(), '..');
+const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
 
 function readRoot(rel: string): string {
-  const p = path.join(ROOT, rel);
+  const p = path.join(/*turbopackIgnore: true*/ ROOT, rel);
   return fs.existsSync(p) ? fs.readFileSync(p, 'utf-8') : '';
 }
 
 async function generatePdf(htmlPath: string, pdfPath: string, format = 'letter') {
-  const script = path.join(ROOT, 'generate-pdf.mjs');
+  const script = path.join(/*turbopackIgnore: true*/ ROOT, 'generate-pdf.mjs');
   await execFileAsync(process.execPath, [script, htmlPath, pdfPath, `--format=${format}`], {
     cwd: ROOT,
     timeout: 60000,
@@ -69,8 +69,9 @@ export async function POST(
   const clTemplate = readRoot('templates/cover-letter-template.html');
   const contact = contactPlaceholders(profile);
 
-  const today = new Date().toISOString().split('T')[0];
-  const folderPath = path.join(ROOT, app.applicationFolder);
+  const generatedAt = new Date().toISOString();
+  const today = generatedAt.split('T')[0];
+  const folderPath = path.join(/*turbopackIgnore: true*/ ROOT, app.applicationFolder);
 
   // ── 1. RESUME ──────────────────────────────────────────────────────────────
 
@@ -287,8 +288,17 @@ Respond in EXACTLY this format (no other text):
   const clRelPath     = `${app.applicationFolder}/cover-letter.pdf`;
 
   const updates: Parameters<typeof updateApplicationFields>[1] = {};
-  if (resumePdfGenerated) updates.resumePath = resumeRelPath;
-  if (clPdfGenerated) updates.coverLetterPath = clRelPath;
+  if (resumePdfGenerated) {
+    updates.resumePath = resumeRelPath;
+    updates.resumeGeneratedAt = generatedAt;
+  }
+  if (clPdfGenerated) {
+    updates.coverLetterPath = clRelPath;
+    updates.coverLetterGeneratedAt = generatedAt;
+  }
+  if (resumePdfGenerated || clPdfGenerated) {
+    updates.lastDocumentGeneratedAt = generatedAt;
+  }
   if (resumePdfGenerated && clPdfGenerated) {
     updates.status = 'Cover Letter Generated';
   } else if (resumePdfGenerated) {

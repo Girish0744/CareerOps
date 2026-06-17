@@ -11,15 +11,19 @@ import { isValidStatus } from './status';
 // Career-ops root is one level up from the frontend directory
 const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
 
+function rootPath(...segments: string[]): string {
+  return path.join(/*turbopackIgnore: true*/ ROOT, ...segments);
+}
+
 export const PATHS = {
-  applicationsJson: path.join(ROOT, 'data', 'applications.json'),
-  applicationsMd:   path.join(ROOT, 'data', 'applications.md'),
-  profileYml:       path.join(ROOT, 'config', 'profile.yml'),
-  cvMd:             path.join(ROOT, 'cv.md'),
-  applicationsDir:  path.join(ROOT, 'applications'),
-  reportsDir:       path.join(ROOT, 'reports'),
-  scanHistory:      path.join(ROOT, 'data', 'scan-history.tsv'),
-  scoredQueue:      path.join(ROOT, 'data', 'scored-queue.json'),
+  applicationsJson: rootPath('data', 'applications.json'),
+  applicationsMd:   rootPath('data', 'applications.md'),
+  profileYml:       rootPath('config', 'profile.yml'),
+  cvMd:             rootPath('cv.md'),
+  applicationsDir:  rootPath('applications'),
+  reportsDir:       rootPath('reports'),
+  scanHistory:      rootPath('data', 'scan-history.tsv'),
+  scoredQueue:      rootPath('data', 'scored-queue.json'),
 };
 
 export interface ApplicationEntry {
@@ -39,7 +43,12 @@ export interface ApplicationEntry {
   reportPath: string | null;
   createdAt: string;
   updatedAt: string;
+  evaluatedAt: string | null;
+  resumeGeneratedAt: string | null;
+  coverLetterGeneratedAt: string | null;
+  lastDocumentGeneratedAt: string | null;
   appliedAt: string | null;
+  lastActivityAt: string | null;
 }
 
 export interface ApplicationDetail extends ApplicationEntry {
@@ -64,6 +73,8 @@ export interface ScoreData {
   notes: string | null;
   categories: Record<string, number | null>;
   originalScore?: number | null;
+  sourceUrl?: string | null;
+  applyUrl?: string | null;
   adjustedByGuardrails?: boolean;
   guardrails?: Array<{
     code: string;
@@ -79,6 +90,7 @@ export interface ScoredJob {
   company: string;
   jobTitle: string;
   location: string | null;
+  description?: string | null;
   jobUrl: string | null;
   score: number;
   fitLevel: string;
@@ -104,6 +116,124 @@ export interface ScoredJob {
   employmentType?: string | null;
   freshnessWindowHours?: number;
   scannedAt: string;
+  applicationId?: string | null;
+  applicationStatus?: string | null;
+  evaluatedAt?: string | null;
+  resumeGeneratedAt?: string | null;
+  coverLetterGeneratedAt?: string | null;
+  lastDocumentGeneratedAt?: string | null;
+  appliedAt?: string | null;
+  lastActivityAt?: string | null;
+  viewedAt?: string | null;
+  hasApplication?: boolean;
+  hasResume?: boolean;
+  hasCoverLetter?: boolean;
+  reviewState?: 'new' | 'viewed' | 'evaluated' | 'docs' | 'applied' | 'archived';
+}
+
+function nowIso(): string {
+  return new Date().toISOString();
+}
+
+function dateOnly(value: string): string {
+  return value.split('T')[0];
+}
+
+function timestampValue(value?: string | null): number {
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function latestTimestamp(...values: Array<string | null | undefined>): string | null {
+  let latest: string | null = null;
+  let latestTime = 0;
+  for (const value of values) {
+    const time = timestampValue(value);
+    if (time > latestTime) {
+      latest = value ?? null;
+      latestTime = time;
+    }
+  }
+  return latest;
+}
+
+function normalizeApplicationEntry(entry: Partial<ApplicationEntry> & { id: string }): ApplicationEntry {
+  const evaluatedAt = entry.evaluatedAt ?? null;
+  const resumeGeneratedAt = entry.resumeGeneratedAt ?? null;
+  const coverLetterGeneratedAt = entry.coverLetterGeneratedAt ?? null;
+  const lastDocumentGeneratedAt = entry.lastDocumentGeneratedAt
+    ?? latestTimestamp(resumeGeneratedAt, coverLetterGeneratedAt);
+  const appliedAt = entry.appliedAt ?? null;
+  const createdAt = entry.createdAt ?? dateOnly(nowIso());
+  const updatedAt = entry.updatedAt ?? createdAt;
+  const lastActivityAt = latestTimestamp(
+    appliedAt,
+    lastDocumentGeneratedAt,
+    coverLetterGeneratedAt,
+    resumeGeneratedAt,
+    evaluatedAt,
+    updatedAt,
+    createdAt,
+  );
+
+  return {
+    id: entry.id,
+    company: entry.company ?? 'Unknown Company',
+    jobTitle: entry.jobTitle ?? 'Unknown Role',
+    location: entry.location ?? null,
+    jobUrl: entry.jobUrl ?? null,
+    status: entry.status ?? 'Saved',
+    score: entry.score ?? null,
+    fitLevel: entry.fitLevel ?? null,
+    applicationFolder: entry.applicationFolder ?? `applications/${entry.id}`,
+    resumePath: entry.resumePath ?? null,
+    coverLetterPath: entry.coverLetterPath ?? null,
+    interviewPrepPath: entry.interviewPrepPath ?? null,
+    notesPath: entry.notesPath ?? null,
+    reportPath: entry.reportPath ?? null,
+    createdAt,
+    updatedAt,
+    evaluatedAt,
+    resumeGeneratedAt,
+    coverLetterGeneratedAt,
+    lastDocumentGeneratedAt,
+    appliedAt,
+    lastActivityAt,
+  };
+}
+
+function normalizeMatchText(value: string | null | undefined): string {
+  return (value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function urlKey(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    url.hash = '';
+    return url.toString().replace(/\/$/, '').toLowerCase();
+  } catch {
+    return value.trim().replace(/\/$/, '').toLowerCase() || null;
+  }
+}
+
+function companyRoleKey(company: string | null | undefined, jobTitle: string | null | undefined): string {
+  return `${normalizeMatchText(company)}|${normalizeMatchText(jobTitle)}`;
+}
+
+function reviewStateForApplication(app: ApplicationEntry | null): ScoredJob['reviewState'] {
+  if (!app) return 'new';
+  if (app.status === 'Applied' || app.appliedAt) return 'applied';
+  if (['Rejected', 'Withdrawn', 'Discarded', 'SKIP'].includes(app.status)) return 'archived';
+  if (app.resumePath || app.coverLetterPath || app.lastDocumentGeneratedAt) return 'docs';
+  if (app.score != null || app.evaluatedAt || app.status === 'Evaluated') return 'evaluated';
+  return 'evaluated';
+}
+
+function reviewStateForScoredJob(job: ScoredJob, app: ApplicationEntry | null): ScoredJob['reviewState'] {
+  if (app) return reviewStateForApplication(app);
+  return job.viewedAt ? 'viewed' : 'new';
 }
 
 // ── READ ──────────────────────────────────────────────────────────────────────
@@ -113,7 +243,9 @@ export function getAllApplications(): ApplicationEntry[] {
   try {
     const raw = fs.readFileSync(PATHS.applicationsJson, 'utf-8');
     const data = JSON.parse(raw);
-    return Array.isArray(data.applications) ? data.applications : [];
+    return Array.isArray(data.applications)
+      ? data.applications.map((entry: Partial<ApplicationEntry> & { id: string }) => normalizeApplicationEntry(entry))
+      : [];
   } catch {
     return [];
   }
@@ -124,7 +256,7 @@ export function getApplication(id: string): ApplicationDetail | null {
   const entry = apps.find(a => a.id === id);
   if (!entry) return null;
 
-  const folderPath = path.join(ROOT, entry.applicationFolder);
+  const folderPath = rootPath(entry.applicationFolder);
 
   const readFile = (filename: string): string | null => {
     const p = path.join(folderPath, filename);
@@ -156,7 +288,7 @@ export function getScoredQueue(): ScoredJob[] {
   if (!fs.existsSync(PATHS.scoredQueue)) return [];
   try {
     const raw = fs.readFileSync(PATHS.scoredQueue, 'utf-8');
-    return JSON.parse(raw) as ScoredJob[];
+    return enrichScoredJobsWithApplications(JSON.parse(raw) as ScoredJob[]);
   } catch {
     return [];
   }
@@ -171,22 +303,24 @@ export function updateApplicationStatus(id: string, newStatus: string): boolean 
   const idx = apps.findIndex(a => a.id === id);
   if (idx === -1) return false;
 
-  const today = new Date().toISOString().split('T')[0];
+  const now = nowIso();
   apps[idx].status = newStatus;
-  apps[idx].updatedAt = today;
+  apps[idx].updatedAt = now;
   if (newStatus === 'Applied' && !apps[idx].appliedAt) {
-    apps[idx].appliedAt = today;
+    apps[idx].appliedAt = now;
   }
+  apps[idx] = normalizeApplicationEntry(apps[idx]);
 
   fs.writeFileSync(PATHS.applicationsJson, JSON.stringify({ applications: apps }, null, 2));
 
   // Also update metadata.json inside the application folder
-  const metaPath = path.join(ROOT, apps[idx].applicationFolder, 'metadata.json');
+  const metaPath = rootPath(apps[idx].applicationFolder, 'metadata.json');
   if (fs.existsSync(metaPath)) {
     try {
       const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
       meta.status = newStatus;
-      meta.updatedAt = today;
+      meta.updatedAt = now;
+      if (newStatus === 'Applied' && !meta.appliedAt) meta.appliedAt = now;
       fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
     } catch { /* non-fatal */ }
   }
@@ -200,10 +334,11 @@ export function updateInterviewPrepPath(id: string, prepPath: string): boolean {
   if (idx === -1) return false;
 
   apps[idx].interviewPrepPath = prepPath;
-  apps[idx].updatedAt = new Date().toISOString().split('T')[0];
+  apps[idx].updatedAt = nowIso();
+  apps[idx] = normalizeApplicationEntry(apps[idx]);
   fs.writeFileSync(PATHS.applicationsJson, JSON.stringify({ applications: apps }, null, 2));
 
-  const metaPath = path.join(ROOT, apps[idx].applicationFolder, 'metadata.json');
+  const metaPath = rootPath(apps[idx].applicationFolder, 'metadata.json');
   if (fs.existsSync(metaPath)) {
     try {
       const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
@@ -220,7 +355,7 @@ export function saveInterviewPrep(id: string, content: string): string {
   const app = getAllApplications().find(a => a.id === id);
   if (!app) throw new Error(`Application not found: ${id}`);
 
-  const folderPath = path.join(ROOT, app.applicationFolder);
+  const folderPath = rootPath(app.applicationFolder);
   const prepPath = path.join(folderPath, 'interview.md');
   fs.writeFileSync(prepPath, content);
 
@@ -233,11 +368,11 @@ export function saveDocumentEdit(id: string, filename: 'resume.md' | 'cover-lett
   const app = getAllApplications().find(a => a.id === id);
   if (!app) throw new Error(`Application not found: ${id}`);
 
-  const filePath = path.join(ROOT, app.applicationFolder, filename);
+  const filePath = rootPath(app.applicationFolder, filename);
   fs.writeFileSync(filePath, content);
 
   // Append to edit-history.json
-  const historyPath = path.join(ROOT, app.applicationFolder, 'edit-history.json');
+  const historyPath = rootPath(app.applicationFolder, 'edit-history.json');
   let history: unknown[] = [];
   if (fs.existsSync(historyPath)) {
     try { history = JSON.parse(fs.readFileSync(historyPath, 'utf-8')); } catch { history = []; }
@@ -246,13 +381,103 @@ export function saveDocumentEdit(id: string, filename: 'resume.md' | 'cover-lett
   fs.writeFileSync(historyPath, JSON.stringify(history, null, 2));
 }
 
+export function saveJobDescriptionSnapshot(id: string, jobDescriptionText: string): void {
+  const apps = getAllApplications();
+  const idx = apps.findIndex(a => a.id === id);
+  if (idx === -1) throw new Error(`Application not found: ${id}`);
+
+  const app = apps[idx];
+  const now = nowIso();
+  const today = dateOnly(now);
+  const filePath = rootPath(app.applicationFolder, 'job-description.md');
+  const content = `# Job Description: ${app.jobTitle} at ${app.company}\n\n**URL:** ${app.jobUrl ?? 'Pasted JD'}\n**Location:** ${app.location ?? 'TBD'}\n**Date saved:** ${today}\n\n---\n\n${jobDescriptionText}`;
+  fs.writeFileSync(filePath, content);
+
+  apps[idx].updatedAt = now;
+  apps[idx] = normalizeApplicationEntry(apps[idx]);
+  fs.writeFileSync(PATHS.applicationsJson, JSON.stringify({ applications: apps }, null, 2));
+
+  const metaPath = rootPath(app.applicationFolder, 'metadata.json');
+  if (fs.existsSync(metaPath)) {
+    try {
+      const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+      meta.updatedAt = now;
+      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+    } catch { /* non-fatal */ }
+  }
+}
+
 export function getPdfAbsPath(relativePath: string): string {
-  return path.join(ROOT, relativePath);
+  return rootPath(relativePath);
 }
 
 export function saveScoredQueue(queue: ScoredJob[]): void {
   fs.mkdirSync(path.dirname(PATHS.scoredQueue), { recursive: true });
-  fs.writeFileSync(PATHS.scoredQueue, JSON.stringify(queue, null, 2));
+  fs.writeFileSync(PATHS.scoredQueue, JSON.stringify(enrichScoredJobsWithApplications(queue), null, 2));
+}
+
+export function markScoredJobViewed(id: string): ScoredJob[] | null {
+  if (!fs.existsSync(PATHS.scoredQueue)) return null;
+  let queue: ScoredJob[];
+  try {
+    queue = JSON.parse(fs.readFileSync(PATHS.scoredQueue, 'utf-8')) as ScoredJob[];
+  } catch {
+    return null;
+  }
+
+  const idx = queue.findIndex(job => job.id === id);
+  if (idx === -1) return null;
+
+  const now = nowIso();
+  queue[idx] = {
+    ...queue[idx],
+    viewedAt: queue[idx].viewedAt ?? now,
+    lastActivityAt: queue[idx].lastActivityAt ?? now,
+    reviewState: queue[idx].reviewState === 'new' || !queue[idx].reviewState ? 'viewed' : queue[idx].reviewState,
+    isNew: false,
+  };
+  saveScoredQueue(queue);
+  return getScoredQueue();
+}
+
+export function enrichScoredJobsWithApplications(queue: ScoredJob[]): ScoredJob[] {
+  const apps = getAllApplications();
+  const byUrl = new Map<string, ApplicationEntry>();
+  const byCompanyRole = new Map<string, ApplicationEntry>();
+
+  for (const app of apps) {
+    const appUrlKey = urlKey(app.jobUrl);
+    if (appUrlKey) byUrl.set(appUrlKey, app);
+    byCompanyRole.set(companyRoleKey(app.company, app.jobTitle), app);
+  }
+
+  return queue.map(job => {
+    const app = urlKey(job.directApplyUrl)
+      ? byUrl.get(urlKey(job.directApplyUrl)!)
+      : null;
+    const matchedApp = app
+      ?? (urlKey(job.jobUrl) ? byUrl.get(urlKey(job.jobUrl)!) : null)
+      ?? byCompanyRole.get(companyRoleKey(job.company, job.jobTitle))
+      ?? null;
+
+    return {
+      ...job,
+      applicationId: matchedApp?.id ?? null,
+      applicationStatus: matchedApp?.status ?? null,
+      evaluatedAt: matchedApp?.evaluatedAt ?? null,
+      resumeGeneratedAt: matchedApp?.resumeGeneratedAt ?? null,
+      coverLetterGeneratedAt: matchedApp?.coverLetterGeneratedAt ?? null,
+      lastDocumentGeneratedAt: matchedApp?.lastDocumentGeneratedAt ?? null,
+      appliedAt: matchedApp?.appliedAt ?? null,
+      lastActivityAt: matchedApp?.lastActivityAt ?? job.lastActivityAt ?? job.viewedAt ?? null,
+      viewedAt: job.viewedAt ?? null,
+      hasApplication: !!matchedApp,
+      hasResume: !!matchedApp?.resumePath,
+      hasCoverLetter: !!matchedApp?.coverLetterPath,
+      reviewState: reviewStateForScoredJob(job, matchedApp),
+      isNew: matchedApp || job.viewedAt ? false : job.isNew,
+    };
+  });
 }
 
 // ── CREATE / UPDATE ───────────────────────────────────────────────────────────
@@ -274,7 +499,8 @@ export function createApplication(
   );
   const actualId = existing?.id ?? id;
   const applicationFolder = existing?.applicationFolder ?? `applications/${actualId}`;
-  const folderPath = path.join(ROOT, applicationFolder);
+  const folderPath = rootPath(applicationFolder);
+  const now = nowIso();
 
   const jobDescMd = `# Job Description: ${jobTitle} at ${company}\n\n**URL:** ${jobUrl ?? 'Pasted JD'}\n**Location:** ${location ?? 'TBD'}\n**Date saved:** ${today}\n\n---\n\n${jobDescriptionText}`;
 
@@ -289,7 +515,7 @@ export function createApplication(
           jobTitle,
           location,
           jobUrl,
-          updatedAt: today,
+          updatedAt: now,
         });
         fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
       } catch { /* non-fatal */ }
@@ -303,7 +529,12 @@ export function createApplication(
     const meta = {
       id: actualId, company, jobTitle, location, jobUrl,
       status: 'Saved',
-      createdAt: today, updatedAt: today,
+      createdAt: now, updatedAt: now,
+      evaluatedAt: null,
+      resumeGeneratedAt: null,
+      coverLetterGeneratedAt: null,
+      lastDocumentGeneratedAt: null,
+      appliedAt: null,
       resumePath: null, coverLetterPath: null, interviewPrepPath: null,
       notesPath: `${applicationFolder}/notes.md`,
       reportPath: null,
@@ -313,7 +544,7 @@ export function createApplication(
   }
 
   // Add to data/applications.json
-  fs.mkdirSync(path.join(ROOT, 'data'), { recursive: true });
+  fs.mkdirSync(rootPath('data'), { recursive: true });
   if (existing) {
     const idx = apps.findIndex(app => app.id === existing.id);
     apps[idx] = {
@@ -322,8 +553,9 @@ export function createApplication(
       jobTitle,
       location,
       jobUrl,
-      updatedAt: today,
+      updatedAt: now,
     };
+    apps[idx] = normalizeApplicationEntry(apps[idx]);
     fs.writeFileSync(PATHS.applicationsJson, JSON.stringify({ applications: apps }, null, 2));
     return actualId;
   }
@@ -336,7 +568,14 @@ export function createApplication(
     resumePath: null, coverLetterPath: null, interviewPrepPath: null,
     notesPath: `${applicationFolder}/notes.md`,
     reportPath: null,
-    createdAt: today, updatedAt: today, appliedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    evaluatedAt: null,
+    resumeGeneratedAt: null,
+    coverLetterGeneratedAt: null,
+    lastDocumentGeneratedAt: null,
+    appliedAt: null,
+    lastActivityAt: now,
   });
   fs.writeFileSync(PATHS.applicationsJson, JSON.stringify({ applications: apps }, null, 2));
   return actualId;
@@ -351,23 +590,28 @@ export function updateApplicationFields(
   const idx = apps.findIndex(a => a.id === id);
   if (idx === -1) return false;
 
-  const today = new Date().toISOString().split('T')[0];
-  Object.assign(apps[idx], updates, { updatedAt: today });
+  const now = nowIso();
+  const normalizedUpdates = { ...updates };
+  if (normalizedUpdates.status === 'Applied' && !normalizedUpdates.appliedAt && !apps[idx].appliedAt) {
+    normalizedUpdates.appliedAt = now;
+  }
+  Object.assign(apps[idx], normalizedUpdates, { updatedAt: now });
+  apps[idx] = normalizeApplicationEntry(apps[idx]);
   fs.writeFileSync(PATHS.applicationsJson, JSON.stringify({ applications: apps }, null, 2));
 
   // Sync metadata.json
-  const metaPath = path.join(ROOT, apps[idx].applicationFolder, 'metadata.json');
+  const metaPath = rootPath(apps[idx].applicationFolder, 'metadata.json');
   if (fs.existsSync(metaPath)) {
     try {
       const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-      Object.assign(meta, updates, { updatedAt: today });
+      Object.assign(meta, normalizedUpdates, { updatedAt: now });
       fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
     } catch { /* non-fatal */ }
   }
 
   // Write score.json if scoreData provided
   if (scoreData !== undefined) {
-    const scorePath = path.join(ROOT, apps[idx].applicationFolder, 'score.json');
+    const scorePath = rootPath(apps[idx].applicationFolder, 'score.json');
     fs.writeFileSync(scorePath, JSON.stringify(scoreData, null, 2));
   }
 

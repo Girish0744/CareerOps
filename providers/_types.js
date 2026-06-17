@@ -18,6 +18,7 @@
  * @property {string} company  May be empty when the source can't expose it
  *                             at the list-page level; populated downstream.
  * @property {string} location May be empty.
+ * @property {(string|null)} [description]     Best-effort archived listing/JD text from the source.
  * @property {(string|null)} [postedAt]       ISO timestamp/date when the source exposes it.
  * @property {(string|null)} [directApplyUrl] Direct apply URL when different from the posting URL.
  * @property {(string|null)} [sourceType]     Provider/source family, e.g. `greenhouse`.

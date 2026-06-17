@@ -5,6 +5,7 @@ import {
   parseRelativeTimestamp,
   rolePriorityRank,
 } from './scan-utils.mjs';
+import { buildTitleFilter } from './scan.mjs';
 
 const FIXTURE_DIR = path.resolve('tests/scan-fixtures');
 const now = new Date('2026-06-04T16:00:00.000Z');
@@ -58,6 +59,29 @@ if (fullTimeRank >= internRank) {
   fail('full-time new-grad role should outrank intern/co-op');
 } else {
   pass('full-time new-grad role outranks intern/co-op');
+}
+
+const resumeBroadFilter = buildTitleFilter({
+  positive: ['Software Developer'],
+  hard_negative: ['Recruiter', 'Forklift'],
+}, { discoveryMode: 'resume_broad' });
+
+if (!resumeBroadFilter('Technology Operations Associate')) {
+  fail('resume_broad filter should allow broad technology-adjacent titles');
+} else {
+  pass('resume_broad filter allows broad technology-adjacent titles');
+}
+
+if (!resumeBroadFilter('System Architecture Analyst')) {
+  fail('resume_broad filter should allow system architecture analyst titles');
+} else {
+  pass('resume_broad filter allows system architecture analyst titles');
+}
+
+if (resumeBroadFilter('Technical Recruiter')) {
+  fail('resume_broad filter should block hard-negative titles');
+} else {
+  pass('resume_broad filter blocks hard-negative titles');
 }
 
 if (failures > 0) {

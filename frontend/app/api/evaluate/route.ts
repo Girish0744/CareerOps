@@ -5,14 +5,19 @@ import path from 'path';
 import { createApplication, updateApplicationFields } from '@/lib/filesystem';
 import { apiErrorMessage } from '@/lib/errors';
 import { applyEvaluationGuardrails } from '@/lib/evaluation-guardrails';
-import { extractJobDescriptionFromUrl, normalizeJobDescriptionText } from '@/lib/job-description';
+import {
+  JobDescriptionExtractionError,
+  assertUsableJobDescription,
+  extractJobDescriptionFromUrl,
+  normalizeJobDescriptionText,
+} from '@/lib/job-description';
 import { generateGeminiContent } from '@/lib/ai-config';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-const ROOT = path.resolve(process.cwd(), '..');
+const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
 
 function readFile(rel: string): string {
-  const p = path.join(ROOT, rel);
+  const p = path.join(/*turbopackIgnore: true*/ ROOT, rel);
   return fs.existsSync(p) ? fs.readFileSync(p, 'utf-8') : '';
 }
 
@@ -20,10 +25,59 @@ function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
+function isPlaceholderValue(value: string | null | undefined): boolean {
+  if (!value) return true;
+  return /^(unknown|n\/a|na|not specified|tbd)$/i.test(value.trim());
+}
+
+interface ScanContext {
+  company?: string;
+  jobTitle?: string;
+  location?: string | null;
+  description?: string | null;
+  score?: number;
+  fitLevel?: string;
+  recommendation?: string;
+  summary?: string;
+  matched?: string[];
+  gaps?: string[];
+  sourceType?: string | null;
+  sourceName?: string | null;
+  postedAt?: string | null;
+  directApplyUrl?: string | null;
+}
+
+function scanContextLooksUsable(context: ScanContext | undefined): context is Required<Pick<ScanContext, 'company' | 'jobTitle'>> & ScanContext {
+  return !!context && !isPlaceholderValue(context.company) && !isPlaceholderValue(context.jobTitle);
+}
+
+function syntheticJobDescriptionFromScan(context: ScanContext, sourceUrl: string | null, applyUrl: string | null): string {
+  const matched = Array.isArray(context.matched) ? context.matched.filter(Boolean) : [];
+  const gaps = Array.isArray(context.gaps) ? context.gaps.filter(Boolean) : [];
+  const archivedDescription = typeof context.description === 'string' ? context.description.trim() : '';
+  return normalizeJobDescriptionText([
+    archivedDescription
+      ? 'Archived job listing snapshot from scan source. The original detail URL could not be fetched directly, so preserve this source text and score conservatively.'
+      : 'Limited job metadata from scan card. The original URL could not be fetched directly, so score conservatively.',
+    `Company: ${context.company}`,
+    `Job Title: ${context.jobTitle}`,
+    context.location ? `Location: ${context.location}` : '',
+    sourceUrl ? `Source URL: ${sourceUrl}` : '',
+    applyUrl ? `Apply URL: ${applyUrl}` : '',
+    context.sourceName || context.sourceType ? `Source: ${context.sourceName ?? context.sourceType}` : '',
+    context.postedAt ? `Posted: ${context.postedAt}` : '',
+    context.summary ? `Scan summary: ${context.summary}` : '',
+    context.score != null ? `Preliminary scan score: ${context.score}/100 (${context.fitLevel ?? 'unclassified'})` : '',
+    matched.length ? `Matched scan signals: ${matched.join('; ')}` : '',
+    gaps.length ? `Scan concerns: ${gaps.join('; ')}` : '',
+    archivedDescription ? `Archived listing text:\n${archivedDescription}` : '',
+  ].filter(Boolean).join('\n'));
+}
+
 export async function POST(req: Request) {
   try {
-    const body = await req.json() as { text?: string; url?: string; applyUrl?: string; sourceUrl?: string };
-    const { text, url, applyUrl, sourceUrl } = body;
+    const body = await req.json() as { text?: string; url?: string; applyUrl?: string; sourceUrl?: string; scanContext?: ScanContext };
+    const { text, url, applyUrl, sourceUrl, scanContext } = body;
 
     if (!text && !url) {
       return NextResponse.json({ error: 'Provide text or url' }, { status: 400 });
@@ -32,17 +86,44 @@ export async function POST(req: Request) {
     let jdText: string;
     let jobUrl: string | null = null;
     let savedApplyUrl: string | null = null;
+    let extractionMode: 'url' | 'apply-url' | 'pasted-text' | 'scan-metadata-fallback' = 'pasted-text';
 
     if (url) {
       jobUrl = url;
       savedApplyUrl = applyUrl || url;
-      const extracted = await extractJobDescriptionFromUrl(url);
-      jdText = extracted.text;
+      try {
+        const extracted = await extractJobDescriptionFromUrl(url);
+        jdText = extracted.text;
+        extractionMode = 'url';
+      } catch (err) {
+        if (applyUrl && applyUrl !== url) {
+          try {
+            const extracted = await extractJobDescriptionFromUrl(applyUrl);
+            jdText = extracted.text;
+            jobUrl = applyUrl;
+            extractionMode = 'apply-url';
+          } catch {
+            if (!scanContextLooksUsable(scanContext)) throw err;
+            jdText = syntheticJobDescriptionFromScan(scanContext, sourceUrl ?? url, applyUrl);
+            extractionMode = 'scan-metadata-fallback';
+          }
+        } else if (scanContextLooksUsable(scanContext)) {
+          jdText = syntheticJobDescriptionFromScan(scanContext, sourceUrl ?? url, applyUrl ?? url);
+          extractionMode = 'scan-metadata-fallback';
+        } else {
+          throw err;
+        }
+      }
     } else {
       jdText = normalizeJobDescriptionText(text!);
+      extractionMode = 'pasted-text';
     }
 
-    if (jdText.length < 500) {
+    if (extractionMode !== 'scan-metadata-fallback') {
+      assertUsableJobDescription(jdText);
+    }
+
+    if (extractionMode !== 'scan-metadata-fallback' && jdText.length < 500) {
       return NextResponse.json({
         error: 'The job description looks too short after cleanup. Paste the full posting text or use a direct ATS job URL.',
       }, { status: 400 });
@@ -51,7 +132,8 @@ export async function POST(req: Request) {
     const cv = readFile('cv.md');
     const profile = readFile('config/profile.yml');
     const profileMd = readFile('modes/_profile.md');
-    const today = new Date().toISOString().split('T')[0];
+    const evaluatedAt = new Date().toISOString();
+    const today = evaluatedAt.split('T')[0];
 
     const systemPrompt = `You are a job application evaluator scoring a job description against a specific candidate's profile.
 
@@ -178,6 +260,12 @@ Do not add any text before ===SUMMARY=== or after ===END_JSON===.`;
     const { company, jobTitle, location, score, fitLevel, recommendation, matched, gaps,
             categories, matchedKeywords, missingKeywords, summary } = evaluation;
 
+    if (isPlaceholderValue(company) || isPlaceholderValue(jobTitle)) {
+      return NextResponse.json({
+        error: 'Could not identify a real company and job title from this posting. Paste the full JD text or use a direct employer/ATS job URL.',
+      }, { status: 422 });
+    }
+
     // Build application ID
     const id = `${slugify(company)}-${slugify(jobTitle)}-${today}`;
 
@@ -190,14 +278,21 @@ Do not add any text before ===SUMMARY=== or after ===END_JSON===.`;
       originalScore: evaluation.originalScore,
       adjustedByGuardrails: evaluation.adjustedByGuardrails,
       guardrails: evaluation.guardrails,
+      extractionMode,
       modelUsed,
       categories, matchedKeywords, missingKeywords,
       notes: summary,
       sourceUrl: sourceUrl ?? jobUrl,
       applyUrl: savedApplyUrl ?? jobUrl,
-      evaluatedAt: today,
+      evaluatedAt,
     };
-    updateApplicationFields(applicationId, { score, fitLevel, status: 'Evaluated', jobUrl: savedApplyUrl ?? jobUrl }, scoreData);
+    updateApplicationFields(applicationId, {
+      score,
+      fitLevel,
+      status: 'Evaluated',
+      jobUrl: savedApplyUrl ?? jobUrl,
+      evaluatedAt,
+    }, scoreData);
 
     return NextResponse.json({
       applicationId,
@@ -208,6 +303,9 @@ Do not add any text before ===SUMMARY=== or after ===END_JSON===.`;
       adjustedByGuardrails: evaluation.adjustedByGuardrails,
     });
   } catch (err) {
+    if (err instanceof JobDescriptionExtractionError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     return NextResponse.json({ error: apiErrorMessage(err) }, { status: 500 });
   }
 }

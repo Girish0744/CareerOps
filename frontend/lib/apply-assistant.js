@@ -155,15 +155,24 @@ export function answerKnownQuestion(question, profile, app = {}) {
 function roleFocus(app = {}) {
   const title = String(app.jobTitle || '').toLowerCase();
   if (/ai|machine learning|\bml\b|data/.test(title)) {
-    return 'AI application work like MediTwin, where I connected Gemini API and OpenFDA to make drug research faster and easier to use';
+    return 'AI, ML, and data work like ETHOS, Zonalyze, AegisGrid, and MediTwin, where I built pipelines, models, APIs, and user-facing tools';
   }
   if (/full.?stack|front.?end|react|next|web/.test(title)) {
-    return 'full-stack work across React, Node/TypeScript, APIs, and user-facing product details';
+    return 'full-stack work across React, TypeScript, FastAPI, Flask/Node.js, APIs, deployment, and user-facing product details';
+  }
+  if (/business analyst|systems analyst|system analyst|it analyst/.test(title)) {
+    return 'analysis work that connects data, workflows, systems, and practical recommendations, including Zonalyze, dropout-risk analysis, and OER workflow automation';
+  }
+  if (/qa|quality assurance|test|tester/.test(title)) {
+    return 'testing and quality work across MSTest, Catch2, Selenium, JMeter, accessibility testing, and defensive edge-case handling';
+  }
+  if (/help desk|support|technician|it technician/.test(title)) {
+    return 'technical support work grounded in troubleshooting, user-facing communication, documentation, platform support, and trainer experience';
   }
   if (/backend|api|software developer|java|c#|python|\.net/.test(title)) {
-    return 'software development work across APIs, OOP, C#, Python, databases, and practical systems';
+    return 'software development work across APIs, OOP, C#, C++, Python, databases, testing, and practical systems';
   }
-  return 'practical software projects that connect technical implementation with real user needs';
+  return 'practical technology projects that connect technical implementation with real user needs';
 }
 
 export function fallbackWrittenAnswer(question, app = {}) {
@@ -175,7 +184,7 @@ export function fallbackWrittenAnswer(question, app = {}) {
     key: 'written_response',
     question,
     label: question,
-    answer: `What draws me to this ${role} role is the chance to keep building useful software in a team setting. In my computer science degree and projects, I have focused on ${focus}. I am still early in my career, but I have shipped work used by real people, including MediTwin, OER tools used by 1,000+ students, and product-focused full-stack projects. I would bring that same careful, hands-on approach to ${company}.`,
+    answer: `What draws me to this ${role} role is the chance to keep building useful technology in a team setting. In my computer science degree, co-op work, and projects, I have focused on ${focus}. I am still early in my career, but I have shipped work used by real people, including OER tools used by 1,000+ students, full-stack and ML projects like Zonalyze and ETHOS, and practical systems built with testing and deployment in mind. I would bring that same careful, hands-on approach to ${company}.`,
     fieldType: 'written',
     confidence: 'medium',
     source: 'local fallback from application context',

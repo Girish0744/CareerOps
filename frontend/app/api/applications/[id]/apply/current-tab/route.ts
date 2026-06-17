@@ -8,7 +8,7 @@ import { isRestrictedApplyHost, isSafeApplyCta, looksLikeApplicationForm } from 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const ROOT = path.resolve(process.cwd(), '..');
+const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
 
 interface CurrentTabLink {
   label?: string;
@@ -32,7 +32,7 @@ interface CurrentTabRequest {
 }
 
 function applySessionPath(applicationFolder: string) {
-  return path.join(ROOT, applicationFolder, 'apply-session.json');
+  return path.join(/*turbopackIgnore: true*/ ROOT, applicationFolder, 'apply-session.json');
 }
 
 function readApplySession(applicationFolder: string) {

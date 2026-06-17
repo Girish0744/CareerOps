@@ -6,7 +6,7 @@ import ScoreBadge from '@/components/ScoreBadge';
 import {
   Briefcase, ExternalLink, MapPin, Loader2, CheckCircle2,
   Sparkles, ArrowRight, AlertTriangle, XCircle, ChevronDown, ChevronUp,
-  CalendarClock, Filter, Upload,
+  CalendarClock, Filter, Upload, Eye,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -36,6 +36,7 @@ interface ScannedJob {
   company: string;
   jobTitle: string;
   location: string | null;
+  description?: string | null;
   jobUrl: string | null;
   score: number;
   fitLevel: string;
@@ -60,6 +61,19 @@ interface ScannedJob {
   rolePriority?: 'full_time_new_grad' | 'full_time_entry' | 'full_time_general' | 'intern_coop' | 'stretch' | 'skip';
   employmentType?: string | null;
   scannedAt: string;
+  applicationId?: string | null;
+  applicationStatus?: string | null;
+  evaluatedAt?: string | null;
+  resumeGeneratedAt?: string | null;
+  coverLetterGeneratedAt?: string | null;
+  lastDocumentGeneratedAt?: string | null;
+  appliedAt?: string | null;
+  lastActivityAt?: string | null;
+  viewedAt?: string | null;
+  hasApplication?: boolean;
+  hasResume?: boolean;
+  hasCoverLetter?: boolean;
+  reviewState?: 'new' | 'viewed' | 'evaluated' | 'docs' | 'applied' | 'archived';
 }
 
 interface SourceSummaryItem {
@@ -75,6 +89,8 @@ type Stage =
   | { kind: 'generating'; result: EvalResult }
   | { kind: 'done'; result: EvalResult; resumePdf: boolean; coverLetterPdf: boolean }
   | { kind: 'error'; message: string };
+
+type ReviewFilter = 'new' | 'viewed' | 'evaluated' | 'docs' | 'applied' | 'archived' | 'all';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -94,6 +110,18 @@ function formatShortDate(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString('en-CA', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 function recencyText(job: ScannedJob) {
@@ -121,7 +149,7 @@ function rolePriorityLabel(value?: ScannedJob['rolePriority']) {
     full_time_general: 'Full-time',
     intern_coop: 'Intern/co-op',
     stretch: 'Stretch',
-    skip: 'Non-target',
+    skip: 'Needs review',
   };
   return value ? labels[value] : 'Unclassified';
 }
@@ -132,6 +160,15 @@ function sourceTypeLabel(value?: string | null) {
   if (value === 'eluta') return 'Eluta';
   if (value === 'manual-import') return 'Manual import';
   return value;
+}
+
+function reviewStateLabel(job: ScannedJob) {
+  if (job.appliedAt || job.reviewState === 'applied') return 'Applied';
+  if (job.reviewState === 'archived') return job.applicationStatus ?? 'Archived';
+  if (job.hasResume || job.hasCoverLetter || job.reviewState === 'docs') return 'Docs ready';
+  if (job.evaluatedAt || job.reviewState === 'evaluated') return 'Evaluated';
+  if (job.viewedAt || job.reviewState === 'viewed') return 'Viewed';
+  return job.isNew ? 'New' : 'Not evaluated';
 }
 
 // ── Score Card ────────────────────────────────────────────────────────────────
@@ -302,8 +339,10 @@ export default function JobDiscoveryPage() {
   const [companyFilter, setCompanyFilter] = useState('all');
   const [recencyFilter, setRecencyFilter] = useState('24h');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>('new');
   const [importText, setImportText] = useState('');
   const [importLoading, setImportLoading] = useState(false);
+  const [jobActionLoading, setJobActionLoading] = useState<string | null>(null);
   const [filterNowMs, setFilterNowMs] = useState(0);
 
   async function loadScannedJobs() {
@@ -346,6 +385,7 @@ export default function JobDiscoveryPage() {
       if (!res.ok) throw new Error(data.error ?? 'Evaluation failed');
 
       setStage({ kind: 'evaluated', result: data as EvalResult });
+      void loadScannedJobs();
     } catch (err) {
       setStage({ kind: 'error', message: err instanceof Error ? err.message : 'Unknown error' });
     }
@@ -367,11 +407,28 @@ export default function JobDiscoveryPage() {
           url: job.jobUrl,
           applyUrl: job.directApplyUrl ?? job.jobUrl,
           sourceUrl: job.jobUrl,
+          scanContext: {
+            company: job.company,
+            jobTitle: job.jobTitle,
+            location: job.location,
+            description: job.description ?? null,
+            score: job.score,
+            fitLevel: job.fitLevel,
+            recommendation: job.recommendation,
+            summary: job.summary,
+            matched: job.matched ?? [],
+            gaps: job.gaps ?? [],
+            sourceType: job.sourceType ?? null,
+            sourceName: job.sourceName ?? job.source ?? null,
+            postedAt: job.postedAt,
+            directApplyUrl: job.directApplyUrl ?? null,
+          },
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Evaluation failed');
       setStage({ kind: 'evaluated', result: data as EvalResult });
+      void loadScannedJobs();
     } catch (err) {
       setStage({ kind: 'error', message: err instanceof Error ? err.message : 'Evaluation failed' });
     }
@@ -423,6 +480,78 @@ export default function JobDiscoveryPage() {
     }
   }
 
+  async function handleMarkViewed(job: ScannedJob, silent = false) {
+    if (job.applicationId || job.reviewState === 'viewed') return;
+    if (!silent) {
+      setJobActionLoading(`viewed:${job.id}`);
+      setScanError(null);
+      setScanMessage(null);
+    }
+    try {
+      const res = await fetch('/api/scan/viewed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: job.id }),
+      });
+      const data = await res.json().catch(() => ({})) as { queue?: ScannedJob[]; error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Viewed update failed');
+      if (Array.isArray(data.queue)) setScannedJobs(data.queue);
+      if (!silent) setScanMessage(`Marked viewed: ${job.company} — ${job.jobTitle}.`);
+    } catch (err) {
+      if (!silent) setScanError(err instanceof Error ? err.message : 'Viewed update failed');
+    } finally {
+      if (!silent) setJobActionLoading(null);
+    }
+  }
+
+  async function handleGenerateDocsForJob(job: ScannedJob) {
+    if (!job.applicationId) {
+      setScanError('Evaluate this job first so an application folder exists.');
+      return;
+    }
+    setJobActionLoading(`docs:${job.id}`);
+    setScanError(null);
+    setScanMessage(null);
+    try {
+      const res = await fetch(`/api/generate-docs/${job.applicationId}`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Document generation failed');
+      await loadScannedJobs();
+      setScanMessage(`Documents generated for ${job.company} — ${job.jobTitle}.`);
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Document generation failed');
+    } finally {
+      setJobActionLoading(null);
+    }
+  }
+
+  async function handleMarkApplied(job: ScannedJob) {
+    if (!job.applicationId) {
+      setScanError('Evaluate this job first so it can be marked applied.');
+      return;
+    }
+    const confirmed = window.confirm(`Mark "${job.jobTitle}" at ${job.company} as applied? Use this only after you manually submit the application.`);
+    if (!confirmed) return;
+    setJobActionLoading(`applied:${job.id}`);
+    setScanError(null);
+    setScanMessage(null);
+    try {
+      const res = await fetch(`/api/applications/${job.applicationId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Applied' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? 'Status update failed');
+      await loadScannedJobs();
+      setScanMessage(`Marked applied: ${job.company} — ${job.jobTitle}.`);
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Status update failed');
+    } finally {
+      setJobActionLoading(null);
+    }
+  }
+
   const companies = useMemo(
     () => Array.from(new Set(scannedJobs.map(job => job.company).filter(Boolean))).sort(),
     [scannedJobs],
@@ -447,8 +576,23 @@ export default function JobDiscoveryPage() {
     }
     return Array.from(map.values()).sort((a, b) => b.count - a.count || a.sourceName.localeCompare(b.sourceName));
   }, [scannedJobs]);
+  const reviewCounts = useMemo(() => ({
+    new: scannedJobs.filter(job => !job.hasApplication && job.reviewState !== 'viewed').length,
+    viewed: scannedJobs.filter(job => job.reviewState === 'viewed').length,
+    evaluated: scannedJobs.filter(job => job.reviewState === 'evaluated').length,
+    docs: scannedJobs.filter(job => job.reviewState === 'docs').length,
+    applied: scannedJobs.filter(job => job.reviewState === 'applied').length,
+    archived: scannedJobs.filter(job => job.reviewState === 'archived').length,
+    all: scannedJobs.length,
+  }), [scannedJobs]);
   const filteredScannedJobs = useMemo(() => {
     return scannedJobs.filter(job => {
+      if (reviewFilter === 'new' && (job.hasApplication || job.reviewState === 'viewed')) return false;
+      if (reviewFilter === 'viewed' && job.reviewState !== 'viewed') return false;
+      if (reviewFilter === 'evaluated' && job.reviewState !== 'evaluated') return false;
+      if (reviewFilter === 'docs' && job.reviewState !== 'docs') return false;
+      if (reviewFilter === 'applied' && job.reviewState !== 'applied') return false;
+      if (reviewFilter === 'archived' && job.reviewState !== 'archived') return false;
       if (fitFilter !== 'all' && job.fitLevel !== fitFilter) return false;
       if (sourceFilter !== 'all' && (job.sourceName ?? job.source ?? 'Unknown') !== sourceFilter && sourceTypeLabel(job.sourceType) !== sourceFilter) return false;
       if (companyFilter !== 'all' && job.company !== companyFilter) return false;
@@ -464,7 +608,7 @@ export default function JobDiscoveryPage() {
       if (recencyFilter === '7d' && (!Number.isFinite(time) || filterNowMs - time > 7 * 24 * 60 * 60 * 1000)) return false;
       return true;
     });
-  }, [companyFilter, filterNowMs, fitFilter, recencyFilter, roleFilter, scannedJobs, sourceFilter]);
+  }, [companyFilter, filterNowMs, fitFilter, recencyFilter, reviewFilter, roleFilter, scannedJobs, sourceFilter]);
 
   const lanes = useMemo(() => [
     { label: 'Strong Apply', jobs: filteredScannedJobs.filter(job => job.score >= 85) },
@@ -491,6 +635,7 @@ export default function JobDiscoveryPage() {
         resumePdf: data.resumePdfGenerated,
         coverLetterPdf: data.coverLetterPdfGenerated,
       });
+      void loadScannedJobs();
     } catch (err) {
       setStage({ kind: 'error', message: err instanceof Error ? err.message : 'Generation failed' });
     }
@@ -668,6 +813,30 @@ export default function JobDiscoveryPage() {
                 {filteredScannedJobs.length} of {scannedJobs.length} shown
               </span>
             </div>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {[
+                { key: 'new', label: 'New / not evaluated', count: reviewCounts.new },
+                { key: 'viewed', label: 'Viewed', count: reviewCounts.viewed },
+                { key: 'evaluated', label: 'Evaluated', count: reviewCounts.evaluated },
+                { key: 'docs', label: 'Docs ready', count: reviewCounts.docs },
+                { key: 'applied', label: 'Applied', count: reviewCounts.applied },
+                { key: 'archived', label: 'Archived', count: reviewCounts.archived },
+                { key: 'all', label: 'All', count: reviewCounts.all },
+              ].map(item => (
+                <button
+                  key={item.key}
+                  onClick={() => setReviewFilter(item.key as ReviewFilter)}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    reviewFilter === item.key
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {item.label}
+                  <span className={reviewFilter === item.key ? 'text-slate-300' : 'text-slate-400'}>{item.count}</span>
+                </button>
+              ))}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               <select value={fitFilter} onChange={e => setFitFilter(e.target.value)}
                 className="px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white text-slate-700">
@@ -758,8 +927,26 @@ export default function JobDiscoveryPage() {
                       </span>
                       <span>{job.sourceName ?? job.source ?? 'Unknown source'}</span>
                       {job.isNew && <span className="text-emerald-600 font-semibold">New</span>}
+                      {job.lastActivityAt && (
+                        <span className="text-slate-500 font-medium">
+                          Last activity {formatDateTime(job.lastActivityAt)}
+                        </span>
+                      )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                        job.reviewState === 'applied'
+                          ? 'border-blue-100 bg-blue-50 text-blue-700'
+                          : job.reviewState === 'docs'
+                            ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                            : job.reviewState === 'evaluated'
+                              ? 'border-amber-100 bg-amber-50 text-amber-700'
+                              : job.reviewState === 'viewed'
+                                ? 'border-violet-100 bg-violet-50 text-violet-700'
+                                : 'border-slate-200 bg-slate-50 text-slate-600'
+                      }`}>
+                        {reviewStateLabel(job)}
+                      </span>
                       <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600">
                         {rolePriorityLabel(job.rolePriority)}
                       </span>
@@ -785,19 +972,61 @@ export default function JobDiscoveryPage() {
                   </div>
                   <ScoreBadge score={job.score} fitLevel={job.fitLevel} />
                 </div>
-                <div className="flex items-center gap-2 pt-4 border-t border-slate-100">
+                <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-slate-100">
                   {(job.directApplyUrl ?? job.jobUrl) && (
                     <a href={job.directApplyUrl ?? job.jobUrl ?? '#'} target="_blank" rel="noopener noreferrer"
+                      onClick={() => void handleMarkViewed(job, true)}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors">
                       <ExternalLink className="w-3 h-3" /> Apply Link
                     </a>
+                  )}
+                  {!job.applicationId && job.reviewState !== 'viewed' && (
+                    <button
+                      onClick={() => void handleMarkViewed(job)}
+                      disabled={busy || jobActionLoading === `viewed:${job.id}`}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-violet-200 rounded-lg text-violet-700 hover:bg-violet-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {jobActionLoading === `viewed:${job.id}`
+                        ? <><Loader2 className="w-3 h-3 animate-spin" />Saving</>
+                        : <><Eye className="w-3 h-3" />Mark viewed</>}
+                    </button>
+                  )}
+                  {job.applicationId && (
+                    <Link
+                      href={`/applications/${job.applicationId}`}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+                    >
+                      Open
+                    </Link>
+                  )}
+                  {job.applicationId && job.reviewState !== 'applied' && (
+                    <button
+                      onClick={() => void handleGenerateDocsForJob(job)}
+                      disabled={busy || jobActionLoading === `docs:${job.id}`}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {jobActionLoading === `docs:${job.id}`
+                        ? <><Loader2 className="w-3 h-3 animate-spin" />Generating</>
+                        : <><Sparkles className="w-3 h-3" />{job.hasResume || job.hasCoverLetter ? 'Regenerate docs' : 'Generate docs'}</>}
+                    </button>
+                  )}
+                  {job.applicationId && job.reviewState !== 'applied' && (
+                    <button
+                      onClick={() => void handleMarkApplied(job)}
+                      disabled={busy || jobActionLoading === `applied:${job.id}`}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {jobActionLoading === `applied:${job.id}`
+                        ? <><Loader2 className="w-3 h-3 animate-spin" />Saving</>
+                        : <><CheckCircle2 className="w-3 h-3" />Mark applied</>}
+                    </button>
                   )}
                   <button
                     onClick={() => void handleEvaluateScanned(job)}
                     disabled={!job.jobUrl || busy}
                     className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-slate-900 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium ml-auto"
                   >
-                    <Sparkles className="w-3 h-3" /> Evaluate
+                    <Sparkles className="w-3 h-3" /> {job.applicationId ? 'Re-evaluate' : 'Evaluate'}
                   </button>
                 </div>
               </div>

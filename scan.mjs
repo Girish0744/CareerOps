@@ -126,13 +126,31 @@ function resolveProvider(entry, providers, { skipIds = [] } = {}) {
 
 // ── Title filter ────────────────────────────────────────────────────
 
-function buildTitleFilter(titleFilter) {
+export function buildTitleFilter(titleFilter, scanConfig = {}) {
+  const discoveryMode = scanConfig?.discoveryMode || 'targeted';
   const positive = (titleFilter?.positive || []).map(k => k.toLowerCase());
-  const negative = (titleFilter?.negative || []).map(k => k.toLowerCase());
+  const negative = (
+    discoveryMode === 'resume_broad'
+      ? (titleFilter?.hard_negative || [])
+      : (titleFilter?.negative || [])
+  ).map(k => k.toLowerCase());
+  const broadTechnologyRole = (lower) => {
+    const techAnalyst = /\b(?:system|systems|architecture|technical|technology|it|application|software|web|data|business|process|operations|quality|qa|support|solution|solutions)[\w\s/.-]{0,50}analyst\b/.test(lower)
+      || /\banalyst[\w\s/.-]{0,50}(?:system|systems|architecture|technical|technology|it|application|software|web|data|business|process|operations|quality|qa|support|solution|solutions)\b/.test(lower);
+    const techSupport = /\b(?:it|technical|application|desktop|service desk|help desk|systems?)[\w\s/.-]{0,50}(?:support|technician|specialist|associate)\b/.test(lower)
+      || /\b(?:support|technician|specialist|associate)[\w\s/.-]{0,50}(?:it|technical|application|desktop|service desk|help desk|systems?)\b/.test(lower);
+    const softwareFamily = /\b(?:developer|engineer|programmer|web|frontend|front end|backend|back end|full stack|full-stack|application developer|software)\b/.test(lower);
+    const dataFamily = /\b(?:data|analytics?|business intelligence|bi|reporting|sql|power bi)[\w\s/.-]{0,50}(?:analyst|developer|specialist|associate)\b/.test(lower);
+    const qaFamily = /\b(?:qa|quality assurance|test|tester|testing)[\w\s/.-]{0,50}(?:analyst|engineer|developer|specialist|associate)\b/.test(lower);
+    return techAnalyst || techSupport || softwareFamily || dataFamily || qaFamily;
+  };
 
   return (title) => {
     const lower = title.toLowerCase();
-    const hasPositive = positive.length === 0 || positive.some(k => lower.includes(k));
+    const hasPositive = discoveryMode === 'resume_broad'
+      || positive.length === 0
+      || positive.some(k => lower.includes(k))
+      || broadTechnologyRole(lower);
     const hasNegative = negative.some(k => lower.includes(k));
     return hasPositive && !hasNegative;
   };
@@ -428,7 +446,7 @@ async function main() {
   const config = parseYaml(readFileSync(PORTALS_PATH, 'utf-8'));
   const companies = config.tracked_companies || [];
   const freshnessWindowHours = Number(config.scan?.freshnessWindowHours ?? DEFAULT_FRESHNESS_WINDOW_HOURS);
-  const titleFilter = buildTitleFilter(config.title_filter);
+  const titleFilter = buildTitleFilter(config.title_filter, config.scan);
   const locationFilter = buildLocationFilter(config.location_filter);
 
   // 3. Resolve a provider for each enabled company

@@ -9,7 +9,7 @@ import type { ApplicationDetail } from '@/lib/filesystem';
 import {
   ArrowLeft, ExternalLink, FileText, Mail, Briefcase,
   ChevronDown, Loader2, MapPin, Link2, BookOpen, Sparkles, Download, Code2, Eye,
-  UserSearch, Send, Copy, AlertTriangle, CheckCircle2, Upload,
+  UserSearch, Send, Copy, AlertTriangle, CheckCircle2, Upload, CalendarClock,
 } from 'lucide-react';
 
 type Tab = 'resume' | 'cover-letter' | 'job-description' | 'interview' | 'outreach' | 'apply' | 'notes';
@@ -136,6 +136,18 @@ function markdownToHtml(markdown: string) {
   return html.join('\n');
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-CA', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 function DocumentPreview({ content }: { content: string }) {
   return (
     <article
@@ -169,6 +181,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const [applyDocsLoading, setApplyDocsLoading] = useState(false);
   const [applyAutomationLoading, setApplyAutomationLoading] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [jobDescriptionLoading, setJobDescriptionLoading] = useState(false);
+  const [jobDescriptionError, setJobDescriptionError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -200,7 +214,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: newStatus }),
     });
-    setApp(prev => prev ? { ...prev, status: newStatus } : prev);
+    await refreshApplication();
     setStatusChanging(false);
   }
 
@@ -249,6 +263,24 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     setContactPublicNotes('');
     setContactLoading(false);
     setActiveTab('outreach');
+  }
+
+  async function refreshJobDescriptionSnapshot() {
+    if (!app) return;
+    setJobDescriptionLoading(true);
+    setJobDescriptionError(null);
+    try {
+      const res = await fetch(`/api/applications/${id}/job-description`, { method: 'POST' });
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Job description refresh failed.');
+      await refreshApplication();
+      setActiveTab('job-description');
+      setSourceMode(false);
+    } catch (err) {
+      setJobDescriptionError(err instanceof Error ? err.message : 'Job description refresh failed.');
+    } finally {
+      setJobDescriptionLoading(false);
+    }
   }
 
   async function refreshApplication() {
@@ -362,6 +394,13 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     { key: 'apply',           label: 'Apply',           icon: <Send className="w-3.5 h-3.5" />,       available: true },
     { key: 'notes',           label: 'Notes',           icon: <FileText className="w-3.5 h-3.5" />,  available: !!app.notesMd },
   ];
+
+  const timelineItems = [
+    app.evaluatedAt ? { label: 'Evaluated', value: app.evaluatedAt } : null,
+    app.resumeGeneratedAt ? { label: 'Resume generated', value: app.resumeGeneratedAt } : null,
+    app.coverLetterGeneratedAt ? { label: 'Cover letter generated', value: app.coverLetterGeneratedAt } : null,
+    app.appliedAt ? { label: 'Applied', value: app.appliedAt } : null,
+  ].filter(Boolean) as Array<{ label: string; value: string }>;
 
   const activeContent = () => {
     switch (activeTab) {
@@ -676,6 +715,17 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           </div>
         </div>
 
+        {timelineItems.length > 0 && (
+          <div className="mt-5 pt-5 border-t border-slate-100 flex flex-wrap gap-2">
+            {timelineItems.map(item => (
+              <span key={item.label} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
+                <CalendarClock className="w-3.5 h-3.5 text-slate-400" />
+                {item.label}: {formatDateTime(item.value)}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Actions row: PDF downloads + Interview Guide */}
         <div className="mt-5 pt-5 border-t border-slate-100 flex flex-wrap items-center gap-3">
           {/* PDF downloads — only shown when PDFs exist */}
@@ -701,6 +751,18 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           {/* Divider if both download buttons and interview button shown */}
           {(app.resumePath || app.coverLetterPath) && (
             <div className="w-px h-6 bg-slate-200 hidden sm:block" />
+          )}
+
+          {app.jobUrl && (
+            <button
+              onClick={() => void refreshJobDescriptionSnapshot()}
+              disabled={jobDescriptionLoading}
+              className="inline-flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+            >
+              {jobDescriptionLoading
+                ? <><Loader2 className="w-4 h-4 animate-spin" />Fetching JD...</>
+                : <><Briefcase className="w-4 h-4" />Fetch Full Job Description</>}
+            </button>
           )}
 
           <button
@@ -790,6 +852,11 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             {contactError}
           </div>
         )}
+        {jobDescriptionError && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {jobDescriptionError}
+          </div>
+        )}
       </div>
 
       {/* Main layout: doc viewer + chat */}
@@ -814,7 +881,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
               </button>
             ))}
             </div>
-            {(activeTab === 'resume' || activeTab === 'cover-letter' || activeTab === 'interview') && activeContent() && (
+            {(activeTab === 'resume' || activeTab === 'cover-letter' || activeTab === 'job-description' || activeTab === 'interview') && activeContent() && (
               <button
                 onClick={() => setSourceMode(v => !v)}
                 className="mb-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"

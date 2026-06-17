@@ -13,7 +13,7 @@ export const maxDuration = 180;
 
 const execFileAsync = promisify(execFile);
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-const ROOT = path.resolve(process.cwd(), '..');
+const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
 const SCAN_JSON_MARKER = '__CAREER_OPS_SCAN_JSON__';
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -33,6 +33,7 @@ interface ScanOffer {
   url: string;
   company: string;
   location?: string | null;
+  description?: string | null;
   source?: string | null;
   sourceType?: string | null;
   sourceName?: string | null;
@@ -66,7 +67,7 @@ interface QuickScore {
 }
 
 function readRoot(rel: string): string {
-  const p = path.join(ROOT, rel);
+  const p = path.join(/*turbopackIgnore: true*/ ROOT, rel);
   return fs.existsSync(p) ? fs.readFileSync(p, 'utf-8') : '';
 }
 
@@ -109,14 +110,18 @@ function classifyRolePriority(title: string, location?: string | null): RolePrio
   if (/\b(intern|internship|co-?op|co op)\b/.test(text)) return 'intern_coop';
   if (/\b(new grad|new graduate|graduate program|university graduate|early career|campus)\b/.test(text)) return 'full_time_new_grad';
   if (/\b(entry level|entry-level|junior|jr\.)\b/.test(text)) return 'full_time_entry';
-  if (/\b(software developer|software engineer|software development engineer|full[ -]?stack|frontend|front end|backend|back end|application developer|web developer|java developer|python developer|\.net developer|ai application|applied ai)\b/.test(text)) return 'full_time_general';
+  if (/\b(software developer|software engineer|software development engineer|full[ -]?stack|frontend|front end|backend|back end|application developer|web developer|java developer|python developer|\.net developer|ai application|applied ai|machine learning|data analyst|business analyst|systems analyst|system analyst|it analyst|qa analyst|quality assurance|software tester|test analyst|it help desk|help desk|it technician|technical support|support analyst|application support)\b/.test(text)
+    || /\b(?:system|systems|architecture|technical|technology|it|application|software|web|data|business|process|operations|quality|qa|support|solution|solutions)[\w\s/.-]{0,50}analyst\b/.test(text)
+    || /\banalyst[\w\s/.-]{0,50}(?:system|systems|architecture|technical|technology|it|application|software|web|data|business|process|operations|quality|qa|support|solution|solutions)\b/.test(text)
+    || /\b(?:it|technical|application|desktop|service desk|help desk|systems?)[\w\s/.-]{0,50}(?:support|technician|specialist|associate)\b/.test(text)
+    || /\b(?:support|technician|specialist|associate)[\w\s/.-]{0,50}(?:it|technical|application|desktop|service desk|help desk|systems?)\b/.test(text)) return 'full_time_general';
   return 'skip';
 }
 
 function employmentTypeForRole(rolePriority: RolePriority): string {
   if (rolePriority === 'intern_coop') return 'intern/co-op';
   if (rolePriority === 'stretch') return 'stretch full-time';
-  if (rolePriority === 'skip') return 'non-target';
+  if (rolePriority === 'skip') return 'needs review';
   return 'full-time';
 }
 
@@ -153,9 +158,6 @@ function applyQuickCaps(offer: ScanOffer, score: number): number {
   if (rolePriority === 'intern_coop') {
     capped = Math.min(capped, 79);
   }
-  if (rolePriority === 'skip') {
-    capped = Math.min(capped, 49);
-  }
   if (/\b(us only|united states only|remote us|remote u\.s\.)\b/.test(location)) {
     capped = Math.min(capped, 49);
   }
@@ -190,6 +192,23 @@ function localQuickScore(offer: ScanOffer): QuickScore {
     ['c#', 6],
     ['java', 5],
     ['python', 5],
+    ['data analyst', 10],
+    ['business analyst', 8],
+    ['systems analyst', 8],
+    ['system analyst', 8],
+    ['architecture analyst', 8],
+    ['technical analyst', 8],
+    ['application analyst', 8],
+    ['qa analyst', 8],
+    ['quality assurance', 8],
+    ['software tester', 8],
+    ['test analyst', 8],
+    ['help desk', 6],
+    ['it technician', 6],
+    ['technical support', 6],
+    ['support analyst', 6],
+    ['sql', 5],
+    ['power bi', 5],
     ['ai', 8],
     ['machine learning', 8],
     ['new grad', 8],
@@ -225,9 +244,11 @@ function localQuickScore(offer: ScanOffer): QuickScore {
     score += 6;
     matched.push('Full-time software role');
   } else if (rolePriority === 'intern_coop') {
-    gaps.push('Intern/co-op role is visible but lower priority than full-time new-grad roles');
+    matched.push('Intern/co-op opportunity is acceptable for industry entry');
   } else if (rolePriority === 'stretch') {
     gaps.push('Stretch/senior role is deprioritized for current new-grad search');
+  } else if (rolePriority === 'skip') {
+    gaps.push('Title is unclassified from metadata; run full evaluation if the work looks relevant');
   }
 
   score = applyQuickCaps(offer, score);
@@ -263,6 +284,7 @@ async function quickScoreOffers(offers: ScanOffer[]): Promise<Array<QuickScore &
     company: offer.company,
     jobTitle: offer.title,
     location: offer.location ?? null,
+    archivedDescription: offer.description ?? null,
     source: offer.source ?? null,
     sourceType: offer.sourceType ?? null,
     postedAt: offer.postedAt ?? null,
@@ -278,8 +300,9 @@ id, score, fitLevel, recommendation, summary, matched, gaps.
 
 Scoring guidance:
 - 85+ Strong Apply, 70-84 Apply, 50-69 Maybe, <50 Skip.
-- Prefer Canada/Ontario/Remote Canada and full-time new-grad or entry-level software/full-stack/AI application roles.
-- Intern/co-op roles can remain visible, but rank them below comparable full-time new-grad/entry-level roles.
+- This is candidate-first discovery. Do not require exact target-title matches. Score by whether the posting's actual work maps to Girish's resume evidence across software, web, data/analytics, QA/testing, systems, technical support, edtech, AI/ML, automation, databases, cloud, or user-facing technical operations.
+- Prefer Canada/Ontario/Remote Canada and early-career roles, but let adjacent role titles remain visible with honest Maybe/Skip scores.
+- Intern/co-op roles are acceptable and should remain visible when they match the resume.
 - Recent postings should be attractive, but never override poor fit or seniority mismatch.
 - Cap senior/staff/principal/architect/lead/manager titles below 65.
 - Be conservative when metadata is thin.
@@ -417,6 +440,7 @@ export async function POST() {
         company: offer.company,
         jobTitle: offer.title,
         location: offer.location ?? null,
+        description: offer.description ?? null,
         jobUrl: offer.url,
         directApplyUrl: offer.directApplyUrl ?? offer.url,
         score: quick.score,

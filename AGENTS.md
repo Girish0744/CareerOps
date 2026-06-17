@@ -397,6 +397,12 @@ Folder names: lowercase, hyphens only. Example: `d2l-software-developer-2026-05-
   "status": "Cover Letter Generated",
   "createdAt": "2026-05-28",
   "updatedAt": "2026-05-28",
+  "evaluatedAt": "2026-05-28T14:12:00.000Z",
+  "resumeGeneratedAt": "2026-05-28T14:20:00.000Z",
+  "coverLetterGeneratedAt": "2026-05-28T14:20:00.000Z",
+  "lastDocumentGeneratedAt": "2026-05-28T14:20:00.000Z",
+  "appliedAt": null,
+  "lastActivityAt": "2026-05-28T14:20:00.000Z",
   "resumePath": "applications/d2l-software-developer-2026-05-28/resume.pdf",
   "coverLetterPath": "applications/d2l-software-developer-2026-05-28/cover-letter.pdf",
   "interviewPrepPath": null,
@@ -439,6 +445,7 @@ Frontend workflow statuses are authoritative for this personalized fork. Legacy 
 | 18B | Rich scan metadata — posted/first-seen/last-seen/source/direct-apply metadata plus filters and quality lanes | ✅ First batch |
 | 21 | Compliant outreach assistant — public-source/user-provided contact leads + LinkedIn/email drafts in Application Detail | ✅ First batch |
 | 22 | Recent-first discovery — Eluta Canada search adapter, 24h freshness mode, role-priority ranking, and manual job-alert/URL import without scraping LinkedIn/Indeed/Glassdoor | ✅ First batch |
+| 23 | Review-state tracking — scan cards track New, Viewed, Evaluated, Docs Ready, Applied, and Archived states; Applications sort by latest activity timestamps | ✅ Complete |
 | 17A | Human-reviewed Apply foundation — Apply tab, apply-session answers, profile truth table, upload paths, and final-submit guard | ✅ First batch |
 | 17B | Visible ATS apply filling — Playwright opens a visible browser, resolves posting-page Apply links, fills high-confidence fields/uploads, and stops before final Submit/Apply | ✅ First batch |
 | 17B.2 | Reliable apply-fill hardening — source-balanced scan ranking, multi-hop Apply resolver, natural field matching, checkbox/radio safety, and current-application upload guard | ✅ Complete |
@@ -480,12 +487,13 @@ Phase 13 is implemented. `portals.yml` exists with Canada/Ontario-focused provid
 1. User clicks Refresh in Job Discovery → `POST /api/scan/run`
 2. API runs `node scan.mjs --dry-run --json` so scanner discovery is machine-readable without mutating `pipeline.md`
 3. New job metadata is quick-scored in one Gemini call through the configurable evaluate model; if AI scoring fails, local fallback scoring keeps the queue usable
-4. Results merge into `data/scored-queue.json`, sorted by freshness bucket, `rolePriority`, source quality, score, exact recency, and company name. This keeps fresh Eluta findings useful without letting one source overwhelm ATS/direct-employer cards. Cards store `postedAt`, `postedAgeHours`, `freshnessBucket`, `firstSeenAt`, `lastSeenAt`, `directApplyUrl`, `sourceType`, `sourceName`, `rolePriority`, `employmentType`, and `recencyConfidence`
+4. Results merge into `data/scored-queue.json`, sorted by freshness bucket, `rolePriority`, source quality, score, exact recency, and company name. This keeps fresh Eluta findings useful without letting one source overwhelm ATS/direct-employer cards. Cards store `postedAt`, `postedAgeHours`, `freshnessBucket`, `firstSeenAt`, `lastSeenAt`, `directApplyUrl`, `sourceType`, `sourceName`, `rolePriority`, `employmentType`, `recencyConfidence`, `viewedAt`, `reviewState`, and application sync fields when a matching application exists
 5. Job Discovery shows a source-count summary for Eluta, Greenhouse, Ashby, Lever, manual import, and unknown sources when present
 6. User clicks Evaluate on a card → full `/api/evaluate` fetches the JD and applies the trusted evaluation/guardrails. If the card has a better `directApplyUrl`, the application metadata saves that employer/ATS URL while keeping the source URL in `score.json` for audit
 7. User confirms from the score card → `/api/generate-docs/{id}` creates the tailored resume and cover letter
-8. Job Discovery shows Strong Apply / Apply / Maybe / Skip lanes plus score, company, source, role type, and freshness filters. Default operating mode is last-24-hours first.
+8. Job Discovery shows Strong Apply / Apply / Maybe / Skip lanes plus score, company, source, role type, freshness, and review-state filters. Review states are `new`, `viewed`, `evaluated`, `docs`, `applied`, and `archived`. Opening a posting link or clicking Mark viewed records `viewedAt` without creating an application folder.
 9. User can paste LinkedIn/Indeed/Glassdoor/Eluta/employer URLs or job-alert text into `POST /api/scan/import`. This preserves job-board signals without scraping restricted platforms.
+10. Applications store `evaluatedAt`, `resumeGeneratedAt`, `coverLetterGeneratedAt`, `lastDocumentGeneratedAt`, `appliedAt`, and `lastActivityAt`; the Applications page sorts by latest activity and Application Detail shows the timeline.
 
 ### Outreach Assistant — Exact Behaviour
 
@@ -529,6 +537,7 @@ frontend/                        Next.js app — run with: cd frontend && npm ru
   app/api/scan/                  GET — reads data/scored-queue.json
   app/api/scan/run/              POST — runs scan.mjs + bulk quick-scores with scan metadata
   app/api/scan/import/           POST — imports pasted job-board URLs or job-alert text without scraping restricted platforms
+  app/api/scan/viewed/           POST — marks a scan card viewed without creating an application
   app/api/applications/[id]/contacts/ GET/POST — compliant contact leads + outreach drafts
   app/api/applications/[id]/apply/ GET/POST — human-reviewed apply-session fields + answers
   app/api/applications/[id]/apply/automate/ POST — visible Playwright assisted fill, stops before submit

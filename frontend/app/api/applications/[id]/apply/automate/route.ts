@@ -10,14 +10,14 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-const ROOT = path.resolve(process.cwd(), '..');
+const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
 
 function applySessionPath(applicationFolder: string) {
-  return path.join(ROOT, applicationFolder, 'apply-session.json');
+  return path.join(/*turbopackIgnore: true*/ ROOT, applicationFolder, 'apply-session.json');
 }
 
 function readRoot(rel: string): string {
-  const p = path.join(ROOT, rel);
+  const p = path.join(/*turbopackIgnore: true*/ ROOT, rel);
   return fs.existsSync(p) ? fs.readFileSync(p, 'utf-8') : '';
 }
 

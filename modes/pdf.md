@@ -117,12 +117,12 @@ Use `templates/cv-template.html`. Replace every `{{...}}` placeholder:
 ```html
 <table class="skills-table">
   <tr>
-    <td class="skill-cat">Programming Languages:</td>
-    <td>Python, JavaScript, TypeScript, C#, Java, HTML, CSS</td>
+    <td class="skill-cat">Languages:</td>
+    <td>Python, JavaScript, TypeScript, C, C++, C#, SQL, HTML, CSS</td>
   </tr>
   <tr>
-    <td class="skill-cat">Frameworks &amp; Technologies:</td>
-    <td>React.js, Node.js, Next.js, Flask, Bootstrap</td>
+    <td class="skill-cat">Frameworks and Libraries:</td>
+    <td>React, Next.js, FastAPI, Flask, Node.js, Streamlit, REST APIs, WebSocket</td>
   </tr>
 </table>
 ```
@@ -135,7 +135,8 @@ Use `templates/cv-template.html`. Replace every `{{...}}` placeholder:
     <div class="entry-right">September 2022 – August 2026</div>
   </div>
   <ul>
-    <li>Available for full-time roles starting August 2026</li>
+    <li>GPA: 3.74/4.00; expected graduation August 2026</li>
+    <li>Relevant coursework: Software Engineering, Database Systems, Cloud Computing, Big Data, AI and Machine Learning</li>
   </ul>
 </div>
 ```
@@ -144,12 +145,12 @@ Use `templates/cv-template.html`. Replace every `{{...}}` placeholder:
 ```html
 <div class="entry">
   <div class="entry-header">
-    <div class="entry-left"><span class="entry-title">Web and Tech Integration Intern (Volunteer)</span>, Olive Branch Mentorship Inc., Cambridge, ON</div>
-    <div class="entry-right">May 2025 – Present</div>
+    <div class="entry-left"><span class="entry-title">Open Education Technology Project Assistant</span>, Conestoga College, Waterloo, ON</div>
+    <div class="entry-right">January 2025 – Present</div>
   </div>
   <ul>
-    <li>Tailored bullet 1 with JD-relevant keyword injected.</li>
-    <li>Tailored bullet 2 with metric preserved.</li>
+    <li>Developed accessible HTML/CSS templates for Pressbooks, H5P Studio, and WordPress-based courses supporting 1,000+ students.</li>
+    <li>Automated repetitive workflows using Power Automate and maintained GitHub repositories for open education projects.</li>
   </ul>
 </div>
 ```
@@ -158,13 +159,13 @@ Use `templates/cv-template.html`. Replace every `{{...}}` placeholder:
 ```html
 <div class="project">
   <div class="project-header">
-    <div class="project-name">MediTwin, <a href="https://github.com/Girish0744">GitHub</a></div>
-    <div class="project-year">2025</div>
+    <div class="project-name">ETHOS, <a href="https://eth0s.online">Live Site</a></div>
+    <div class="project-year">2026</div>
   </div>
   <ul>
-    <li><strong>Overview:</strong> Designed an AI-driven health companion app delivering personalized medication insights.</li>
-    <li><strong>Technology Stack:</strong> Next.js, React, Flask, Google Gemini API, OpenFDA API.</li>
-    <li><strong>Outcome:</strong> Reduced manual drug research time by 40% through automated interaction checks.</li>
+    <li><strong>Overview:</strong> Built an ML pipeline to classify 9,500+ Kepler candidates as confirmed exoplanets or false positives.</li>
+    <li><strong>Technology Stack:</strong> Python, Random Forest, MLP, GridSearchCV, MLflow, Streamlit, Flask, AWS EC2.</li>
+    <li><strong>Outcome:</strong> Achieved 94.91% accuracy, 95% precision, and 94% recall with the champion Random Forest model.</li>
   </ul>
 </div>
 ```
@@ -173,11 +174,11 @@ Use `templates/cv-template.html`. Replace every `{{...}}` placeholder:
 ```html
 <div class="entry">
   <div class="entry-header">
-    <div class="entry-left"><span class="entry-title">President – IT Club</span>, Conestoga College</div>
-    <div class="entry-right">March 2025 – Present</div>
+    <div class="entry-left"><span class="entry-title">President - IT Club</span>, Conestoga College</div>
+    <div class="entry-right">April 2025 – Present</div>
   </div>
   <ul>
-    <li>Led 10+ technical workshops, hackathons, and networking events empowering 100+ students with in-demand tech skills.</li>
+    <li>Built the club roadmap across workshops, Build Nights, hackathons, and mentorship programs for 100+ students.</li>
   </ul>
 </div>
 ```

@@ -3,7 +3,7 @@ import { getApplication } from '@/lib/filesystem';
 import fs from 'fs';
 import path from 'path';
 
-const ROOT = path.resolve(process.cwd(), '..');
+const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
 
 export async function GET(
   req: Request,
@@ -21,7 +21,7 @@ export async function GET(
   if (!app) return NextResponse.json({ error: 'Application not found' }, { status: 404 });
 
   const filename = type === 'resume' ? 'resume.pdf' : 'cover-letter.pdf';
-  const pdfPath = path.join(ROOT, app.applicationFolder, filename);
+  const pdfPath = path.join(/*turbopackIgnore: true*/ ROOT, app.applicationFolder, filename);
 
   if (!fs.existsSync(pdfPath)) {
     return NextResponse.json({ error: 'PDF not found — generate documents first' }, { status: 404 });

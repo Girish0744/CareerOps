@@ -7,7 +7,7 @@ import { apiErrorMessage } from '@/lib/errors';
 import { generateGeminiContent } from '@/lib/ai-config';
 import { extractPublicContactLeads, fallbackOutreachDrafts } from '@/lib/contact-intel';
 
-const ROOT = path.resolve(process.cwd(), '..');
+const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
 interface ContactsRequest {
@@ -16,7 +16,7 @@ interface ContactsRequest {
 }
 
 function contactsPath(applicationFolder: string) {
-  return path.join(ROOT, applicationFolder, 'contacts.json');
+  return path.join(/*turbopackIgnore: true*/ ROOT, applicationFolder, 'contacts.json');
 }
 
 function readContacts(applicationFolder: string) {

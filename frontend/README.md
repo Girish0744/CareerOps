@@ -72,6 +72,7 @@ npx playwright install chromium
 | `/api/scan` | GET | Read `data/scored-queue.json` — returns ranked scan cards. |
 | `/api/scan/run` | POST | Runs `scan.mjs --dry-run --json`, quick-scores discovered jobs, merges them into `data/scored-queue.json`, and returns the queue. |
 | `/api/scan/import` | POST | Imports pasted job-board URLs or job-alert text into `data/scored-queue.json` without scraping restricted platforms. |
+| `/api/scan/viewed` | POST | Marks a scan card as viewed without creating an application folder. Body: `{ "id": "scan-card-id" }`. |
 | `/api/applications/[id]/contacts` | GET/POST | Reads or generates compliant contact leads and outreach drafts from public job context plus user-provided URLs. |
 | `/api/applications/[id]/apply` | GET/POST | Reads or generates `apply-session.json` with known fields, reviewable answers, upload paths, and final-submit guard. |
 | `/api/applications/[id]/apply/automate` | POST | Starts a visible Playwright apply-fill session for the saved employer/ATS URL and updates `apply-session.json` with automation status. |
@@ -83,8 +84,10 @@ npx playwright install chromium
 - Legacy statuses are still accepted where scripts/dashboard need compatibility: `Responded`, `Discarded`, `SKIP`.
 - Root `portals.yml` is initialized for Girish's Canada/Ontario software, full-stack, and AI application search, with structured Ashby/Greenhouse/Lever boards plus an Eluta Canada IT/software search adapter.
 - Scanner default freshness mode is `scan.freshnessWindowHours: 24`; scan queues rank freshness bucket first, then full-time new-grad/entry-level role priority, source quality, score, exact recency, and company name. This keeps Eluta fresh-discovery results visible without letting one source dominate the default queue.
-- `data/scored-queue.json` stores ranked preliminary scan cards from Job Discovery's Refresh and Import actions, including `postedAt`, `postedAgeHours`, `freshnessBucket`, `firstSeenAt`, `lastSeenAt`, source labels/types, direct apply URLs, `rolePriority`, `employmentType`, and recency confidence.
-- Job Discovery scan cards are grouped into Strong Apply / Apply / Maybe / Skip lanes, show a source-count summary, and can be filtered by score, company, source, role type, and freshness (`24h`, `72h`, `7d`, `all`).
+- `data/scored-queue.json` stores ranked preliminary scan cards from Job Discovery's Refresh and Import actions, including `postedAt`, `postedAgeHours`, `freshnessBucket`, `firstSeenAt`, `lastSeenAt`, source labels/types, direct apply URLs, `rolePriority`, `employmentType`, recency confidence, `viewedAt`, and application sync fields.
+- Job Discovery scan cards are grouped into Strong Apply / Apply / Maybe / Skip lanes, show a source-count summary, and can be filtered by score, company, source, role type, freshness (`24h`, `72h`, `7d`, `all`), and review state (`new`, `viewed`, `evaluated`, `docs`, `applied`, `archived`, `all`).
+- Opening a scan-card Apply Link or clicking **Mark viewed** records `viewedAt` and moves the card out of New without creating an application. Evaluate creates/syncs the application, Generate docs moves it to Docs ready, and Mark applied records manual submission after confirmation.
+- Application entries store activity timestamps (`evaluatedAt`, `resumeGeneratedAt`, `coverLetterGeneratedAt`, `lastDocumentGeneratedAt`, `appliedAt`, `lastActivityAt`). The Applications page sorts by latest activity and Application Detail shows the same timeline.
 - LinkedIn, Indeed, Glassdoor, and job-alert emails are supported as manual/import signals only. The frontend does not scrape those platforms or automate activity on them.
 - `data/pipeline.md` exists with the scanner's expected `Pendientes` and `Procesadas` sections.
 - Job evaluation normalizes both pasted text and fetched URLs through the same cleanup layer, removing ATS/legal boilerplate before scoring.

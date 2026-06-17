@@ -13,7 +13,7 @@ import {
   standardApplyFields,
 } from '@/lib/apply-assistant';
 
-const ROOT = path.resolve(process.cwd(), '..');
+const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
 interface ApplyRequest {
@@ -34,11 +34,11 @@ interface GeneratedAnswer {
 }
 
 function applySessionPath(applicationFolder: string) {
-  return path.join(ROOT, applicationFolder, 'apply-session.json');
+  return path.join(/*turbopackIgnore: true*/ ROOT, applicationFolder, 'apply-session.json');
 }
 
 function readRoot(rel: string): string {
-  const p = path.join(ROOT, rel);
+  const p = path.join(/*turbopackIgnore: true*/ ROOT, rel);
   return fs.existsSync(p) ? fs.readFileSync(p, 'utf-8') : '';
 }
 
@@ -130,7 +130,7 @@ Rules:
 - For yes/no fields, answer only if the profile truth table supports it; otherwise set answer "" and needsReview true.
 - Written answers should sound like Girish: direct, warm, practical, early-career, and confident without overclaiming.
 - Prefer plain first-person language. Avoid generic AI phrases such as "I am passionate about", "I believe I am a perfect fit", "I would be thrilled", "leverage", "dynamic team", or empty company praise.
-- Ground each written answer in the job and 1-2 strongest saved proof points. Choose from MediTwin, OER tools, DineEase, portfolio work, IT Club/community leadership, or the generated resume/cover letter when relevant.
+- Ground each written answer in the job and 1-2 strongest saved proof points. Choose honestly from Zonalyze, ETHOS, AegisGrid, MediTwin, OER tools, MediNet+, TelemetryDownloader, Student Dropout Risk Analysis, IT Club/community leadership, support/trainer experience, or the generated resume/cover letter when relevant.
 - For capability/experience questions, emphasize building and shipping real products alongside the CS degree. Do not list every technology unless the question asks for it.
 - Keep answers professional and copy-paste ready, usually 80-140 words unless the question clearly needs a shorter answer.
 

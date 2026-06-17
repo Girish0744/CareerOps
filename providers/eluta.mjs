@@ -38,6 +38,31 @@ function extractEmployerHost(block) {
   return cache ? decodeHtml(cache[1]) : '';
 }
 
+function extractDirectApplyUrl(block) {
+  const cache = block.match(/cache\?u=\d+:([^'")\s]+)/);
+  if (!cache) return '';
+  const value = decodeHtml(cache[1]);
+  if (/^https?:\/\//i.test(value)) return value;
+  if (/^[\w.-]+\.[a-z]{2,}(?:\/\S*)?$/i.test(value)) return `https://${value}`;
+  return '';
+}
+
+function blockToText(block) {
+  return decodeHtml(block)
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h1|h2|h3|h4|span)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map(line => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .filter(line => !/^save|^apply|^share$/i.test(line))
+    .join('\n')
+    .slice(0, 6000);
+}
+
 function parseElutaJobs(html, sourceUrl, now = new Date()) {
   const jobs = [];
   const blocks = html.match(/<div[^>]+class="[^"]*organic-job[^"]*"[\s\S]*?(?=<div[^>]+class="[^"]*organic-job|\s*<\/div>\s*<\/div>\s*<\/div>|$)/gi) || [];
@@ -58,14 +83,17 @@ function parseElutaJobs(html, sourceUrl, now = new Date()) {
     const relativeTime = decodeHtml(lastSeenMatch?.[1] || '');
     const postedAt = parseRelativeTimestamp(relativeTime, now);
     const employerHost = extractEmployerHost(block);
+    const directApplyUrl = extractDirectApplyUrl(block);
+    const description = blockToText(block);
 
     jobs.push({
       title,
       url,
       company: decodeHtml(employerMatch?.[1] || 'Eluta result'),
       location: decodeHtml(locationMatch?.[1] || 'Canada'),
+      description,
       postedAt,
-      directApplyUrl: url,
+      directApplyUrl: directApplyUrl || url,
       sourceType: 'eluta',
       sourceName: 'Eluta',
       recencyConfidence: postedAt ? 'exact' : 'unknown',

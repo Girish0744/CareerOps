@@ -25,7 +25,9 @@
       "Bash(node -e \"const pkg = require\\('./node_modules/@google/generative-ai/package.json'\\); console.log\\(pkg.version\\)\")",
       "Bash(npm uninstall *)",
       "Bash(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\giris\\\\OneDrive\\\\Desktop\\\\Projects\\\\Job applications automation\\\\career-ops\\\\frontend\\\\app\\\\api\\\\applications\\\\[id]\\\\pdf\")",
-      "Bash(Out-Null)"
+      "Bash(Out-Null)",
+      "PowerShell(cd \"c:\\\\Users\\\\giris\\\\OneDrive\\\\Desktop\\\\Projects\\\\Job applications automation\\\\career-ops\"; Write-Output \"=== Missing PDFs check ===\"; Get-ChildItem applications -Directory | ForEach-Object { $id=$_.Name; $hasResumePdf=Test-Path \"applications/$id/resume.pdf\"; $hasCoverPdf=Test-Path \"applications/$id/cover-letter.pdf\"; $hasResumeMd=Test-Path \"applications/$id/resume.md\"; $hasCoverMd=Test-Path \"applications/$id/cover-letter.md\"; if \\(-not $hasResumePdf -or -not $hasCoverPdf\\) { Write-Output \"MISSING: $id | resume.pdf=$hasResumePdf | cover.pdf=$hasCoverPdf | resume.md=$hasResumeMd | cover.md=$hasCoverMd\" } }; Write-Output \"=== interview-prep dir ===\"; Test-Path interview-prep; Write-Output \"=== private-docs ===\"; Test-Path private-docs; Write-Output \"=== browser-extension ===\"; Get-ChildItem browser-extension -ErrorAction SilentlyContinue | Select-Object Name)",
+      "PowerShell(cd \"c:\\\\Users\\\\giris\\\\OneDrive\\\\Desktop\\\\Projects\\\\Job applications automation\\\\career-ops\"; Write-Output \"=== All application folders ===\"; Get-ChildItem applications -Directory | Select-Object Name | Sort-Object Name; Write-Output \"\"; Write-Output \"=== Any blackberry or ATS duplicates? ===\"; Get-ChildItem applications -Directory | Where-Object { $_.Name -match \"blackberry|ats-auto\" } | Select-Object Name)"
     ],
     "additionalDirectories": [
       "c:\\Users\\giris\\OneDrive\\Desktop\\Projects\\Job applications automation\\career-ops\\frontend\\app\\api\\generate-docs",

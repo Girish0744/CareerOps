@@ -9,6 +9,32 @@ import DocIndicators from '@/components/DocIndicators';
 import type { ApplicationEntry } from '@/lib/filesystem';
 import { MapPin, Calendar, ExternalLink, Search, Briefcase, TrendingUp } from 'lucide-react';
 
+function timeValue(value?: string | null) {
+  if (!value) return 0;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return 'Not recorded';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-CA', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function activityLines(app: ApplicationEntry) {
+  const lines: string[] = [];
+  if (app.evaluatedAt) lines.push(`Evaluated ${formatDateTime(app.evaluatedAt)}`);
+  if (app.lastDocumentGeneratedAt) lines.push(`Docs ${formatDateTime(app.lastDocumentGeneratedAt)}`);
+  if (app.appliedAt) lines.push(`Applied ${formatDateTime(app.appliedAt)}`);
+  return lines;
+}
+
 export default function ApplicationsPage() {
   const router = useRouter();
   const [apps, setApps] = useState<ApplicationEntry[]>([]);
@@ -30,7 +56,7 @@ export default function ApplicationsPage() {
       a.company.toLowerCase().includes(search.toLowerCase()) ||
       a.jobTitle.toLowerCase().includes(search.toLowerCase())
     )
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    .sort((a, b) => timeValue(b.lastActivityAt ?? b.updatedAt ?? b.createdAt) - timeValue(a.lastActivityAt ?? a.updatedAt ?? a.createdAt));
 
   const stats = {
     total: apps.length,
@@ -128,7 +154,7 @@ export default function ApplicationsPage() {
                 <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Score</th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Docs</th>
-                <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Date</th>
+                <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wide">Latest Activity</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -170,10 +196,15 @@ export default function ApplicationsPage() {
                       report={!!app.reportPath}
                     />
                   </td>
-                  <td className="px-5 py-4 text-slate-400 text-xs">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />{app.createdAt}
+                  <td className="px-5 py-4 text-slate-400 text-xs min-w-44">
+                    <span className="flex items-center gap-1 text-slate-500 font-medium">
+                      <Calendar className="w-3 h-3" />{formatDateTime(app.lastActivityAt ?? app.updatedAt ?? app.createdAt)}
                     </span>
+                    {activityLines(app).length > 0 && (
+                      <div className="mt-1 space-y-0.5 text-[11px] text-slate-400">
+                        {activityLines(app).map(line => <div key={line}>{line}</div>)}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

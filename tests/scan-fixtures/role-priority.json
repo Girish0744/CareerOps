@@ -20,6 +20,41 @@
     "expected": "full_time_general"
   },
   {
+    "title": "Entry Level Data Analyst",
+    "location": "Toronto, ON",
+    "expected": "full_time_entry"
+  },
+  {
+    "title": "Business Analyst",
+    "location": "Waterloo, ON",
+    "expected": "full_time_general"
+  },
+  {
+    "title": "System Architecture Analyst",
+    "location": "Toronto, ON",
+    "expected": "full_time_general"
+  },
+  {
+    "title": "Technical Business Process Analyst",
+    "location": "Mississauga, ON",
+    "expected": "full_time_general"
+  },
+  {
+    "title": "Application Support Specialist",
+    "location": "Waterloo, ON",
+    "expected": "full_time_general"
+  },
+  {
+    "title": "QA Analyst",
+    "location": "Kitchener, ON",
+    "expected": "full_time_general"
+  },
+  {
+    "title": "IT Help Desk Technician",
+    "location": "Cambridge, ON",
+    "expected": "full_time_general"
+  },
+  {
     "title": "Software Developer Intern",
     "location": "Kitchener, ON",
     "expected": "intern_coop"
