@@ -25,6 +25,7 @@ These files contain your personal data, customizations, and work product. Update
 | `output/*` | Your generated PDFs |
 | `applications/*` | Per-application job descriptions, scores, resumes, cover letters, PDFs, interview prep, and edit history |
 | `jds/*` | Your saved job descriptions |
+| `templates/cv-template.html` | Girish's final approved resume PDF format; locked unless he explicitly requests a layout/design change |
 
 ## System Layer (safe to auto-update)
 
@@ -59,7 +60,7 @@ These files contain system logic, scripts, templates, and instructions that impr
 | `batch/batch-prompt.md` | Batch worker prompt |
 | `batch/batch-runner.sh` | Batch orchestrator |
 | `dashboard/*` | Go TUI dashboard |
-| `templates/*` | Base templates |
+| `templates/*` | Base templates, except `templates/cv-template.html` in Girish's fork |
 | `fonts/*` | Self-hosted fonts |
 | `.claude/skills/*` | Skill definitions |
 | `docs/*` | Documentation |
@@ -72,3 +73,5 @@ These files contain system logic, scripts, templates, and instructions that impr
 **If a file is in the User Layer, no update process may read, modify, or delete it.**
 
 **If a file is in the System Layer, it can be safely replaced with the latest version from the upstream repo.**
+
+**Girish fork exception:** `templates/cv-template.html` is intentionally treated as user-approved presentation state even though templates are normally system-layer. Do not overwrite it during updates or unrelated implementation work.

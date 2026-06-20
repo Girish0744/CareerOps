@@ -257,6 +257,12 @@ export function getApplication(id: string): ApplicationDetail | null {
   if (!entry) return null;
 
   const folderPath = rootPath(entry.applicationFolder);
+  const resumePath = fs.existsSync(path.join(folderPath, 'resume.pdf'))
+    ? `${entry.applicationFolder}/resume.pdf`
+    : entry.resumePath;
+  const coverLetterPath = fs.existsSync(path.join(folderPath, 'cover-letter.pdf'))
+    ? `${entry.applicationFolder}/cover-letter.pdf`
+    : entry.coverLetterPath;
 
   const readFile = (filename: string): string | null => {
     const p = path.join(folderPath, filename);
@@ -271,6 +277,8 @@ export function getApplication(id: string): ApplicationDetail | null {
 
   return {
     ...entry,
+    resumePath,
+    coverLetterPath,
     jobDescription:    readFile('job-description.md'),
     resumeMd:          readFile('resume.md'),
     resumeHtml:        readFile('resume.html'),
@@ -279,8 +287,8 @@ export function getApplication(id: string): ApplicationDetail | null {
     interviewMd:       readFile('interview.md'),
     notesMd:           readFile('notes.md'),
     scoreData:         readJson('score.json') as ScoreData | null,
-    resumePdfPath:     entry.resumePath,
-    coverLetterPdfPath: entry.coverLetterPath,
+    resumePdfPath:     resumePath,
+    coverLetterPdfPath: coverLetterPath,
   };
 }
 

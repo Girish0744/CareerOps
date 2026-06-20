@@ -38,6 +38,7 @@ This fork extends the base career-ops system with a full **web frontend pipeline
 | 17A | Human-reviewed Apply foundation — Apply tab, apply-session answers, profile truth table, upload paths, and final-submit guard | ✅ First batch |
 | 17B | Visible ATS apply filling — Playwright opens a visible browser, resolves posting-page Apply links, fills high-confidence ATS fields, uploads generated documents, and stops before final Submit/Apply | ✅ First batch |
 | 17B.2 | Reliable apply-fill hardening — source-balanced scan ranking, multi-hop Apply resolver, natural field matching, checkbox/radio safety, and current-application upload guard | ✅ Complete |
+| 24 | Resume format lock — `templates/cv-template.html` is the final resume visual format for generated resumes; future work should change content selection/prompting, not this template, unless Girish explicitly asks for a design change | ✅ Complete |
 
 ### Current Baseline Notes
 
@@ -58,6 +59,8 @@ This fork extends the base career-ops system with a full **web frontend pipeline
 - Offline scoring QA exists at `npm run eval:qa`; it runs known JD fixtures against the backend guardrails without spending API quota.
 - Job Discovery lets the user evaluate another job immediately from any score card, including low-score Maybe/Skip results, without refreshing the page.
 - Application Detail now shows live previews for resume, cover letter, and interview prep in the platform, with a Source toggle for raw Markdown.
+- Generated resumes use one final locked format: `templates/cv-template.html`. There is no runtime format picker. `/api/generate-docs/{id}` may tailor content, but the saved resume HTML is canonicalized to this template's CSS/style before `generate-pdf.mjs` renders `resume.pdf`.
+- Do not change `templates/cv-template.html` during content-quality, ATS-keyword, scoring, cover-letter, or frontend work. Treat it as Girish's approved resume format unless he explicitly asks for a resume design/layout change.
 - Application Detail includes a compliant Outreach section. It uses public job/application context and user-provided URLs only; it does not automate LinkedIn scraping, connecting, or messaging. LinkedIn notes should be warm, specific, and low-pressure, never a first-message referral ask.
 - Application Detail includes an Apply tab. It prepares known fields, generated answers, resume/cover-letter upload paths, optional transcript path, and must stop before final Submit/Apply. Written answers should sound like Girish: practical, warm, professional, role-specific, and grounded in saved proof points rather than generic AI phrasing.
 - Application Detail also includes **Start Assisted Fill**. It launches a visible Playwright browser for Greenhouse, Lever, Ashby, and conservative generic employer forms. If the saved URL is a posting page with no form fields, it may follow up to 3 safe Apply hops (`Apply`, `Apply Now`, `Apply for this job`, `Start Application`, `Continue to application`), but it never clicks final submit/login/share/referral controls.
@@ -370,7 +373,7 @@ career-ops/
 │   ├── batch.md                 # Batch processing
 │   └── ...
 ├── templates/
-│   ├── cv-template.html         # ATS-optimized CV template
+│   ├── cv-template.html         # Final locked resume PDF template
 │   ├── portals.example.yml      # Scanner config template
 │   └── states.yml               # Canonical statuses
 ├── batch/

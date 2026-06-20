@@ -96,6 +96,8 @@ Processed TSVs are moved to `batch/tracker-additions/merged/`.
 
 Renders an HTML file to a print-quality, ATS-parseable PDF via headless Chromium. Resolves font paths from `fonts/`, normalizes Unicode for ATS compatibility (em-dashes, smart quotes, zero-width characters), and reports page count and file size.
 
+The renderer honors CSS page sizing and margins from the HTML template (`@page`) using `preferCSSPageSize: true`. In Girish's fork, generated resume PDFs should get their visual format from `templates/cv-template.html`, not from extra margins or layout rules inside `generate-pdf.mjs`.
+
 ```bash
 npm run pdf -- input.html output.pdf
 npm run pdf -- input.html output.pdf --format=letter   # US letter

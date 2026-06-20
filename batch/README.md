@@ -2,6 +2,8 @@
 
 Process multiple job offers in parallel via headless workers. Each worker runs the full evaluation pipeline (A-F report + PDF + tracker line) autonomously. See the **Headless / Batch Mode** table in `AGENTS.md` for the correct command per CLI.
 
+In Girish's fork, resume PDFs must use the locked final format in `templates/cv-template.html`. Batch workers may tailor content for each job, but they should not alter the resume template unless Girish explicitly requests a layout/design change.
+
 ## Quick Start
 
 1. **Add offers** to `batch-input.tsv` (tab-separated: `id`, `url`, `source`, `notes`):

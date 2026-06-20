@@ -1,12 +1,14 @@
 # Templates
 
-System-layer template files used by career-ops scripts and modes. These files are auto-updated when you run `npm run update` -- put user customizations in the user-layer files instead (see DATA_CONTRACT.md).
+System-layer template files used by career-ops scripts and modes.
+
+Important for Girish's fork: `cv-template.html` is the approved final resume format. Do not change it during normal resume-content, ATS, scoring, cover-letter, or frontend work. Only edit `cv-template.html` when Girish explicitly asks for a resume design/layout change. Content tailoring should happen in prompts, source data, and generated application files, not by changing this locked template.
 
 ## Files
 
 | File | Used By | Purpose |
 |------|---------|---------|
-| `cv-template.html` | `generate-pdf.mjs` | HTML/CSS template for ATS-optimized CV PDFs |
+| `cv-template.html` | `generate-pdf.mjs` | Locked final HTML/CSS format for Girish's ATS-optimized resume PDFs |
 | `cv-template.tex` | `generate-latex.mjs` | LaTeX/Overleaf template for ATS-optimized CV PDFs |
 | `portals.example.yml` | Onboarding | Example portal scanner configuration (copy to `portals.yml` to activate) |
 | `states.yml` | `verify-pipeline.mjs`, `normalize-statuses.mjs`, `merge-tracker.mjs` | Canonical application states and their aliases |
@@ -15,9 +17,11 @@ System-layer template files used by career-ops scripts and modes. These files ar
 
 The HTML template rendered by Playwright into PDF. Uses placeholder tokens (`{{NAME}}`, `{{SUMMARY_TEXT}}`, `{{EXPERIENCE}}`, etc.) that the PDF pipeline fills at generation time.
 
-**Design:** Space Grotesk headings + DM Sans body, single-column ATS-safe layout, self-hosted fonts from `fonts/`.
+**Design:** Girish's final approved two-page resume format. Single-column, ATS-safe, selectable text, self-hosted fonts from `fonts/`, fixed section order, and a structural `page-two` wrapper so Projects starts on page 2.
 
-**Customization:** Edit this file to change colors, spacing, or section order. The placeholder tokens are documented in `batch/batch-prompt.md` under "Template placeholders."
+**Format selection:** There is no runtime theme picker. Every generated resume uses this one template. The document-generation route may tailor the content, but it canonicalizes the final resume HTML back to this template's CSS before `generate-pdf.mjs` renders the PDF.
+
+**Customization:** Locked for this fork. If Girish explicitly asks for a layout redesign, edit this file carefully and then regenerate/test at least one application resume PDF. Otherwise leave it unchanged.
 
 ### cv-template.tex
 

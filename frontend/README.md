@@ -62,7 +62,7 @@ npx playwright install chromium
 | Route | Method | What it does |
 |-------|--------|-------------|
 | `/api/evaluate` | POST | Gemini 2.5 Flash: score JD against profile (0–100), extract company/title/location, list matched skills and gaps. Creates `applications/{id}/` folder + `score.json`. |
-| `/api/generate-docs/[id]` | POST | Gemini 2.5 Flash × 2 + Playwright: generate resume markdown → HTML → PDF, then cover letter markdown → HTML → PDF. Saves both to `applications/{id}/`. |
+| `/api/generate-docs/[id]` | POST | Gemini 2.5 Flash × 2 + Playwright: generate resume markdown → HTML → canonicalized final-template resume PDF, then cover letter markdown → HTML → PDF. Saves both to `applications/{id}/`. |
 | `/api/applications` | GET | List all applications from `applications/` folders. |
 | `/api/applications/[id]` | GET | Single application detail (metadata, score, documents). |
 | `/api/applications/[id]` | PUT | Update application status (syncs `metadata.json` + `applications.json`). |
@@ -97,6 +97,8 @@ npx playwright install chromium
 - Offline scoring QA is available with root `npm run eval:qa`; it validates known JD fixtures against the same guardrail core used by the app and does not call Gemini.
 - Job Discovery score cards include an **Evaluate another job** action in every evaluated state, so low-score results do not require a page refresh before pasting the next posting.
 - Application Detail has a live in-app preview for resume, cover letter, and interview prep, plus a Source toggle for raw Markdown.
+- Resume format is fixed. All generated resumes use `../templates/cv-template.html` as the approved final visual format; the frontend does not offer multiple resume themes or choose a format per job.
+- `/api/generate-docs/[id]` can change tailored content, section bullets, project selection, and keywords, but it should not change resume styling. The backend canonicalizes generated resume CSS with `templates/cv-template.html` before PDF rendering.
 - Application Detail has a compliant Outreach tab. It uses public job/application context and manually provided profile URLs only; LinkedIn scraping, auto-connecting, and auto-messaging are intentionally out of scope. Drafts should sound friendly, specific, and low-pressure, not like a referral demand.
 - Application Detail has an Apply tab. It can generate missing resume/cover-letter PDFs, prepare known profile fields, answer pasted form questions, surface missing private fields, and open the apply link. It never clicks final submit.
 - Apply tab has **Start Assisted Fill** for Phase 17B. It opens a visible controlled browser, supports Greenhouse/Lever/Ashby plus conservative generic forms, can follow up to 3 safe posting-page Apply hops when no form fields are visible yet, fills high-confidence fields/uploads only, and stops before final Submit/Apply.
@@ -158,6 +160,7 @@ Score card shown in UI
         ▼ (if "Generate Resume & Cover Letter" clicked)
 POST /api/generate-docs/{id}
   → Call 1: Gemini → tailored resume.md + filled resume HTML
+  → Backend canonicalizes resume styling to templates/cv-template.html
   → Playwright → resume.pdf
   → Call 2: Gemini → cover-letter.md + filled cover letter HTML
   → Playwright → cover-letter.pdf
@@ -177,6 +180,7 @@ Applied → In Progress → Interview → Offer / Rejected / Withdrawn
 ## Key Implementation Notes
 
 - Font paths in generated HTML use `../../fonts/` (relative to `applications/{id}/`) → resolves to `career-ops/fonts/` when Playwright renders via `file://` URL
+- Resume PDFs get their visual format from `templates/cv-template.html`; keep format/layout changes out of document-generation logic unless Girish explicitly requests a template redesign.
 - `export const maxDuration = 120` on generate-docs route overrides Next.js 30s default (PDF gen takes 45–90s)
 - Response parsing uses a 3-fallback chain: custom `===DELIMITERS===` → markdown code blocks → raw `{...}` — handles Gemini's variable output formats
 - All file reads/writes go through `lib/filesystem.ts` — single swap point if migrating to a database

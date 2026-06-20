@@ -78,8 +78,28 @@ article-digest.md        →  Proof points for matching
 config/profile.yml       →  Candidate identity
 portals.yml              →  Scanner configuration
 templates/states.yml     →  Canonical status values
-templates/cv-template.html → PDF generation template
+templates/cv-template.html → Locked final resume format for generated PDFs
 ```
+
+## Personal Frontend Document Flow
+
+Girish's fork adds a browser-first application workflow:
+
+```
+POST /api/evaluate
+  → applications/{id}/job-description.md
+  → applications/{id}/score.json
+  → applications/{id}/metadata.json
+
+POST /api/generate-docs/{id}
+  → Gemini selects/tailors truthful resume content from source files
+  → Backend canonicalizes resume styling to templates/cv-template.html
+  → generate-pdf.mjs renders applications/{id}/resume.pdf
+  → Gemini generates cover-letter.md/html
+  → generate-pdf.mjs renders applications/{id}/cover-letter.pdf
+```
+
+Resume format is not selected dynamically. `templates/cv-template.html` is Girish's approved final resume format and should remain unchanged unless he explicitly asks for a layout/design update. Resume improvement work should usually focus on content selection, section wording, project choice, or prompt guardrails.
 
 ## File Naming Conventions
 

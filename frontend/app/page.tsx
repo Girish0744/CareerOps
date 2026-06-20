@@ -87,7 +87,7 @@ type Stage =
   | { kind: 'evaluating' }
   | { kind: 'evaluated'; result: EvalResult }
   | { kind: 'generating'; result: EvalResult }
-  | { kind: 'done'; result: EvalResult; resumePdf: boolean; coverLetterPdf: boolean }
+  | { kind: 'done'; result: EvalResult; resumePdf: boolean; coverLetterPdf: boolean; warnings?: string[] }
   | { kind: 'error'; message: string };
 
 type ReviewFilter = 'new' | 'viewed' | 'evaluated' | 'docs' | 'applied' | 'archived' | 'all';
@@ -275,17 +275,24 @@ function ScoreCard({
       {/* Action footer */}
       <div className={`px-6 py-4 border-t ${c.border} flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4`}>
         {done ? (
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
-              <CheckCircle2 className="w-4 h-4" />
-              Documents generated
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
+                <CheckCircle2 className="w-4 h-4" />
+                Documents generated
+              </div>
+              <Link
+                href={`/applications/${result.applicationId}`}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 transition-colors shadow-sm"
+              >
+                Open Application <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
-            <Link
-              href={`/applications/${result.applicationId}`}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 transition-colors shadow-sm"
-            >
-              Open Application <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            {stage.kind === 'done' && stage.warnings && stage.warnings.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                {stage.warnings[0]}
+              </div>
+            )}
           </div>
         ) : (
           <>
@@ -517,7 +524,10 @@ export default function JobDiscoveryPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? 'Document generation failed');
       await loadScannedJobs();
-      setScanMessage(`Documents generated for ${job.company} — ${job.jobTitle}.`);
+      const warning = Array.isArray(data.warnings) && data.warnings.length > 0
+        ? ` Warning: ${data.warnings[0]}`
+        : '';
+      setScanMessage(`Documents generated for ${job.company} — ${job.jobTitle}.${warning}`);
     } catch (err) {
       setScanError(err instanceof Error ? err.message : 'Document generation failed');
     } finally {
@@ -634,6 +644,7 @@ export default function JobDiscoveryPage() {
         result,
         resumePdf: data.resumePdfGenerated,
         coverLetterPdf: data.coverLetterPdfGenerated,
+        warnings: Array.isArray(data.warnings) ? data.warnings : [],
       });
       void loadScannedJobs();
     } catch (err) {

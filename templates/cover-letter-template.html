@@ -81,8 +81,10 @@
     text-decoration: underline;
   }
 
-  /* Comma separator (cover letter uses commas, matching the provided PDF) */
-  .csep { margin-right: 1px; }
+  .bsep {
+    margin: 0 5px;
+    color: #000000;
+  }
 
   /* ── HEADER RULE ── */
   .header-rule {
@@ -153,11 +155,10 @@
 <div class="header">
   <div class="header-name">{{NAME}}</div>
   <div class="contact-line">
-    {{LOCATION}},
-    <a href="mailto:{{EMAIL}}">{{EMAIL}}</a>,
-    {{PHONE_SPAN}}<a href="https://{{LINKEDIN_URL}}">{{LINKEDIN_DISPLAY}}</a>,
-    <a href="{{PORTFOLIO_URL}}">{{PORTFOLIO_DISPLAY}}</a>,
-    <a href="https://{{GITHUB_URL}}">{{GITHUB_DISPLAY}}</a>
+    {{LOCATION}}<span class="bsep">●</span><a href="mailto:{{EMAIL}}">{{EMAIL}}</a><span class="bsep">●</span>{{PHONE}}
+  </div>
+  <div class="contact-line">
+    <a href="https://{{LINKEDIN_URL}}">{{LINKEDIN_DISPLAY}}</a><span class="bsep">●</span><a href="{{PORTFOLIO_URL}}">{{PORTFOLIO_DISPLAY}}</a><span class="bsep">●</span><a href="https://{{GITHUB_URL}}">{{GITHUB_DISPLAY}}</a>
   </div>
 </div>
 

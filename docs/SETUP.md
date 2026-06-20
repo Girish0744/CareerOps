@@ -31,6 +31,10 @@ Create `cv.md` in the project root with your full CV in markdown format. This is
 
 (Optional) Create `article-digest.md` with proof points from your portfolio projects/articles.
 
+### Resume format note for Girish's fork
+
+Generated resumes use the final approved format in `templates/cv-template.html`. The document-generation pipeline tailors the content for each job, but the resume visual layout is fixed. Do not edit `templates/cv-template.html` during normal setup or content tuning unless Girish explicitly asks for a resume design/layout change.
+
 ### 4. Configure portals
 
 ```bash

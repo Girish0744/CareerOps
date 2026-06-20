@@ -4,10 +4,14 @@ import fs from 'fs';
 import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { getApplication, updateApplicationFields } from '@/lib/filesystem';
+import { getApplication, saveJobDescriptionSnapshot, updateApplicationFields } from '@/lib/filesystem';
 import { apiErrorMessage } from '@/lib/errors';
 import { generateGeminiContent } from '@/lib/ai-config';
 import { extractApplicantProfile } from '@/lib/apply-assistant';
+import {
+  assertUsableJobDescription,
+  extractJobDescriptionFromUrl,
+} from '@/lib/job-description';
 
 export const maxDuration = 120;
 
@@ -22,10 +26,16 @@ function readRoot(rel: string): string {
 
 async function generatePdf(htmlPath: string, pdfPath: string, format = 'letter') {
   const script = path.join(/*turbopackIgnore: true*/ ROOT, 'generate-pdf.mjs');
-  await execFileAsync(process.execPath, [script, htmlPath, pdfPath, `--format=${format}`], {
+  const { stdout, stderr } = await execFileAsync(process.execPath, [script, htmlPath, pdfPath, `--format=${format}`], {
     cwd: ROOT,
     timeout: 60000,
   });
+  const output = `${stdout}\n${stderr}`;
+  const pageCount = Number(output.match(/Pages:\s*(\d+)/i)?.[1] ?? NaN);
+  return {
+    pageCount: Number.isFinite(pageCount) ? pageCount : null,
+    output,
+  };
 }
 
 function displayFromUrl(value: string, fallback: string): string {
@@ -37,19 +47,246 @@ function displayFromUrl(value: string, fallback: string): string {
 
 function contactPlaceholders(profileYml: string) {
   const profile = extractApplicantProfile(profileYml);
-  const phone = profile.phone ? `${profile.phone},` : '';
   return {
     name: profile.fullName || profile.legalName || 'Candidate',
     location: [profile.city, profile.province].filter(Boolean).join(', ') || profile.country || '',
     email: profile.email || '',
-    phoneSpan: phone,
+    phone: profile.phone || '',
     linkedinUrl: displayFromUrl(profile.linkedin || '', ''),
-    linkedinDisplay: profile.linkedin ? 'LinkedIn' : '',
+    linkedinDisplay: profile.linkedin ? displayFromUrl(profile.linkedin, '') : '',
     portfolioUrl: profile.portfolioUrl || '',
     portfolioDisplay: displayFromUrl(profile.portfolioUrl || '', 'Portfolio'),
     githubUrl: displayFromUrl(profile.github || '', ''),
-    githubDisplay: profile.github ? 'GitHub' : '',
+    githubDisplay: profile.github ? displayFromUrl(profile.github, '') : '',
   };
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stripHtml(value: string): string {
+  return value
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function sanitizeCoverLetterLanguage(value: string): string {
+  return value
+    .replace(/\bI am eager to contribute to\b/gi, 'I can contribute to')
+    .replace(/\bam eager to contribute to\b/gi, 'can contribute to')
+    .replace(/\blook forward to the possibility of contributing to\b/gi, 'can contribute to')
+    .replace(/\bwould love the opportunity to\b/gi, 'can')
+    .replace(/\bleveraging\b/gi, 'using')
+    .replace(/\butilizing\b/gi, 'using')
+    .replace(/\butilize\b/gi, 'use')
+    .replace(/\brobust\b/gi, 'reliable')
+    .replace(/\bcomprehensive\b/gi, 'broad')
+    .replace(/\bextensive experience\b/gi, 'hands-on experience')
+    .replace(/\btechnical rigors\b/gi, 'technical standards');
+}
+
+function countMatches(value: string, pattern: RegExp): number {
+  return [...value.matchAll(pattern)].length;
+}
+
+function uniqueUrls(values: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>();
+  const urls: string[] = [];
+  for (const value of values) {
+    if (!value) continue;
+    const matches = String(value).match(/https?:\/\/[^\s<>)"']+/gi) ?? [];
+    for (const raw of matches) {
+      const url = raw.replace(/[.,;]+$/, '');
+      if (!seen.has(url)) {
+        seen.add(url);
+        urls.push(url);
+      }
+    }
+  }
+  return urls;
+}
+
+function isWeakJobDescription(text: string | null | undefined): boolean {
+  if (!text) return true;
+  const normalized = text.toLowerCase();
+  const hasFallbackMarker = normalized.includes('archived job listing snapshot from scan source')
+    || normalized.includes('preliminary scan score')
+    || normalized.includes('scan summary');
+  const hasRealSections = /\b(responsibilities|requirements|qualifications|what you'?ll do|what you bring|about the role)\b/i.test(text);
+  return hasFallbackMarker || text.trim().length < 1200 || !hasRealSections;
+}
+
+async function bestAvailableJobDescription(
+  id: string,
+  app: NonNullable<ReturnType<typeof getApplication>>,
+  warnings: string[],
+): Promise<string> {
+  const savedJobDescription = app.jobDescription ?? '';
+  if (!isWeakJobDescription(savedJobDescription)) return savedJobDescription;
+
+  const urls = uniqueUrls([
+    app.scoreData?.sourceUrl,
+    app.jobUrl,
+    app.scoreData?.applyUrl,
+    app.jobDescription,
+  ]);
+
+  const failures: string[] = [];
+  for (const url of urls) {
+    try {
+      const extracted = await extractJobDescriptionFromUrl(url);
+      assertUsableJobDescription(extracted.text);
+      if (isWeakJobDescription(extracted.text)) {
+        failures.push(`${url}: extracted text was too thin for confident tailoring`);
+        continue;
+      }
+      saveJobDescriptionSnapshot(id, extracted.text);
+      warnings.push(`Job description refreshed from ${url} before document generation.`);
+      return extracted.text;
+    } catch (err) {
+      failures.push(`${url}: ${apiErrorMessage(err)}`);
+    }
+  }
+
+  warnings.push(
+    `Generated from limited saved job context because the full posting could not be fetched. Tailoring confidence is low.${failures.length ? ` Attempts: ${failures.join(' | ')}` : ''}`,
+  );
+  return savedJobDescription;
+}
+
+function collectResumeQualityWarnings(html: string, markdown: string) {
+  const warnings: string[] = [];
+  const htmlLower = html.toLowerCase();
+  const plainText = stripHtml(`${html}\n${markdown}`);
+
+  if (!html.trimStart().toLowerCase().startsWith('<!doctype html>')) {
+    warnings.push('resume HTML should start with <!DOCTYPE html>');
+  }
+  if (/\{\{[A-Z0-9_]+\}\}/i.test(html) || /\[(?:template filled|insert|placeholder|content here)[^\]]*\]/i.test(html)) {
+    warnings.push('resume HTML contains an unfilled placeholder or bracketed template note');
+  }
+  if (!/class=["'][^"']*\bpage-two\b/i.test(html)) {
+    warnings.push('resume HTML should keep the page-two wrapper so Projects starts on page 2');
+  }
+
+  const requiredSections = [
+    'Profile',
+    'Highlights of Qualifications',
+    'Technical Skills Summary',
+    'Professional Experience',
+    'Projects',
+    'Education',
+    'Extracurricular Activities',
+    'Awards and Recognition',
+  ];
+  let previousIndex = -1;
+  for (const section of requiredSections) {
+    const match = new RegExp(`<div\\s+class=["'][^"']*\\bsection-title\\b[^"']*["'][^>]*>\\s*${escapeRegExp(section)}\\s*<`, 'i').exec(html);
+    if (!match) {
+      warnings.push(`missing required section: ${section}`);
+      continue;
+    }
+    if (match.index < previousIndex) {
+      warnings.push(`section is out of order: ${section}`);
+    }
+    previousIndex = match.index;
+  }
+  if (!/Certifications\s*&amp;\s*Memberships|Certifications\s*&\s*Memberships/i.test(html)) {
+    warnings.push('missing Certifications & Memberships line');
+  }
+
+  const projectsSection = html.match(/<div\s+class=["']page-two["'][^>]*>([\s\S]*?)<\/body>/i)?.[1] ?? html;
+  const projectBlocks = [...projectsSection.matchAll(/<div\s+class=["']project["'][^>]*>([\s\S]*?)(?=<div\s+class=["']project["']|<div\s+class=["'][^"']*\bsection-title\b|<\/div>\s*<\/body>|$)/gi)]
+    .map(match => match[1]);
+  if (projectBlocks.length < 3) {
+    warnings.push('resume should include at least 3 selected projects');
+  }
+  projectBlocks.forEach((block, index) => {
+    const bullets = countMatches(block, /<li\b/gi);
+    if (bullets < 3) {
+      warnings.push(`project ${index + 1} should include at least 3 bullets when using the HTML template`);
+    }
+  });
+
+  const summary = html.match(/<div\s+class=["']summary["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] ?? '';
+  const summaryText = stripHtml(summary);
+  const sentenceCount = summaryText ? countMatches(summaryText, /[.!?](?:\s|$)/g) : 0;
+  const summaryWords = summaryText ? summaryText.split(/\s+/).length : 0;
+  if (!summaryText) {
+    warnings.push('profile summary is missing');
+  }
+  if (sentenceCount > 4 || summaryWords > 95) {
+    warnings.push('profile summary should stay concise: max 4 sentences and roughly 4 resume lines');
+  }
+
+  const firstPerson = plainText.match(/\b(?:I|me|my|mine|we|our|ours|us)\b/);
+  if (firstPerson) {
+    warnings.push(`resume contains first-person wording: "${firstPerson[0]}"`);
+  }
+  const filler = plainText.match(/\b(?:passionate about|excited to|team player|detail-oriented|results-driven|innovative solutions|fast-paced environment|cutting-edge|leveraging|utilized)\b/i);
+  if (filler) {
+    warnings.push(`resume contains AI/generic filler: "${filler[0]}"`);
+  }
+  if (htmlLower.includes('<table') && !/<table\b[^>]*class=["'][^"']*\bskills-table\b/i.test(html)) {
+    warnings.push('tables should only be used for the ATS-friendly skills table');
+  }
+
+  return warnings;
+}
+
+function canonicalizeResumeHtml(html: string, template: string): string {
+  const templateStyle = template.match(/<style>[\s\S]*?<\/style>/i)?.[0];
+  if (!templateStyle) return html;
+  if (/<style>[\s\S]*?<\/style>/i.test(html)) {
+    return html.replace(/<style>[\s\S]*?<\/style>/i, templateStyle);
+  }
+  return html.replace(/<\/head>/i, `${templateStyle}\n</head>`);
+}
+
+function markdownFromResumeHtml(html: string): string {
+  let markdown = html
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<div\s+class=["']header-name["'][^>]*>([\s\S]*?)<\/div>/gi, '\n# $1\n')
+    .replace(/<div\s+class=["']section-title["'][^>]*>([\s\S]*?)<\/div>/gi, '\n## $1\n')
+    .replace(/<div\s+class=["']summary["'][^>]*>([\s\S]*?)<\/div>/gi, '\n$1\n')
+    .replace(/<li\b[^>]*>([\s\S]*?)<\/li>/gi, '\n- $1')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|tr|ul)>/gi, '\n')
+    .replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi, '$1')
+    .replace(/<strong\b[^>]*>([\s\S]*?)<\/strong>/gi, '**$1**')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (!markdown.startsWith('# ')) {
+    markdown = `# Resume\n\n${markdown}`;
+  }
+  return markdown;
+}
+
+function isPlaceholderMarkdown(markdown: string): boolean {
+  const trimmed = markdown.trim();
+  const hasCoreSections = /(?:^|\n)(?:##|\*\*)\s*Profile/i.test(trimmed)
+    && /(?:^|\n)(?:##|\*\*)\s*Professional Experience/i.test(trimmed)
+    && /(?:^|\n)(?:##|\*\*)\s*Projects/i.test(trimmed)
+    && /(?:^|\n)(?:##|\*\*)\s*Education/i.test(trimmed);
+  return trimmed.length < 400
+    || !hasCoreSections
+    || /\[(?:resume|tailored resume|full tailored resume|content)[^\]]*\]/i.test(trimmed);
 }
 
 export async function POST(
@@ -72,49 +309,22 @@ export async function POST(
   const generatedAt = new Date().toISOString();
   const today = generatedAt.split('T')[0];
   const folderPath = path.join(/*turbopackIgnore: true*/ ROOT, app.applicationFolder);
+  const warnings: string[] = [];
+  const jobDescriptionText = await bestAvailableJobDescription(id, app, warnings);
 
   // ── 1. RESUME ──────────────────────────────────────────────────────────────
 
-  const resumeSystem = `You generate ATS-optimized tailored resumes. Given a candidate's CV, profile, and a job description, produce:
-1. A tailored markdown resume (resume.md — the editable source)
-2. The complete filled HTML using the provided template (for PDF generation)
+  const resumeSystem = `You are an expert ATS resume writer. Produce the strongest possible tailored 2-page resume for this candidate. The resume must clear ATS first, then read naturally for HR, and give a technical manager confidence that the evidence is real.
 
-TAILORING RULES:
-- Rewrite the Professional Summary to match JD keywords + candidate narrative bridge
-- Select top 3-4 most relevant projects for this role
-- Reorder experience bullets by JD relevance (most relevant first)
-- NEVER invent metrics or experience — only facts from the CV
-- Inject JD keywords naturally into existing content
-- Keep ALL sections from the template
+Use this workflow in order:
+1. Read the job description carefully.
+2. Extract important keywords, skills, tools, responsibilities, required outcomes, and role-specific language from the job description.
+3. Go back to the master resume facts below and select only the most relevant real content.
+4. Generate a two-page resume with the existing HTML template.
 
-FONT PATHS: The HTML is saved at applications/${id}/resume.html.
-Replace all font src URLs in the template with ../../fonts/{filename} (not ./fonts/).
-Example: src: url('../../fonts/space-grotesk-latin.woff2') format('woff2');
+Every fact comes from the master resume/profile sources below. Never fabricate experience, metrics, tools, titles, dates, education, awards, or certifications.
 
-TEMPLATE (fill every {{PLACEHOLDER}}):
-${cvTemplate}
-
-PLACEHOLDER VALUES from profile:
-- {{LANG}} → en
-- {{PAGE_WIDTH}} → 8.5in
-- {{NAME}} → ${contact.name}
-- {{LOCATION}} → ${contact.location}
-- {{EMAIL}} → ${contact.email}
-- {{PHONE_SPAN}} → ${contact.phoneSpan}
-- {{LINKEDIN_URL}} → ${contact.linkedinUrl}
-- {{LINKEDIN_DISPLAY}} → ${contact.linkedinDisplay}
-- {{PORTFOLIO_URL}} → ${contact.portfolioUrl}
-- {{PORTFOLIO_DISPLAY}} → ${contact.portfolioDisplay}
-- {{GITHUB_URL}} → ${contact.githubUrl}
-- {{GITHUB_DISPLAY}} → ${contact.githubDisplay}
-- {{SUMMARY_TEXT}} → [YOU GENERATE: tailored 2-3 line summary]
-- {{SKILLS}} → [YOU GENERATE: tailored <table class="skills-table"> HTML]
-- {{EDUCATION}} → [YOU GENERATE: education <div class="entry"> HTML]
-- {{EXPERIENCE}} → [YOU GENERATE: tailored experience <div class="entry"> HTML]
-- {{PROJECTS}} → [YOU GENERATE: selected top projects <div class="project"> HTML]
-- {{EXTRACURRICULAR}} → [YOU GENERATE: top 3-4 extracurricular <div class="entry"> HTML]
-
-CANDIDATE CV:
+MASTER CV:
 ${cv}
 
 CANDIDATE PROFILE:
@@ -123,22 +333,458 @@ ${profile}
 NARRATIVE:
 ${profileMd}
 
-Respond in EXACTLY this format (no other text):
+MASTER RESUME SOURCE:
+- config/profile.yml points to the master DOCX source when available.
+- cv.md is the synced markdown source used by this app at generation time.
+
+===== REQUIRED STRUCTURE AND PAGE PLAN =====
+The resume must keep the same section structure as the master resume, in this exact order:
+1. Profile
+2. Highlights of Qualifications
+3. Technical Skills Summary
+4. Professional Experience
+5. Projects
+6. Education
+7. Extracurricular Activities
+8. Awards and Recognition
+9. Certifications & Memberships
+
+Page 1 must contain Profile, Highlights of Qualifications, Technical Skills Summary, and Professional Experience.
+Page 2 must start with Projects, then Education, Extracurricular Activities, Awards and Recognition, and Certifications & Memberships.
+The template contains a <div class="page-two"> wrapper before Projects. Keep that wrapper exactly so Projects starts on page 2.
+Professional Experience must stay compact enough to finish on page 1: use the 2 strongest OER bullets by default and 2 Olive Branch bullets. Add a 3rd OER bullet only if it is short and page 1 still fits.
+The second page should look full. Use space intelligently: include 3 projects by default; add a 4th project only if the second page would otherwise look sparse. If space is tight, keep the best 3 projects and expand them with stronger relevant bullets instead of dropping below 3 projects.
+Each selected project should have at least 3 bullets when possible: Stack first, then 2+ evidence/impact bullets.
+
+PROJECT URLS (use exactly these in HTML links):
+- Zonalyze: GitHub https://github.com/Girish0744/Zonalyze
+- ETHOS: GitHub https://github.com/Girish0744/ETHOS-MLPROJECT | Live https://eth0s.online
+- AegisGrid: GitHub https://github.com/Girish0744/AegisGrid | Live https://aegis-grid.vercel.app
+- MediTwin: GitHub https://github.com/Girish0744/MediTwin
+- DineEase: GitHub https://github.com/Girish0744/DineEase
+- MediNet+: GitHub https://github.com/Girish0744/MediNet
+- Student Dropout Risk Analysis: GitHub https://github.com/Girish0744/Student-Dropout-Risk-Analysis
+- TelemetryDownloader: GitHub https://github.com/Girish0744/TelemetryDownloader
+
+===== STEP 1: DETECT ROLE ARCHETYPE =====
+Read the JD and classify into exactly one:
+- SWE_FULLSTACK: React, TypeScript, Node.js, REST APIs, databases, front-end/back-end primary
+- AI_ML: model training, ML pipelines, data science, Python ML context, scikit-learn, TensorFlow primary
+- DA_BA: SQL, data analysis, dashboards, BI, reporting, business intelligence, Excel, Power BI primary
+- DATA_ENGINEER: data pipelines, ETL, infrastructure, data quality, transformation, automation primary
+- BACKEND_JAVA_SYSTEMS: Java, Golang/Go, back-end services, modular services, service integration, banking platforms, API/service development primary
+- SYSTEMS_CPP: embedded, networking, C/C++, TCP, binary protocols, hardware primary
+- CSHARP_DOTNET: C#, .NET, Windows Forms, enterprise desktop, SQL Server primary
+- HELPDESK_IT: troubleshooting, ticketing, user support, IT operations, help desk primary
+- GENERAL: mixed or none of the above clearly dominant
+
+===== STEP 2: SELECT PROJECTS FROM MASTER RESUME =====
+Select at least 3 projects from the master resume. Use exactly 3 by default. Add a 4th only if page 2 needs more density and the project is strongly relevant to the JD.
+SWE_FULLSTACK  → Zonalyze, AegisGrid, MediTwin
+AI_ML          → Zonalyze, ETHOS, AegisGrid
+DA_BA          → Zonalyze, Student Dropout Risk Analysis, ETHOS
+DATA_ENGINEER  → Zonalyze, ETHOS, Student Dropout Risk Analysis
+BACKEND_JAVA_SYSTEMS → MediNet+, TelemetryDownloader, Zonalyze
+SYSTEMS_CPP    → TelemetryDownloader, MediNet+, Zonalyze
+CSHARP_DOTNET  → MediNet+, DineEase, Zonalyze
+HELPDESK_IT    → Zonalyze, ETHOS, MediTwin
+GENERAL        → Zonalyze, ETHOS, AegisGrid
+
+If adding a 4th project, choose the next strongest project from the master resume based on the JD:
+- Web/full-stack: MediTwin or DineEase
+- AI/ML: MediTwin or Student Dropout Risk Analysis
+- Data/analytics: AegisGrid or MediTwin
+- C#/.NET: DineEase
+- Backend Java/Go: DineEase or AegisGrid
+- Systems/C++: AegisGrid or ETHOS
+- IT/help desk/support: OER-related evidence belongs in Experience, not Projects; use MediTwin or Student Dropout if a 4th is needed
+
+For each project:
+- Name bold + " | " separator + full URL as link text (e.g. github.com/Girish0744/Zonalyze, NOT "GitHub")
+- Live site URL added if available
+- Date range in full (e.g. "Jan 2026 – Present")
+- Stack as first bullet (front-load JD-relevant tech)
+- 2–3 content bullets after the Stack bullet (metric-bearing first); REWORD bullets to echo JD language — see Step 5 for rewording rules
+- Do not pick projects just because they are impressive; pick the projects that best match the job. For a Data Analytics role, choose analytics/data projects over unrelated web-only projects.
+
+===== STEP 3: PROFILE PARAGRAPH (exactly 4 sentences, zero first-person) =====
+Sentence 1: Identity + core stack — 3–4 specific tools from the JD that the candidate actually has
+Sentence 2: Capability — mirror the JD's core responsibilities in Girish's language
+Sentence 3: Differentiator — one sentence about project background that connects to the JD's domain
+Sentence 4: FIXED — "Available for full-time roles starting August 2026."
+
+Profile templates by archetype (adapt to JD — replace bracketed slots with actual JD keywords):
+SWE_FULLSTACK: "Full-stack developer with hands-on experience designing and deploying web applications using React, TypeScript, FastAPI, and PostgreSQL. Experienced in building end-to-end solutions from database design and REST APIs through to deployed frontends with real-time features. Strong project background in accessible web platforms, containerised deployments, and technical team coordination. Available for full-time roles starting August 2026."
+AI_ML: "AI/ML engineer with hands-on experience designing and deploying machine learning pipelines using Python, scikit-learn, MLflow, and [JD tools]. Experienced in building end-to-end solutions from data preprocessing and feature engineering through model training, evaluation, and deployment. Strong project background in experiment tracking, model comparison, and production deployment on AWS. Available for full-time roles starting August 2026."
+DA_BA: "Data analyst with hands-on experience building data pipelines and translating analytical findings into actionable recommendations using Python, SQL, Pandas, and [JD-specific tools like Power BI/Excel]. Experienced in data compilation, validation, and quality assurance across large datasets, with a track record of automating workflows and maintaining reporting systems. Strong project background in cross-functional data analysis, statistical trend identification, and evidence-based decision support. Available for full-time roles starting August 2026."
+DATA_ENGINEER: "Data engineer with hands-on experience building data pipelines and infrastructure using Python, SQL, PostgreSQL, and AWS. Experienced in transforming raw datasets into model-ready matrices, automating data workflows, and maintaining data quality across large-scale systems. Strong project background in pipeline development, ETL processes, and cloud deployment. Available for full-time roles starting August 2026."
+BACKEND_JAVA_SYSTEMS: "Java-certified software developer with hands-on experience building backend, database-backed, and networked systems using C#, C++, SQL Server, TCP/IP, and REST API patterns. Experienced in implementing modular service logic, parameterized data access layers, defensive protocol handling, and multi-tier tests across academic and project systems. Strong project background in MediNet+, TelemetryDownloader, and Zonalyze, with Java SE certification supporting object-oriented backend fundamentals. Available for full-time roles starting August 2026."
+SYSTEMS_CPP: "Software developer with hands-on experience building networked systems and protocol implementations in C++ using TCP/IP, binary packet design, and state machine architecture. Experienced in writing testable, low-level code with comprehensive test coverage across unit, integration, and system tiers. Strong project background in file transfer protocols, server lifecycle management, and multi-tier system testing. Available for full-time roles starting August 2026."
+CSHARP_DOTNET: "Software developer with hands-on experience building multi-role desktop applications in C# using Windows Forms, SQL Server, and TCP networking. Experienced in writing parameterised queries, multi-tier test suites, and server communication layers for complex, multi-user systems. Strong project background in hospital management systems, restaurant platforms, and full-stack web applications. Available for full-time roles starting August 2026."
+HELPDESK_IT: "IT support professional with hands-on experience in technical troubleshooting, platform management, and workflow automation using HTML, CSS, WordPress, and Power Automate. Experienced in WCAG accessibility testing, cross-platform issue resolution, and documenting workflows to support non-technical users. Strong background in open-source platform contributions, SharePoint management, and integrating third-party APIs for platform reliability. Available for full-time roles starting August 2026."
+GENERAL: use SWE_FULLSTACK template, adapt stack to JD keywords
+
+Profile anti-patterns — NEVER use:
+- "Possesses", "Utilizes" — always active voice
+- "deep technical experience" — say "hands-on experience" or "applied experience"
+- "rigorous" (statistical analysis, testing, etc.) — drop the adjective
+- "robust" — say "reliable" or drop it
+- "leveraging" or "utilized" — say "using" or choose a stronger action verb
+- "comprehensive", "cutting-edge", "innovative solutions", "fast-paced environment"
+- em dashes — use commas or semicolons
+- any first-person pronoun
+
+===== STEP 4: HIGHLIGHTS OF QUALIFICATIONS — always exactly 5 bullets =====
+1. (always): "Bachelor of Computer Science (Honours) candidate at Conestoga College with a 3.74 GPA, graduating August 2026; coursework includes [pick 4–5 most relevant from: Software Engineering, OOP, Data Structures and Algorithms, Database Systems, Computer Networks, OS and Security, Cloud Computing, Big Data, AI and Machine Learning, Advanced Topics in AI/ML]"
+2. (always): "Completed 2 co-op work terms at Conestoga College; converted from part-time to co-op based on performance and retained through departmental restructuring"
+3. (customize per archetype — pick the version that best matches the JD's required tools):
+   DA_BA:          "Deployed 8+ full-stack and ML projects using Python, SQL, PostgreSQL, AWS (Athena/S3/EC2), Docker, and Power BI; all publicly available on GitHub"
+   AI_ML/GENERAL:  "Deployed 8+ full-stack and ML projects using Python, scikit-learn, MLflow, AWS EC2, Docker, and React; all publicly available on GitHub"
+   SWE_FULLSTACK:  "Deployed 8+ full-stack and ML projects using React, TypeScript, FastAPI, Python, PostgreSQL, AWS EC2, Docker, and Vercel; all publicly available on GitHub"
+   DATA_ENGINEER:  "Deployed 8+ full-stack and ML projects using Python, SQL, PostgreSQL, AWS (Athena/S3/EC2), Docker, and FastAPI; all publicly available on GitHub"
+   BACKEND_JAVA_SYSTEMS: "Built backend and networked systems using C#, C++, SQL Server, TCP/IP, REST API patterns, Docker, and Git; Java SE certified and all major projects publicly available on GitHub"
+   SYSTEMS_CPP:    "Deployed 8+ projects using C++, C#, Python, SQL Server, AWS EC2, Docker, and React; all publicly available on GitHub"
+   CSHARP_DOTNET:  "Deployed 8+ projects using C#, SQL Server, Python, FastAPI, React, AWS EC2, Docker, and MSTest; all publicly available on GitHub"
+   HELPDESK_IT:    "Deployed 8+ full-stack and ML projects using Python, SQL, React, FastAPI, Docker, and AWS; all publicly available on GitHub"
+   Rule: always include 6–8 tools; prioritise tools that appear in the JD
+4. (customize per archetype):
+   DA_BA:          "Analyzed 4,400+ student records across two real-world datasets applying IQR-based outlier detection and multi-variable correlation analysis to generate institutional recommendations"
+   AI_ML/GENERAL:  "Built ML pipelines with scikit-learn, MLflow, and Random Forest, achieving 94.9% classification accuracy on real NASA Kepler telescope data"
+   SWE_FULLSTACK:  "Built real-time WebSocket systems, containerised deployments with Docker Compose, and LLM-powered chat interfaces across multiple full-stack projects"
+   DATA_ENGINEER:  "Analyzed 4,400+ student records across two real-world datasets applying IQR-based outlier detection and multi-variable correlation analysis to generate institutional recommendations"
+   BACKEND_JAVA_SYSTEMS: "Implemented SQL Server data access layers, TCP client-server communication, defensive protocol handling, and 85+ MSTest methods across backend and networked systems"
+   SYSTEMS_CPP:    "Implemented a 7-type binary packet protocol and 5-state server lifecycle state machine with Stop-and-Wait ACK, achieving 32 passing tests and a byte-exact 1 MB file transfer"
+   CSHARP_DOTNET:  "Wrote 85+ MSTest methods across unit, integration, and system tiers covering patient workflows, billing calculations, and server connectivity for complex multi-role systems"
+   HELPDESK_IT:    "Deployed 8+ accessible web platforms and interactive learning objects using HTML, CSS, WordPress, and Power Automate, supporting 1,000+ students across Business and Health Sciences"
+5. (always): "Narhari Sharma Memorial Award recipient (April 2026); IT Club President coordinating workshops, hackathons, and mentorship programs for 100+ students"
+
+NOTE on leadership: leadership is mentioned in bullet 5 — do NOT repeat it in the profile or extracurriculars bullets.
+
+===== STEP 5: EXPERIENCE BULLETS — REWORD, DON'T JUST COPY =====
+Do NOT copy master resume bullets verbatim. REWORD each bullet to echo the JD's language and framing while preserving the candidate's natural resume tone. The facts stay the same; the framing shifts to match what the JD values. Keep wording human, specific, and grounded.
+
+Rewording examples:
+- Master CV: "Developed and maintained accessible HTML and CSS templates for Pressbooks..."
+- DA/BA version: "Maintained structured data entry templates and document management workflows in SharePoint to support data organisation and cross-departmental reporting"
+- SWE version: "Built and maintained accessible HTML/CSS templates for Pressbooks and H5P Studio supporting 1,000+ students across Business, Health Sciences, and Community Services"
+
+OER role — 2 bullets by default, 3 only if the extra bullet is short and page 1 still fits. Select and reword by archetype:
+  SWE_FULLSTACK: emphasise HTML/CSS/templates, GitHub repos, WCAG accessibility testing
+  AI_ML:         emphasise Power Automate automation, data-backed engagement metric (20%), open-source contributions
+  DA_BA:         emphasise Power Automate automation, data management/SharePoint, engagement/metrics tracking
+  DATA_ENGINEER: emphasise automation workflows, data tracking systems, platform reliability
+  BACKEND_JAVA_SYSTEMS: emphasise automation workflows, GitHub repositories, backend issue diagnosis, and API integration without claiming Java/Go professional experience
+  SYSTEMS_CPP/CSHARP_DOTNET: emphasise automation, open-source contribution/feedback to communities, templates
+  HELPDESK_IT:   emphasise WCAG testing, SharePoint management, workflow automation, supporting 1,000+ users
+  GENERAL:       HTML/CSS templates → automation → engagement metric
+
+Always include the italic context note for OER:
+"Part-time and co-op role; converted to co-op based on performance; retained after departmental restructuring"
+
+Olive Branch — keep both bullets, front-load the JD-relevant one. REWORD to echo JD language:
+  DA_BA/DATA_ENGINEER: "Optimised backend architecture by integrating 5+ third-party APIs, improving data synchronisation efficiency and reducing user-facing response time"
+  BACKEND_JAVA_SYSTEMS: "Integrated 5+ third-party APIs and optimized backend architecture, improving data synchronization efficiency and reducing user-facing response time"
+  SWE_FULLSTACK:       "Built React components for mentorship matching workflows and implemented Node.js API routes; integrated 5+ third-party APIs and optimised backend architecture"
+  HELPDESK_IT:         "Diagnosed and resolved frontend and backend issues across browsers and devices, strengthening cross-platform performance and compatibility"
+
+Home Depot — DROP (not relevant to tech roles)
+
+===== STEP 6: SKILLS TABLE — USE EXACT ROW CONTENT PER ARCHETYPE =====
+Always 5 rows. Category names use "&" not "and". Reorder rows (after Languages) so the most JD-relevant category comes first. Technical skills must be customized to the JD, but only include skills present in the master resume/profile sources.
+
+Languages (always first):
+  DA_BA / DATA_ENGINEER:    Python, SQL, JavaScript, TypeScript, C, C++, C#, HTML, CSS
+  AI_ML:                    Python, SQL, JavaScript, TypeScript, C, C++, C#, HTML, CSS
+  SWE_FULLSTACK / GENERAL:  Python, JavaScript, TypeScript, C, C++, C#, SQL, HTML, CSS
+  BACKEND_JAVA_SYSTEMS:     Java (Java SE), C#, C++, Python, SQL, JavaScript, TypeScript, C, HTML, CSS
+  SYSTEMS_CPP:              C, C++, Python, JavaScript, TypeScript, C#, SQL, HTML, CSS
+  CSHARP_DOTNET:            C#, Python, JavaScript, TypeScript, C, C++, SQL, HTML, CSS
+  HELPDESK_IT:              Python, JavaScript, TypeScript, C, C++, C#, SQL, HTML, CSS
+
+Frameworks & Libraries:
+  DA_BA / DATA_ENGINEER:  Pandas, NumPy, scikit-learn, FastAPI, Flask, React, Node.js, Streamlit
+  AI_ML:                  scikit-learn, TensorFlow, Keras, Pandas, NumPy, FastAPI, Flask, React, Streamlit
+  SWE_FULLSTACK / GENERAL: React, Next.js, FastAPI, Flask, Node.js, Streamlit, WordPress, REST APIs, WebSocket
+  BACKEND_JAVA_SYSTEMS:   REST APIs, WebSocket, Node.js, FastAPI, Flask, React, Next.js, Streamlit
+  SYSTEMS_CPP:            FastAPI, Flask, React, Node.js, Streamlit, REST APIs
+  CSHARP_DOTNET:          React, Next.js, FastAPI, Flask, Node.js, Streamlit, REST APIs, WebSocket
+  HELPDESK_IT:            React, FastAPI, Flask, Node.js, WordPress, REST APIs, Streamlit
+
+AI/ML & Data:
+  DA_BA:          MLflow, Random Forest, GridSearchCV, Power BI, Power Automate, DBSCAN, Clustering
+  DATA_ENGINEER:  MLflow, Random Forest, GridSearchCV, Pandas, NumPy, DBSCAN, Clustering
+  AI_ML:          TensorFlow, Keras, scikit-learn, MLflow, Random Forest, MLP, CNN, RNN, Transformers, Autoencoders, GANs, DBSCAN, Clustering, GridSearchCV
+  SWE_FULLSTACK / GENERAL: scikit-learn, MLflow, Random Forest, DBSCAN, Clustering
+  BACKEND_JAVA_SYSTEMS: scikit-learn, MLflow, Random Forest, DBSCAN
+  SYSTEMS_CPP:    scikit-learn, MLflow, Random Forest, DBSCAN
+  CSHARP_DOTNET:  scikit-learn, MLflow, Random Forest, DBSCAN
+  HELPDESK_IT:    scikit-learn, MLflow, Power BI, Power Automate, Random Forest
+
+Databases (same for all): PostgreSQL, SQL Server, MongoDB, MySQL, SQLite
+
+Tools & Infrastructure:
+  DA_BA:          AWS (Athena, S3, EC2), Azure, Docker, Git, GitHub, CI/CD, Postman, SharePoint, Power BI, Excel
+  DATA_ENGINEER:  AWS (Athena, S3, EC2, Lambda), Azure, Docker, Git, GitHub, CI/CD, Postman, Power Automate
+  AI_ML:          AWS (EC2, S3, Athena, Lambda), Azure, Docker, Vercel, Git, GitHub, CI/CD, Postman
+  SWE_FULLSTACK / GENERAL: AWS (EC2, S3, Athena, Lambda), Azure, Docker, Vercel, Git, GitHub, CI/CD, Postman, Selenium
+  BACKEND_JAVA_SYSTEMS: Docker, Git, GitHub, CI/CD, Postman, AWS (EC2, S3), Azure, Vercel, Selenium
+  SYSTEMS_CPP:    AWS (EC2, S3), Azure, Docker, Git, GitHub, CI/CD, Postman, Vercel
+  CSHARP_DOTNET:  AWS (EC2, S3), Azure, Docker, Vercel, Git, GitHub, CI/CD, Postman, Selenium
+  HELPDESK_IT:    AWS (EC2, S3), Azure, Docker, Git, GitHub, CI/CD, Postman, SharePoint, Power Automate, Selenium
+
+Post-selection check: scan the JD keyword list. If any required tool is missing from the skills rows AND the candidate genuinely has it, add it to the appropriate row:
+- Excel → Tools & Infrastructure (real skill, used at OER; add for any DA/BA/data role that lists it)
+- Azure → Tools & Infrastructure (always valid, in master resume)
+- SharePoint → Tools & Infrastructure (used at OER for document management)
+- Power Automate → AI/ML & Data or Tools & Infrastructure
+- Java → Languages only as "Java (Java SE)" because the master resume supports Java certification, not professional Java employment
+- Go/Golang → NEVER add as a skill unless the master resume is updated with real Go experience; treat it as a gap
+Never add skills the candidate does not have.
+
+===== LOW-FIT / SENIOR ROLE HONESTY =====
+If the score is below 50, fitLevel is Skip, or the JD/title includes senior, lead, principal, staff, manager, consultant, vice president, or 5+ years:
+- Keep the resume truthful and more conservative
+- Do not imply senior professional Java/Golang experience
+- Do not use "3+ years" unless clearly framed as hands-on project/web experience from the master resume, not professional senior backend experience
+- If Java/Golang appears in the JD and the master resume only supports Java SE certification plus adjacent backend systems, emphasize Java fundamentals, C#/C++ backend systems, TCP, SQL, testing, API patterns, and GitHub evidence
+- Never list Go, Golang, Spring Boot, Kubernetes, Kafka, or banking systems experience unless present in the master resume
+- Prefer backend/system projects: MediNet+, TelemetryDownloader, Zonalyze
+
+===== STEP 7: EXTRACURRICULAR — 2 always + 1 optional =====
+Always include (1 bullet each):
+1. President, IT Club, Conestoga College — Apr 2025 – Present
+2. Director, Student Success Team, HackTheBrain, Toronto Tech Week — Mar 2025 – Jul 2025
+
+Add 1 more ONLY if page space permits (ranked by JD relevance):
+- Area Leader, AI Build Lab, Toronto Tech Week (May 2026 – Jun 2026) — good for AI/tech roles
+- Student Experience Mentor, Conestoga College (Sept 2025 – Dec 2025)
+- Subcommittee Member, GDG Waterloo (Apr 2026 – Present)
+
+DROP: Orientation Volunteer, Leadership Workshop Facilitator, Volunteering Panel Speaker
+
+===== STEP 8: AWARDS — always include both =====
+1. Narhari Sharma Memorial Award, Conestoga College | April 2026
+   "Awarded for academic excellence, leadership, and sustained commitment to helping others succeed; nominated by management and colleagues"
+2. Helena Webb Mentorship Program, Conestoga College | January – April 2026
+   "Selected for a structured four-month industry mentorship, recognizing academic achievement and leadership potential"
+
+===== STEP 9: CERTIFICATIONS — single line of plain text =====
+Standard: "Java SE, Oracle, 2024 · OOP Using C++, Infosys Springboard, 2024 · CIPS Ontario Member, 2025"
+Drop JMeter if space is tight. Never drop CIPS Ontario.
+Output as plain text only — no HTML tags.
+
+===== WRITING QUALITY RULES (non-negotiable) =====
+- ZERO first-person pronouns — no "I", "my", "me", "we", "our" anywhere
+- No em dashes (—) anywhere — use commas or semicolons
+- No periods at the end of any bullet point
+- Round metrics: 94.9% not 94.91%, 88% not 88.14%
+- Never fabricate — every number and fact comes from the master CV exactly
+- Vary action verbs — never use the same verb as the leading word twice on the same page
+- No AI-sounding filler: "passionate about", "excited to", "team player", "detail-oriented", "results-driven", "fast-paced environment", "innovative solutions", "cutting-edge", "comprehensive", "utilized"
+- No passive ownership verbs: "Possesses", "Utilizes", "Demonstrates" — always active voice
+- No adjective inflation: "rigorous", "robust", "deep technical experience" — drop the adjective or replace with evidence
+- Never say "leveraging" — say "using"
+- Use "candidate" not "holds" for the degree (graduation is future, August 2026)
+- Profile sentences must read like a human wrote them, not a language model
+- Bullets are direct statements of fact and impact — no preamble, no hedging
+- JD keywords appear in context, not bolted on — if a bullet sounds forced, rewrite it
+- Do NOT repeat leadership claims: if mentioned in Highlights bullet 5, skip it in Profile and Extracurricular bullets
+
+===== CONTENT DENSITY (CRITICAL) =====
+TARGET: Both pages must be completely full. A half-empty second page is a failure.
+- Use at least 3 total bullets per project: Stack first, then 2–3 content bullets
+- Use 2 bullets for OER by default, 2 for Olive Branch
+- Expand skills rows with the full list from master CV
+- If page 2 still has whitespace: add the optional 3rd extracurricular entry, expand project bullets to 3 content bullets, or add a 4th relevant project if it still fits
+
+===== 2-PAGE MANAGEMENT (trim in this exact order if over 2 pages) =====
+1. If a 4th project was added, drop it first
+2. Drop the optional 3rd extracurricular entry
+3. If OER has 3 bullets, reduce it to 2
+4. Reduce projects from 3 content bullets to 2 content bullets, keeping the Stack bullet and the strongest evidence bullets
+5. Drop JMeter from certifications line
+Never trim below 3 projects. Never trim: Education, Highlights of Qualifications, Awards, Skills table
+
+===== HTML GENERATION =====
+FONT PATHS: HTML is saved at applications/${id}/resume.html.
+Replace all font src URLs: use ../../fonts/{filename} (not ./fonts/).
+Example: src: url('../../fonts/space-grotesk-latin.woff2') format('woff2');
+
+TEMPLATE (fill every {{PLACEHOLDER}}):
+${cvTemplate}
+
+FIXED PLACEHOLDER VALUES:
+- {{LANG}} → en
+- {{PAGE_WIDTH}} → 8.5in
+- {{NAME}} → ${contact.name}
+- {{LOCATION}} → ${contact.location}
+- {{EMAIL}} → ${contact.email}
+- {{PHONE}} → ${contact.phone}
+- {{LINKEDIN_URL}} → ${contact.linkedinUrl}
+- {{LINKEDIN_DISPLAY}} → ${contact.linkedinDisplay}
+- {{PORTFOLIO_URL}} → ${contact.portfolioUrl}
+- {{PORTFOLIO_DISPLAY}} → ${contact.portfolioDisplay}
+- {{GITHUB_URL}} → ${contact.githubUrl}
+- {{GITHUB_DISPLAY}} → ${contact.githubDisplay}
+
+GENERATED PLACEHOLDER FORMATS:
+
+{{SUMMARY_TEXT}} → plain paragraph text, no HTML tags (template renders as-is)
+
+{{HIGHLIGHTS}} → <ul> with exactly 5 <li> items, no periods at end:
+<ul>
+  <li>Highlight one</li>
+  <li>Highlight two</li>
+  <li>Highlight three</li>
+  <li>Highlight four</li>
+  <li>Highlight five</li>
+</ul>
+
+{{SKILLS}} → <table class="skills-table"> with one <tr> per category. Use "&" not "and" in category names:
+<table class="skills-table">
+  <tr><td class="skill-cat">Languages:</td><td>Python, JavaScript, TypeScript, C, C++, C#, SQL, HTML, CSS</td></tr>
+  <tr><td class="skill-cat">Frameworks &amp; Libraries:</td><td>React, Next.js, FastAPI, ...</td></tr>
+  <tr><td class="skill-cat">AI/ML &amp; Data:</td><td>TensorFlow, Keras, scikit-learn, ...</td></tr>
+  <tr><td class="skill-cat">Databases:</td><td>PostgreSQL, SQL Server, MongoDB, MySQL, SQLite</td></tr>
+  <tr><td class="skill-cat">Tools &amp; Infrastructure:</td><td>AWS (EC2, S3, Athena, Lambda), Azure, Docker, ...</td></tr>
+</table>
+
+{{EXPERIENCE}} → one <div class="entry"> per role, no periods at bullet ends.
+Title bold on line 1, company/location italic on line 2, context note italic on line 3 (ONLY if there is a real note — omit div if none), then bullets:
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left"><span class="entry-title">Role Title</span></div>
+    <div class="entry-right">Month YYYY – Present</div>
+  </div>
+  <div class="entry-company">Organisation, City, Province</div>
+  <div class="entry-note">Context note about the role — italic, one line (omit this div if no note applies)</div>
+  <ul>
+    <li>Bullet — no period</li>
+    <li>Bullet — no period</li>
+    <li>Bullet — no period</li>
+  </ul>
+</div>
+
+OER exact structure:
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left"><span class="entry-title">Open Education Technology Project Assistant</span></div>
+    <div class="entry-right">Jan 2025 – Present</div>
+  </div>
+  <div class="entry-company">Conestoga College, Waterloo, ON</div>
+  <div class="entry-note">Part-time and co-op role; converted to co-op based on performance; retained after departmental restructuring</div>
+  <ul>
+    <li>...</li>
+  </ul>
+</div>
+
+Olive Branch exact structure (no entry-note — it's a volunteer role with no conversion story):
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left"><span class="entry-title">Web and Tech Integration Specialist (Volunteer)</span></div>
+    <div class="entry-right">May 2025 – Present</div>
+  </div>
+  <div class="entry-company">Olive Branch Mentorship Inc., Cambridge, ON</div>
+  <ul>
+    <li>...</li>
+  </ul>
+</div>
+
+{{PROJECTS}} → one <div class="project"> per project.
+Project name bold (<strong>), separator " | " in normal weight, then full URL as link text (NOT "GitHub" — show the actual URL path).
+Date range in full (e.g. "Jan 2026 – Present", "Apr 2026"), not just a year.
+Stack as first bullet. 2–3 content bullets (metric-bearing first):
+<div class="project">
+  <div class="project-header">
+    <div class="project-name"><strong>Zonalyze - Business Feasibility Intelligence Platform</strong> | <a href="https://github.com/Girish0744/Zonalyze">github.com/Girish0744/Zonalyze</a></div>
+    <div class="project-year">Jan 2026 – Present</div>
+  </div>
+  <ul>
+    <li>Stack: React, TypeScript, FastAPI, PostgreSQL, scikit-learn, Statistics Canada Census, OpenStreetMap API, WebSocket, Docker, LLM | Capstone (In Progress)</li>
+    <li>Metric-bearing content bullet — no period</li>
+    <li>Second content bullet — no period</li>
+  </ul>
+</div>
+
+If project has a live site, include both GitHub and live URL:
+<div class="project-name"><strong>ETHOS - Autonomous Exoplanet Discovery Pipeline</strong> | <a href="https://github.com/Girish0744/ETHOS-MLPROJECT">github.com/Girish0744/ETHOS-MLPROJECT</a> | <a href="https://eth0s.online">eth0s.online</a></div>
+
+{{EDUCATION}} → single <div class="entry">. Degree bold on line 1, institution italic on line 2, then bullets:
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left"><span class="entry-title">Bachelor of Computer Science (Honours)</span></div>
+    <div class="entry-right">Sept 2022 – Present</div>
+  </div>
+  <div class="entry-company">Conestoga College, Waterloo, ON</div>
+  <ul>
+    <li>GPA: 3.74/4.00; expected graduation August 2026</li>
+    <li>Relevant coursework: [4–5 JD-relevant subjects]</li>
+  </ul>
+</div>
+
+{{EXTRACURRICULAR}} → one <div class="entry"> per activity, 1 bullet each, no periods:
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left"><span class="entry-title">Role Title</span>, Organisation</div>
+    <div class="entry-right">Month YYYY – Present</div>
+  </div>
+  <ul>
+    <li>Single most-impactful bullet — no period</li>
+  </ul>
+</div>
+
+{{AWARDS}} → one <div class="entry"> per award, 1 bullet each, no periods.
+Award name and institution on the SAME line separated by " | " (not a comma):
+<div class="entry">
+  <div class="entry-header">
+    <div class="entry-left"><span class="entry-title">Award Name</span> | Institution</div>
+    <div class="entry-right">Month YYYY</div>
+  </div>
+  <ul>
+    <li>Award description — no period</li>
+  </ul>
+</div>
+
+{{CERTIFICATIONS}} → plain text only (template wraps in <p>):
+Certification 1, Issuer, Year · Certification 2, Issuer, Year · Membership, Year
+
+CRITICAL OUTPUT RULE: You must write actual code. Do NOT output "[Template filled with the above content]" or any other bracketed description. Do NOT summarise what you would write. Write the real HTML with every {{PLACEHOLDER}} replaced.
+Keep the <div class="page-two"> wrapper around Projects through Certifications & Memberships exactly as provided by the template.
+
+Respond in EXACTLY this format:
 ===MARKDOWN===
 # ${contact.name}
 
-[Full tailored resume in clean markdown with standard headings]
+[resume in markdown]
 ===END_MARKDOWN===
 ===HTML===
 <!DOCTYPE html>
-[Complete filled HTML starting with <!DOCTYPE html>]
+<html lang="en">
+<head>
+<!-- write every line of the actual filled HTML here -->
+</head>
+<body>
+<!-- every section filled with real candidate content -->
+</body>
+</html>
 ===END_HTML===`;
 
   const { result: resumeResult } = await generateGeminiContent(ai, 'generateDocs', {
-    contents: `Tailor this resume for the following job:\n\nCOMPANY: ${app.company}\nROLE: ${app.jobTitle}\nSCORE: ${app.score}/100 (${app.fitLevel})\nMATCHED: ${app.scoreData?.matchedKeywords?.slice(0,8).join(', ') ?? ''}\nGAPS: ${app.scoreData?.missingKeywords?.slice(0,5).join(', ') ?? ''}\n\nJOB DESCRIPTION:\n${app.jobDescription ?? ''}`,
+    contents: [
+      `COMPANY: ${app.company}`,
+      `ROLE: ${app.jobTitle}`,
+      `SCORE: ${app.score}/100 (${app.fitLevel})`,
+      `MATCHED KEYWORDS: ${app.scoreData?.matchedKeywords?.slice(0, 10).join(', ') ?? 'none'}`,
+      `GAPS: ${app.scoreData?.missingKeywords?.slice(0, 5).join(', ') ?? 'none'}`,
+      ``,
+      `JOB DESCRIPTION:`,
+      jobDescriptionText,
+      ``,
+      `Now produce the output. Write the complete filled HTML between ===HTML=== and ===END_HTML===. Start the HTML block with <!DOCTYPE html> — not with a bracketed description. Every {{PLACEHOLDER}} in the template must contain real candidate content.`,
+    ].join('\n'),
     config: {
       systemInstruction: resumeSystem,
-      maxOutputTokens: 8192,
+      maxOutputTokens: 16384,
       thinkingConfig: { thinkingBudget: 0 },
     },
   });
@@ -170,22 +816,41 @@ Respond in EXACTLY this format (no other text):
     return '';
   }
 
-  const resumeMd   = extractBlock(resumeRaw, 'MARKDOWN') || cv;
-  const resumeHtml = extractAllHtml(resumeRaw);
+  let resumeMd     = extractBlock(resumeRaw, 'MARKDOWN') || '';
+  const rawHtml    = extractAllHtml(resumeRaw);
+  const resumeHtml = rawHtml.trimStart().toLowerCase().startsWith('<!doctype')
+    ? canonicalizeResumeHtml(rawHtml, cvTemplate)
+    : '';
+  if (isPlaceholderMarkdown(resumeMd)) {
+    resumeMd = resumeHtml ? markdownFromResumeHtml(resumeHtml) : cv;
+  }
 
   fs.writeFileSync(path.join(folderPath, 'resume.md'),   resumeMd);
 
   let resumePdfGenerated = false;
+  let resumeGenerationError: string | null = null;
   if (resumeHtml) {
-    const htmlPath = path.join(folderPath, 'resume.html');
-    const pdfPath  = path.join(folderPath, 'resume.pdf');
-    fs.writeFileSync(htmlPath, resumeHtml);
     try {
-      await generatePdf(htmlPath, pdfPath);
+      const resumeWarnings = collectResumeQualityWarnings(resumeHtml, resumeMd);
+      if (resumeWarnings.length > 0) {
+        warnings.push(...resumeWarnings.map(warning => `Resume: ${warning}`));
+        console.warn('[generate-docs] resume quality warnings:', resumeWarnings.join('; '));
+      }
+      const htmlPath = path.join(folderPath, 'resume.html');
+      const pdfPath  = path.join(folderPath, 'resume.pdf');
+      fs.writeFileSync(htmlPath, resumeHtml);
+      const pdfResult = await generatePdf(htmlPath, pdfPath);
+      if (pdfResult.pageCount && pdfResult.pageCount > 2) {
+        warnings.push(`Resume rendered to ${pdfResult.pageCount} pages; expected a maximum of 2 pages.`);
+        console.warn(`[generate-docs] resume page warning: rendered to ${pdfResult.pageCount} pages`);
+      }
       resumePdfGenerated = fs.existsSync(pdfPath);
     } catch (e) {
+      resumeGenerationError = e instanceof Error ? e.message : String(e);
       console.error('Resume PDF failed:', e);
     }
+  } else {
+    resumeGenerationError = 'Resume HTML was not generated. The model output did not include a complete <!DOCTYPE html> document.';
   }
 
   // ── 2. COVER LETTER ────────────────────────────────────────────────────────
@@ -197,12 +862,17 @@ Respond in EXACTLY this format (no other text):
   const clSystem = `You generate professional, tailored cover letters.
 
 RULES:
-- Max 4 short paragraphs. 250-350 words total.
-- Human, direct, confident. Not sycophantic or generic.
+- Exactly 3 short paragraphs. 220-280 words total.
+- Human, direct, plainspoken, and specific. Not sycophantic, inflated, or generic.
 - Do NOT start paragraph 1 with "I".
-- Never use: "I am passionate about", "I would love the opportunity", "I believe I would be a great fit", "I am writing to apply"
+- Never use: "I am passionate about", "I would love the opportunity", "I believe I would be a great fit", "I am writing to apply", "I am eager", "leveraging", "robust", "comprehensive", "extensive experience", "technical rigors", "enterprise-scale environments"
 - Reference something specific from the company/JD
 - Only use facts from the CV — never invent experience or metrics
+- If the role is senior or low-fit, write conservatively and do not pretend the candidate meets seniority requirements
+- Never imply hands-on Golang, Spring Boot, Kubernetes, Kafka, or banking platform experience unless those facts appear in the CV/profile
+- For Java/Golang backend roles, frame Java as Java SE certification/fundamentals and emphasize adjacent C#/C++/SQL/TCP/API systems evidence
+- Do not mention "Golang" except in the job title unless the candidate has real Go experience in the source material
+- Do not close with a generic enthusiasm sentence. Close with a calm, concrete fit statement
 
 FONT PATHS: The HTML is saved at applications/${id}/cover-letter.html.
 Replace all font src URLs in the template with ../../fonts/{filename}.
@@ -216,7 +886,7 @@ PLACEHOLDER VALUES:
 - {{NAME}} → ${contact.name}
 - {{LOCATION}} → ${contact.location}
 - {{EMAIL}} → ${contact.email}
-- {{PHONE_SPAN}} → ${contact.phoneSpan}
+- {{PHONE}} → ${contact.phone}
 - {{LINKEDIN_URL}} → ${contact.linkedinUrl}
 - {{LINKEDIN_DISPLAY}} → ${contact.linkedinDisplay}
 - {{PORTFOLIO_URL}} → ${contact.portfolioUrl}
@@ -252,7 +922,7 @@ Respond in EXACTLY this format (no other text):
 ===END_HTML===`;
 
   const { result: clResult } = await generateGeminiContent(ai, 'generateDocs', {
-    contents: `Write a cover letter for:\n\nCOMPANY: ${app.company}\nROLE: ${app.jobTitle}\n\nJOB DESCRIPTION:\n${app.jobDescription ?? ''}`,
+    contents: `Write a cover letter for:\n\nCOMPANY: ${app.company}\nROLE: ${app.jobTitle}\n\nJOB DESCRIPTION:\n${jobDescriptionText}`,
     config: {
       systemInstruction: clSystem,
       maxOutputTokens: 4096,
@@ -263,13 +933,14 @@ Respond in EXACTLY this format (no other text):
   const clRaw = clResult.text ?? '';
   console.log('[generate-docs] cover letter raw (first 300):', clRaw.slice(0, 300));
 
-  const clMdBody  = extractBlock(clRaw, 'MARKDOWN') || clRaw;
-  const clHtml    = extractAllHtml(clRaw);
+  const clMdBody  = sanitizeCoverLetterLanguage(extractBlock(clRaw, 'MARKDOWN') || clRaw);
+  const clHtml    = sanitizeCoverLetterLanguage(extractAllHtml(clRaw));
   const clMdFull  = `# Cover Letter: ${app.jobTitle} at ${app.company}\n\n**Date:** ${today}\n**Application:** applications/${id}/\n\n---\n\n${clMdBody}`;
 
   fs.writeFileSync(path.join(folderPath, 'cover-letter.md'), clMdFull);
 
   let clPdfGenerated = false;
+  let coverLetterGenerationError: string | null = null;
   if (clHtml) {
     const clHtmlPath = path.join(folderPath, 'cover-letter.html');
     const clPdfPath  = path.join(folderPath, 'cover-letter.pdf');
@@ -278,8 +949,11 @@ Respond in EXACTLY this format (no other text):
       await generatePdf(clHtmlPath, clPdfPath);
       clPdfGenerated = fs.existsSync(clPdfPath);
     } catch (e) {
+      coverLetterGenerationError = e instanceof Error ? e.message : String(e);
       console.error('Cover letter PDF failed:', e);
     }
+  } else {
+    coverLetterGenerationError = 'Cover letter HTML was not generated.';
   }
 
   // ── 3. UPDATE DATA STORES ──────────────────────────────────────────────────
@@ -311,7 +985,7 @@ Respond in EXACTLY this format (no other text):
 
   if (!resumePdfGenerated || !clPdfGenerated) {
     throw new Error(
-      `Document source was generated, but PDF generation was incomplete. Resume PDF: ${resumePdfGenerated ? 'ok' : 'failed'}; cover letter PDF: ${clPdfGenerated ? 'ok' : 'failed'}.`,
+      `Document source was generated, but PDF generation was incomplete. Resume PDF: ${resumePdfGenerated ? 'ok' : resumeGenerationError ?? 'failed'}; cover letter PDF: ${clPdfGenerated ? 'ok' : coverLetterGenerationError ?? 'failed'}.`,
     );
   }
 
@@ -322,6 +996,7 @@ Respond in EXACTLY this format (no other text):
     coverLetterPath: clRelPath,
     resumePdfGenerated,
     coverLetterPdfGenerated: clPdfGenerated,
+    warnings,
   });
   } catch (err) {
     return NextResponse.json({ error: apiErrorMessage(err) }, { status: 500 });

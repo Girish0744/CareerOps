@@ -19,6 +19,7 @@ There are two layers. Read `DATA_CONTRACT.md` for the full list.
 **System Layer (auto-updatable, DON'T put user data here):**
 - `modes/_shared.md`, `modes/oferta.md`, all other modes
 - `AGENTS.md`, `CLAUDE.md`, `*.mjs` scripts, `dashboard/*`, `templates/*`, `batch/*`
+- Girish fork exception: `templates/cv-template.html` is user-approved presentation state and must not be overwritten or edited unless Girish explicitly asks for a resume layout/design change.
 
 **THE RULE: When the user asks to customize anything (archetypes, narrative, negotiation scripts, proof points, location policy, comp targets), ALWAYS write to `modes/_profile.md` or `config/profile.yml`. NEVER edit `modes/_shared.md` for user-specific content.** This ensures system updates don't overwrite their customizations.
 
@@ -54,7 +55,7 @@ AI-powered, CLI-agnostic job search automation: pipeline tracking, offer evaluat
 | `data/pipeline.md` | Inbox of pending URLs |
 | `data/scan-history.tsv` | Scanner dedup history |
 | `portals.yml` | Query and company config |
-| `templates/cv-template.html` | HTML template for CVs |
+| `templates/cv-template.html` | Final locked HTML template for Girish's generated resume PDFs |
 | `templates/cv-template.tex` | LaTeX/Overleaf template for CVs |
 | `generate-pdf.mjs` | Playwright: HTML to PDF |
 | `generate-latex.mjs` | LaTeX CV validator + pdflatex compiler |
@@ -162,7 +163,7 @@ This system is designed to be customized by YOU (AI Agent). When the user asks y
 - "Translate the modes to English" → edit all files in `modes/`
 - "Add these companies to my portals" → edit `portals.yml`
 - "Update my profile" → edit `config/profile.yml`
-- "Change the CV template design" → edit `templates/cv-template.html`
+- "Change the CV template design" → edit `templates/cv-template.html` only if Girish explicitly requests a resume layout/design change; otherwise keep the locked format unchanged
 - "Adjust the scoring weights" → edit `modes/_profile.md` for user-specific weighting, or edit `modes/_shared.md` and `batch/batch-prompt.md` only when changing the shared system defaults for everyone
 
 ### Language Modes
@@ -362,6 +363,7 @@ This project has been customized into a personal job application command center 
 - **NEVER edit master profile files during job-specific chat edits.** `cv.md`, `config/profile.yml`, and `modes/_profile.md` are the source of truth. Application-specific edits go only into `applications/{id}/resume.md` or `applications/{id}/cover-letter.md`.
 - **ATS-friendly resumes only.** Single-column, standard headings, selectable text, no sidebars.
 - **Two-page max for resume PDFs.** Flag if content exceeds two pages.
+- **Resume format is locked.** `templates/cv-template.html` is Girish's final approved resume format. Do not edit it for content selection, ATS tuning, scoring, frontend work, or cover-letter work. Only change it if Girish explicitly asks for a resume layout/design update.
 - **Work in phases.** Explain changes before large refactors. Preserve existing functionality unless a change is clearly necessary.
 
 ### Application Folder System
@@ -449,6 +451,7 @@ Frontend workflow statuses are authoritative for this personalized fork. Legacy 
 | 17A | Human-reviewed Apply foundation — Apply tab, apply-session answers, profile truth table, upload paths, and final-submit guard | ✅ First batch |
 | 17B | Visible ATS apply filling — Playwright opens a visible browser, resolves posting-page Apply links, fills high-confidence fields/uploads, and stops before final Submit/Apply | ✅ First batch |
 | 17B.2 | Reliable apply-fill hardening — source-balanced scan ranking, multi-hop Apply resolver, natural field matching, checkbox/radio safety, and current-application upload guard | ✅ Complete |
+| 24 | Resume format lock — `templates/cv-template.html` is the final visual format for generated resume PDFs; future work should improve tailored content without editing the template unless explicitly requested | ✅ Complete |
 | 18 | **Expanded portals, next batch** — continue toward 150+ companies; add Workday/Teamtailor/BambooHR/custom parsers only for verified high-value Canadian sources | 🔜 Next |
 | 19 | **Email job alerts** — After scan, diff against last run; new jobs ≥ threshold → Resend API digest email | 🔜 After 18 |
 | 16 | **Settings / Profile page** — `/settings`: edit `profile.yml` and `portals.yml` from the browser | 🔜 After 19 |
@@ -478,6 +481,8 @@ Frontend workflow statuses are authoritative for this personalized fork. Legacy 
 **Job Discovery reset:** every evaluated score card should let the user evaluate another job without refreshing the page. Keep this available for Maybe/Skip outcomes as well as Apply outcomes.
 
 **Application detail previews:** resume, cover letter, and interview prep are viewable inside the platform with a Preview/Source toggle. Chat edits refresh the live Markdown preview immediately.
+
+**Resume format lock:** all generated resumes use `templates/cv-template.html` as the single final visual format. There is no runtime format/theme selection. `/api/generate-docs/{id}` may tailor content and project selection, but final resume styling is canonicalized to the template before PDF rendering. Preserve this template unless Girish explicitly requests a layout/design change.
 
 ### Scan Queue — How It Works (Phase 13)
 

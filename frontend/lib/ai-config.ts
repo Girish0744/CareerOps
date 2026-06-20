@@ -38,7 +38,16 @@ function unique(values: string[]): string[] {
 
 function isRetryableModelError(err: unknown): boolean {
   const text = err instanceof Error ? `${err.name} ${err.message}` : String(err);
-  return /429|quota|rate limit|resource_exhausted|too many requests|not found|unsupported|invalid model/i.test(text);
+  return /429|503|quota|rate limit|resource_exhausted|too many requests|unavailable|high demand|overloaded|deadline|timeout|internal|not found|unsupported|invalid model/i.test(text);
+}
+
+function isTransientModelError(err: unknown): boolean {
+  const text = err instanceof Error ? `${err.name} ${err.message}` : String(err);
+  return /429|503|quota|rate limit|resource_exhausted|too many requests|unavailable|high demand|overloaded|deadline|timeout|internal/i.test(text);
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export function geminiModelsForTask(task: GeminiTask): string[] {
@@ -57,18 +66,27 @@ export async function generateGeminiContent<TRequest extends Record<string, unkn
 ): Promise<{ result: TResult; modelUsed: string }> {
   const models = geminiModelsForTask(task);
   let lastError: unknown;
+  const attemptsPerModel = 3;
 
   for (const model of models) {
-    try {
-      const result = await ai.models.generateContent({ ...request, model });
-      console.log(`[gemini] ${task} used ${model}`);
-      return { result, modelUsed: model };
-    } catch (err) {
-      lastError = err;
-      if (!isRetryableModelError(err) || model === models[models.length - 1]) {
-        throw err;
+    for (let attempt = 1; attempt <= attemptsPerModel; attempt += 1) {
+      try {
+        const result = await ai.models.generateContent({ ...request, model });
+        console.log(`[gemini] ${task} used ${model}`);
+        return { result, modelUsed: model };
+      } catch (err) {
+        lastError = err;
+        if (isTransientModelError(err) && attempt < attemptsPerModel) {
+          console.warn(`[gemini] ${task} transient failure on ${model}; retrying attempt ${attempt + 1}/${attemptsPerModel}.`);
+          await wait(800 * attempt);
+          continue;
+        }
+        if (!isRetryableModelError(err) || model === models[models.length - 1]) {
+          throw err;
+        }
+        console.warn(`[gemini] ${task} failed on ${model}; trying next configured model.`);
+        break;
       }
-      console.warn(`[gemini] ${task} failed on ${model}; trying next configured model.`);
     }
   }
 

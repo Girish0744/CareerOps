@@ -19,6 +19,7 @@ There are two layers. Read `DATA_CONTRACT.md` for the full list.
 **System Layer (auto-updatable, DON'T put user data here):**
 - `modes/_shared.md`, `modes/oferta.md`, all other modes
 - `CLAUDE.md`, `*.mjs` scripts, `dashboard/*`, `templates/*`, `batch/*`
+- Girish fork exception: `templates/cv-template.html` is user-approved presentation state and must not be overwritten or edited unless Girish explicitly asks for a resume layout/design change.
 
 **THE RULE: When the user asks to customize anything (archetypes, narrative, negotiation scripts, proof points, location policy, comp targets), ALWAYS write to `modes/_profile.md` or `config/profile.yml`. NEVER edit `modes/_shared.md` for user-specific content.** This ensures system updates don't overwrite their customizations.
 
@@ -54,7 +55,7 @@ AI-powered job search automation built on Claude Code: pipeline tracking, offer 
 | `data/pipeline.md` | Inbox of pending URLs |
 | `data/scan-history.tsv` | Scanner dedup history |
 | `portals.yml` | Query and company config |
-| `templates/cv-template.html` | HTML template for CVs |
+| `templates/cv-template.html` | Final locked HTML template for Girish's generated resume PDFs |
 | `templates/cv-template.tex` | LaTeX/Overleaf template for CVs |
 | `generate-pdf.mjs` | Playwright: HTML to PDF |
 | `generate-latex.mjs` | LaTeX CV validator + pdflatex compiler |
@@ -211,7 +212,7 @@ This system is designed to be customized by YOU (AI Agent). When the user asks y
 - "Translate the modes to English" → edit all files in `modes/`
 - "Add these companies to my portals" → edit `portals.yml`
 - "Update my profile" → edit `config/profile.yml`
-- "Change the CV template design" → edit `templates/cv-template.html`
+- "Change the CV template design" → edit `templates/cv-template.html` only if Girish explicitly requests a resume layout/design change; otherwise keep the locked format unchanged
 - "Adjust the scoring weights" → edit `modes/_profile.md` for user-specific weighting, or edit `modes/_shared.md` and `batch/batch-prompt.md` only when changing the shared system defaults for everyone
 
 ### Language Modes
@@ -391,6 +392,7 @@ This project has been customized into a personal job application command center 
 - **NEVER edit master profile files during job-specific chat edits.** Application-specific edits go only into `applications/{id}/resume.md` or `applications/{id}/cover-letter.md`.
 - **ATS-friendly resumes only.** Single-column, standard headings, selectable text, no sidebars.
 - **Two-page max for resume PDFs.** Flag if content exceeds two pages.
+- **Resume format is locked.** `templates/cv-template.html` is Girish's final approved resume format. Do not edit it for content selection, ATS tuning, scoring, frontend work, or cover-letter work. Only change it if Girish explicitly asks for a resume layout/design update.
 
 ### Phased Implementation Plan
 
@@ -422,6 +424,7 @@ This project has been customized into a personal job application command center 
 | 21 | Compliant outreach assistant — public-source contact leads + LinkedIn/email drafts in Application Detail | ✅ Complete |
 | 22 | Recent-first discovery — Eluta Canada adapter, 24h freshness mode, role-priority ranking, manual job-alert import | ✅ Complete |
 | 23 | Review-state tracking — scan cards track New, Viewed, Evaluated, Docs Ready, Applied, and Archived states; Applications sort by latest activity timestamps | ✅ Complete |
+| 24 | Resume format lock — `templates/cv-template.html` is the final visual format for generated resume PDFs; future work should improve tailored content without editing the template unless explicitly requested | ✅ Complete |
 | 18 | **Expanded portals, next batch** — grow from 19 → 150+ companies; add Workday/Teamtailor/BambooHR providers | 🔜 Next |
 | 19 | **Email job alerts** — diff scan queue after run; new jobs ≥ threshold → Resend API digest email | 🔜 After 18 |
 | 16 | **Settings / Profile page** — `/settings`: edit `profile.yml` and `portals.yml` from browser | 🔜 After 19 |
@@ -433,6 +436,8 @@ This project has been customized into a personal job application command center 
 1. User pastes JD or URL → clicks **Evaluate** → `POST /api/evaluate` → score card shown (0–100)
 2. User decides — no automatic doc generation
 3. If user clicks **Generate Resume & Cover Letter** → `POST /api/generate-docs/{id}` → PDFs created
+
+**Resume format lock:** all generated resumes use `templates/cv-template.html` as the single final visual format. There is no runtime format/theme selection. `/api/generate-docs/{id}` may tailor content and project selection, but final resume styling is canonicalized to the template before PDF rendering. Preserve this template unless Girish explicitly requests a layout/design change.
 
 **Score thresholds:** 85+ Strong Apply (emerald) · 70–84 Apply (blue) · 50–69 Maybe (amber) · <50 Skip (red). Gate is informational, not blocking.
 

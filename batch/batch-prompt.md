@@ -282,15 +282,15 @@ next_action: "{one concrete next step}"
 
 ### Paso 4 — Generar PDF
 
-1. Lee `cv.md` + `i18n.ts`
-2. Extrae 15-20 keywords del JD
+1. Lee `cv.md`, `config/profile.yml`, `modes/_profile.md`, `article-digest.md` y `templates/cv-template.html`
+2. Extrae 15-20 keywords, skills, tools, responsabilidades y lenguaje específico del JD
 3. Detecta idioma del JD → idioma del CV (EN default)
 4. Detecta ubicación empresa → formato papel: US/Canada → `letter`, resto → `a4`
 5. Detecta arquetipo → adapta framing
-6. Reescribe Professional Summary inyectando keywords
-7. Selecciona top 3-4 proyectos más relevantes
+6. Reescribe Profile con máximo 4 frases, cero first-person, y keywords naturales del JD
+7. Selecciona proyectos desde el master resume: mínimo 3, 4 solo si page 2 queda vacía y hay espacio
 8. Reordena bullets de experiencia por relevancia al JD
-9. Construye competency grid (6-8 keyword phrases)
+9. Construye Technical Skills Summary solo con skills reales del master resume, reordenadas por relevancia al JD
 10. Inyecta keywords en logros existentes (**NUNCA inventa**)
 11. Genera HTML completo desde template (lee `templates/cv-template.html`)
 12. Escribe HTML a `/tmp/cv-candidate-{company-slug}.html`
@@ -305,26 +305,34 @@ node generate-pdf.mjs \
 
 **Reglas ATS:**
 - Single-column (sin sidebars)
-- Headers estándar: "Professional Summary", "Work Experience", "Education", "Skills", "Certifications", "Projects"
+- Headers estándar y en este orden exacto: "Profile", "Highlights of Qualifications", "Technical Skills Summary", "Professional Experience", "Projects", "Education", "Extracurricular Activities", "Awards and Recognition", "Certifications & Memberships"
+- Page 1: Profile, Highlights, Technical Skills Summary, Professional Experience
+- Page 2: debe empezar con Projects; conservar el wrapper `page-two` del template alrededor de Projects → Certifications
 - Sin texto en imágenes/SVGs
 - Sin info crítica en headers/footers
 - UTF-8, texto seleccionable
 - Keywords distribuidas: Summary (top 5), primer bullet de cada rol, Skills section
 
 **Diseño:**
-- Fonts: Space Grotesk (headings, 600-700) + DM Sans (body, 400-500)
-- Fonts self-hosted: `fonts/`
-- Header: Space Grotesk 24px bold + gradiente cyan→purple 2px + contacto
-- Section headers: Space Grotesk 13px uppercase, color cyan `hsl(187,74%,32%)`
-- Body: DM Sans 11px, line-height 1.5
-- Company names: purple `hsl(270,70%,45%)`
-- Márgenes: 0.6in
-- Background: blanco
+- `templates/cv-template.html` es el formato final aprobado para los resumes de Girish.
+- No cambiar fonts, márgenes, colores, spacing, section styling, ni page-break CSS desde batch.
+- No hay selección dinámica de themes/formats por oferta.
+- Si el resume se ve débil, mejorar selección de contenido, densidad, proyectos y wording; no modificar el template salvo que Girish pida explícitamente un cambio de layout/diseño.
+- `generate-pdf.mjs` debe respetar el `@page` del template.
 
 **Estrategia keyword injection (ético):**
 - Reformular experiencia real con vocabulario exacto del JD
 - NUNCA añadir skills the candidate doesn't have
 - Ejemplo: JD dice "RAG pipelines" y CV dice "LLM workflows with retrieval" → "RAG pipeline design and LLM orchestration workflows"
+
+**Reglas de contenido para Girish:**
+- Source of truth: master resume synced into `cv.md`; do not invent or inflate
+- Mantener estructura del master resume
+- Proyectos: mínimo 3; cada proyecto debe tener Stack + 2-3 bullets de evidencia cuando sea posible
+- Si es Data Analytics, priorizar proyectos data/analytics sobre web-only
+- No repetir liderazgo entre Profile, Highlights y Extracurriculars
+- No sonar genérico/AI: sin "passionate about", "team player", "results-driven", "fast-paced environment", "leveraging"
+- Si el PDF supera 2 páginas, recortar en este orden: 4º proyecto opcional, 3º extracurricular opcional, OER 3→2 bullets, project content bullets 3→2, JMeter cert. Nunca bajar de 3 proyectos
 
 **Template placeholders (en cv-template.html):**
 
@@ -339,20 +347,14 @@ node generate-pdf.mjs \
 | `{{PORTFOLIO_URL}}` | (from profile.yml) |
 | `{{PORTFOLIO_DISPLAY}}` | (from profile.yml) |
 | `{{LOCATION}}` | (from profile.yml) |
-| `{{SECTION_SUMMARY}}` | Professional Summary / Resumen Profesional |
 | `{{SUMMARY_TEXT}}` | Summary personalizado con keywords |
-| `{{SECTION_COMPETENCIES}}` | Core Competencies / Competencias Core |
-| `{{COMPETENCIES}}` | `<span class="competency-tag">keyword</span>` × 6-8 |
-| `{{SECTION_EXPERIENCE}}` | Work Experience / Experiencia Laboral |
 | `{{EXPERIENCE}}` | HTML de cada trabajo con bullets reordenados |
-| `{{SECTION_PROJECTS}}` | Projects / Proyectos |
-| `{{PROJECTS}}` | HTML de top 3-4 proyectos |
-| `{{SECTION_EDUCATION}}` | Education / Formación |
+| `{{PROJECTS}}` | HTML de 3 proyectos mínimo, 4 opcional si cabe |
 | `{{EDUCATION}}` | HTML de educación |
-| `{{SECTION_CERTIFICATIONS}}` | Certifications / Certificaciones |
-| `{{CERTIFICATIONS}}` | HTML de certificaciones |
-| `{{SECTION_SKILLS}}` | Skills / Competencias |
-| `{{SKILLS}}` | HTML de skills |
+| `{{EXTRACURRICULAR}}` | HTML de actividades extracurriculares |
+| `{{AWARDS}}` | HTML de premios |
+| `{{CERTIFICATIONS}}` | Texto plano para certificaciones/memberships |
+| `{{SKILLS}}` | HTML de Technical Skills Summary |
 
 ### Paso 5 — Tracker Line
 
