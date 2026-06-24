@@ -7,6 +7,7 @@ import { promisify } from 'util';
 import { getApplication, saveJobDescriptionSnapshot, updateApplicationFields } from '@/lib/filesystem';
 import { apiErrorMessage } from '@/lib/errors';
 import { generateGeminiContent } from '@/lib/ai-config';
+import { refreshDocumentPdfIfStale } from '@/lib/document-renderer';
 import { extractApplicantProfile } from '@/lib/apply-assistant';
 import {
   assertUsableJobDescription,
@@ -216,6 +217,19 @@ function collectResumeQualityWarnings(html: string, markdown: string) {
     }
   });
 
+  // Check total project bullet count and overflow risk
+  const totalProjectBullets = projectBlocks.reduce((sum, block) => sum + countMatches(block, /<li\b/gi), 0);
+  if (totalProjectBullets < 9) {
+    warnings.push(`only ${totalProjectBullets} project bullets found — minimum is 9 (3 projects × 3 bullets each)`);
+  }
+  if (totalProjectBullets > 11) {
+    const extraSection = html.match(/Extracurricular Activities[\s\S]*?(?=Awards and Recognition|$)/i)?.[0] ?? '';
+    const extraEntries = countMatches(extraSection, /<div\s+class=["']entry["']/gi);
+    if (extraEntries >= 3) {
+      warnings.push(`${totalProjectBullets} project bullets + ${extraEntries} extracurricular entries will likely overflow to 3 pages`);
+    }
+  }
+
   const summary = html.match(/<div\s+class=["']summary["'][^>]*>([\s\S]*?)<\/div>/i)?.[1] ?? '';
   const summaryText = stripHtml(summary);
   const sentenceCount = summaryText ? countMatches(summaryText, /[.!?](?:\s|$)/g) : 0;
@@ -226,6 +240,26 @@ function collectResumeQualityWarnings(html: string, markdown: string) {
   if (sentenceCount > 4 || summaryWords > 95) {
     warnings.push('profile summary should stay concise: max 4 sentences and roughly 4 resume lines');
   }
+  if (sentenceCount !== 4 && summaryText) {
+    warnings.push(`profile has ${sentenceCount} sentences — should be exactly 4`);
+  }
+
+  // Check for candidate name in profile
+  const summaryLower = summaryText.toLowerCase();
+  if (summaryLower.includes('girish') || summaryLower.includes('bhuteja')) {
+    warnings.push('profile contains the candidate\'s name — profile should use impersonal resume voice');
+  }
+
+  // Check for third-person pronouns in profile
+  const thirdPerson = summaryText.match(/\b(?:he|his|him|she|her)\b/i);
+  if (thirdPerson) {
+    warnings.push(`profile contains third-person pronoun: "${thirdPerson[0]}" — use impersonal resume voice`);
+  }
+
+  // Check for education-first profile opening
+  if (/^(?:computer science|cs honours|bachelor|b\.?sc?\.?|honours candidate|graduating)/i.test(summaryText.trim())) {
+    warnings.push('profile opens with education/credentials — should lead with value/capabilities');
+  }
 
   const firstPerson = plainText.match(/\b(?:I|me|my|mine|we|our|ours|us)\b/);
   if (firstPerson) {
@@ -235,6 +269,26 @@ function collectResumeQualityWarnings(html: string, markdown: string) {
   if (filler) {
     warnings.push(`resume contains AI/generic filler: "${filler[0]}"`);
   }
+
+  // Check for banned power verbs
+  const powerVerb = plainText.match(/\b(?:Spearheaded|Championed|Orchestrated|Revolutionized|Pioneered)\b/);
+  if (powerVerb) {
+    warnings.push(`resume uses overstated power verb: "${powerVerb[0]}" — use honest verbs like led, built, managed`);
+  }
+
+  // Check for banned profile phrases
+  if (summaryText) {
+    const bannedProfile = summaryText.match(/\b(?:proven track record|adept at|expertise in|deep technical experience)\b/i);
+    if (bannedProfile) {
+      warnings.push(`profile contains banned phrase: "${bannedProfile[0]}"`);
+    }
+  }
+
+  // Check for em dashes
+  if (plainText.includes('\u2014')) {
+    warnings.push('resume contains em dashes (\u2014) — use commas or semicolons instead');
+  }
+
   if (htmlLower.includes('<table') && !/<table\b[^>]*class=["'][^"']*\bskills-table\b/i.test(html)) {
     warnings.push('tables should only be used for the ATS-friendly skills table');
   }
@@ -289,6 +343,25 @@ function isPlaceholderMarkdown(markdown: string): boolean {
     || /\[(?:resume|tailored resume|full tailored resume|content)[^\]]*\]/i.test(trimmed);
 }
 
+function extractBlock(text: string, tag: string): string {
+  const delim = text.match(new RegExp(`===${tag}===\\s*([\\s\\S]*?)\\s*===${tag === 'HTML' ? 'END_HTML' : 'END_MARKDOWN'}===`));
+  if (delim) return delim[1].trim();
+  const lang = tag === 'HTML' ? '(?:html)?' : '(?:markdown|md)?';
+  const code = text.match(new RegExp('```' + lang + '\\s*([\\s\\S]*?)\\s*```'));
+  if (code) return code[1].trim();
+  return '';
+}
+
+function extractAllHtml(text: string): string {
+  const delim = text.match(/===HTML===\s*([\s\S]*?)\s*===END_HTML===/);
+  if (delim) return delim[1].trim();
+  const code = text.match(/```html\s*([\s\S]*?)\s*```/);
+  if (code) return code[1].trim();
+  const doctype = text.match(/(<!DOCTYPE html[\s\S]*<\/html>)/i);
+  if (doctype) return doctype[1].trim();
+  return '';
+}
+
 export async function POST(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -314,7 +387,8 @@ export async function POST(
 
   // ── 1. RESUME ──────────────────────────────────────────────────────────────
 
-  const resumeSystem = `You are an expert ATS resume writer. Produce the strongest possible tailored 2-page resume for this candidate. The resume must clear ATS first, then read naturally for HR, and give a technical manager confidence that the evidence is real.
+  const resumeSystem = `
+You are an expert ATS resume writer. Produce the strongest possible tailored 2-page resume for this candidate. The resume must clear ATS first, then read naturally for HR, and give a technical manager confidence that the evidence is real.
 
 Use this workflow in order:
 1. Read the job description carefully.
@@ -337,6 +411,27 @@ MASTER RESUME SOURCE:
 - config/profile.yml points to the master DOCX source when available.
 - cv.md is the synced markdown source used by this app at generation time.
 
+===== VOICE AND TONE (read this before writing anything) =====
+This resume should sound like a sharp CS student who has actually built things wrote it, not like a career services AI filled in a template. Test every bullet by reading it out loud. If it sounds like something you'd read on a resume-writing blog or an AI prompt output, rewrite it.
+
+Markers of human writing:
+- Specific over general: "classified 9,500+ Kepler candidates" not "processed large datasets"
+- Tool names appear because they were used, not because the JD lists them
+- Bullets describe WHAT WAS BUILT and WHAT IT DOES, not abstract capabilities
+- Short, punchy structure; a bullet should land in one breath
+- Natural sentence rhythm; not every bullet starts with a past-tense power verb followed by three prepositional phrases
+
+Markers of AI writing (reject on sight):
+- Three or more adjectives stacked before a noun
+- "Spearheaded", "Championed", "Orchestrated", "Revolutionized" for student/co-op work
+- Vague results: "improving efficiency", "enhancing performance", "driving impact"
+- Mirroring JD phrases word-for-word without integrating them naturally into the bullet's own logic
+- Every bullet following the same syntactic pattern (verb + object + "using" + tool list + result clause)
+- Phrases like "cutting-edge", "innovative solutions", "fast-paced environment", "comprehensive", "robust", "rigorous"
+- Passive ownership verbs: "Possesses", "Utilizes", "Demonstrates"
+
+Tone target: honest, direct, student-appropriate. This candidate is graduating August 2026. The resume should reflect real hands-on project and co-op experience, not imply 10 years of professional seniority.
+
 ===== REQUIRED STRUCTURE AND PAGE PLAN =====
 The resume must keep the same section structure as the master resume, in this exact order:
 1. Profile
@@ -355,6 +450,45 @@ The template contains a <div class="page-two"> wrapper before Projects. Keep tha
 Professional Experience must stay compact enough to finish on page 1: use the 2 strongest OER bullets by default and 2 Olive Branch bullets. Add a 3rd OER bullet only if it is short and page 1 still fits.
 The second page should look full. Use space intelligently: include 3 projects by default; add a 4th project only if the second page would otherwise look sparse. If space is tight, keep the best 3 projects and expand them with stronger relevant bullets instead of dropping below 3 projects.
 Each selected project should have at least 3 bullets when possible: Stack first, then 2+ evidence/impact bullets.
+
+PAGE 1 FILLING STRATEGY:
+Page 1 must also be completely full. With 4-sentence profile, 5 highlights, 5 skill rows, and 4 experience bullets (2 OER + 2 Olive Branch), page 1 is usually tight. But if there is visible whitespace at the bottom of page 1, apply these fixes IN ORDER:
+1. FIRST: Write longer, more detailed experience bullets. Each experience bullet should be 20-30 words (roughly 1.5-2 printed lines). If your bullets are short single-line statements, expand them with JD-relevant technical detail from the master resume.
+2. SECOND: Add a 3rd OER bullet if the master resume has a relevant one for this JD. Keep it to 1-1.5 lines.
+3. LAST RESORT: Slightly expand highlights bullets with additional coursework or tool mentions. Do not exceed 5 highlights.
+
+PAGE 2 CONTENT BUDGET (CRITICAL — follow these exact counts):
+
+You cannot render the page, so you MUST follow this bullet budget exactly. These counts have been calibrated to produce a full 2-page resume without overflow.
+
+STANDARD PAGE 2 BUDGET (use this by default):
+- 3 projects × (1 stack bullet + 2 content bullets) = 9 project bullets
+- Education: 1 entry, 2 bullets
+- 2 extracurricular entries × 1 bullet each = 2 bullets
+- 2 award entries × 1 bullet each = 2 bullets
+- 1 certifications line
+- TOTAL: 15 items on page 2
+
+BULLET LENGTH TARGET: Each content bullet should be 20-30 words (roughly 1.5-2 printed lines). This is where you fill the page — through LONGER, RICHER bullets, not through MORE bullets. A 25-word bullet with technical detail and JD keywords is worth more than two 10-word bullets.
+
+IF PAGE 2 LOOKS SPARSE with the standard budget (all bullets are short, under 15 words each):
+Apply ONE of these adjustments (not all of them — pick the single best option):
+- OPTION A (preferred): Expand ONE project from 2 to 3 content bullets. Pick the project most relevant to the JD. This brings the total to 10 project bullets.
+- OPTION B: Add the 3rd extracurricular entry. This brings extracurriculars to 3 entries.
+- OPTION C: Write all content bullets at the longer end (25-30 words each) with more technical detail.
+Do NOT apply all three options simultaneously — that causes page overflow.
+
+HARD LIMIT: Never exceed 11 project bullets + 3 extracurricular entries on page 2. That combination ALWAYS overflows to page 3. If you have 12 project bullets AND 3 extracurricular entries, you WILL overflow. Drop one or the other.
+
+SAFE COMBINATIONS THAT FIT ON PAGE 2:
+- 9 project bullets + 2 extracurricular entries (standard — always fits)
+- 10 project bullets + 2 extracurricular entries (fits if bullets are 20-25 words)
+- 9 project bullets + 3 extracurricular entries (fits if bullets are 20-25 words)
+- 12 project bullets + 2 extracurricular entries (TIGHT — only if bullets are under 20 words each)
+
+COMBINATIONS THAT OVERFLOW TO PAGE 3 (never use):
+- 12 project bullets + 3 extracurricular entries (this is what causes 3-page overflow)
+- Any combination with 4+ projects
 
 PROJECT URLS (use exactly these in HTML links):
 - Zonalyze: GitHub https://github.com/Girish0744/Zonalyze
@@ -377,6 +511,8 @@ Read the JD and classify into exactly one:
 - CSHARP_DOTNET: C#, .NET, Windows Forms, enterprise desktop, SQL Server primary
 - HELPDESK_IT: troubleshooting, ticketing, user support, IT operations, help desk primary
 - GENERAL: mixed or none of the above clearly dominant
+
+Also note the COMPANY DOMAIN. If the company is not a pure tech company (e.g., mining, banking, healthcare, insurance), the profile must acknowledge the industry context where possible.
 
 ===== STEP 2: SELECT PROJECTS FROM MASTER RESUME =====
 Select at least 3 projects from the master resume. Use exactly 3 by default. Add a 4th only if page 2 needs more density and the project is strongly relevant to the JD.
@@ -404,35 +540,72 @@ For each project:
 - Live site URL added if available
 - Date range in full (e.g. "Jan 2026 – Present")
 - Stack as first bullet (front-load JD-relevant tech)
-- 2–3 content bullets after the Stack bullet (metric-bearing first); REWORD bullets to echo JD language — see Step 5 for rewording rules
+- MANDATORY: 3 content bullets after the Stack bullet (metric-bearing first). This means each project has EXACTLY 4 bullets total: 1 stack + 3 content. The master resume has 3-4 content bullets per project — use 3 of them, reconstructed for the JD.
+- NEVER output a project with only 1 content bullet. That is a failure. Minimum is 2 content bullets; target is 3.
+- Each content bullet should be 15-30 words long. If a bullet is under 12 words, it is too short — add technical detail from the master resume.
+- Do not merge two separate facts into one mega-bullet. If the master resume has "classified 9,500+ candidates with 94.9% accuracy" and "implemented MLflow experiment tracking to log 9 metrics per run", those are TWO bullets, not one.
 - Do not pick projects just because they are impressive; pick the projects that best match the job. For a Data Analytics role, choose analytics/data projects over unrelated web-only projects.
 
-===== STEP 3: PROFILE PARAGRAPH (exactly 4 sentences, zero first-person) =====
-Sentence 1: Identity + core stack — 3–4 specific tools from the JD that the candidate actually has
-Sentence 2: Capability — mirror the JD's core responsibilities in Girish's language
-Sentence 3: Differentiator — one sentence about project background that connects to the JD's domain
-Sentence 4: FIXED — "Available for full-time roles starting August 2026."
+PROJECT BULLET COUNT VERIFICATION (check this before outputting):
+Count your project bullets. Default target:
+- Project 1: 1 stack + 2 content = 3 bullets
+- Project 2: 1 stack + 2 content = 3 bullets
+- Project 3: 1 stack + 2 content = 3 bullets
+- TOTAL: 9 project bullets (standard)
 
-Profile templates by archetype (adapt to JD — replace bracketed slots with actual JD keywords):
-SWE_FULLSTACK: "Full-stack developer with hands-on experience designing and deploying web applications using React, TypeScript, FastAPI, and PostgreSQL. Experienced in building end-to-end solutions from database design and REST APIs through to deployed frontends with real-time features. Strong project background in accessible web platforms, containerised deployments, and technical team coordination. Available for full-time roles starting August 2026."
-AI_ML: "AI/ML engineer with hands-on experience designing and deploying machine learning pipelines using Python, scikit-learn, MLflow, and [JD tools]. Experienced in building end-to-end solutions from data preprocessing and feature engineering through model training, evaluation, and deployment. Strong project background in experiment tracking, model comparison, and production deployment on AWS. Available for full-time roles starting August 2026."
-DA_BA: "Data analyst with hands-on experience building data pipelines and translating analytical findings into actionable recommendations using Python, SQL, Pandas, and [JD-specific tools like Power BI/Excel]. Experienced in data compilation, validation, and quality assurance across large datasets, with a track record of automating workflows and maintaining reporting systems. Strong project background in cross-functional data analysis, statistical trend identification, and evidence-based decision support. Available for full-time roles starting August 2026."
-DATA_ENGINEER: "Data engineer with hands-on experience building data pipelines and infrastructure using Python, SQL, PostgreSQL, and AWS. Experienced in transforming raw datasets into model-ready matrices, automating data workflows, and maintaining data quality across large-scale systems. Strong project background in pipeline development, ETL processes, and cloud deployment. Available for full-time roles starting August 2026."
-BACKEND_JAVA_SYSTEMS: "Java-certified software developer with hands-on experience building backend, database-backed, and networked systems using C#, C++, SQL Server, TCP/IP, and REST API patterns. Experienced in implementing modular service logic, parameterized data access layers, defensive protocol handling, and multi-tier tests across academic and project systems. Strong project background in MediNet+, TelemetryDownloader, and Zonalyze, with Java SE certification supporting object-oriented backend fundamentals. Available for full-time roles starting August 2026."
-SYSTEMS_CPP: "Software developer with hands-on experience building networked systems and protocol implementations in C++ using TCP/IP, binary packet design, and state machine architecture. Experienced in writing testable, low-level code with comprehensive test coverage across unit, integration, and system tiers. Strong project background in file transfer protocols, server lifecycle management, and multi-tier system testing. Available for full-time roles starting August 2026."
-CSHARP_DOTNET: "Software developer with hands-on experience building multi-role desktop applications in C# using Windows Forms, SQL Server, and TCP networking. Experienced in writing parameterised queries, multi-tier test suites, and server communication layers for complex, multi-user systems. Strong project background in hospital management systems, restaurant platforms, and full-stack web applications. Available for full-time roles starting August 2026."
-HELPDESK_IT: "IT support professional with hands-on experience in technical troubleshooting, platform management, and workflow automation using HTML, CSS, WordPress, and Power Automate. Experienced in WCAG accessibility testing, cross-platform issue resolution, and documenting workflows to support non-technical users. Strong background in open-source platform contributions, SharePoint management, and integrating third-party APIs for platform reliability. Available for full-time roles starting August 2026."
-GENERAL: use SWE_FULLSTACK template, adapt stack to JD keywords
+You may expand ONE project to 3 content bullets (total = 10) if page 2 needs more density and you have only 2 extracurricular entries. NEVER go to 12 project bullets unless you have only 2 extracurricular entries AND all bullets are under 20 words.
+If your total is under 9, you have NOT followed the instructions. Go back and add content bullets from the master resume.
+
+===== STEP 3: PROFILE PARAGRAPH (exactly 4 sentences, zero first-person or third-person) =====
+PROFILE RULES (not rigid templates — write naturally each time):
+- Sentence 1: LEAD WITH VALUE, NOT CREDENTIALS. Start with a role-relevant identity and the candidate's strongest JD-relevant capabilities plus 3-4 tools. The first line a recruiter reads must answer "what can this person do for us?" — not "what school do they go to?"
+- Sentence 2: Mirror the JD's TOP responsibility in the candidate's own words. What does this job actually DO day to day? Say the candidate can do that.
+- Sentence 3: One concrete project fact or capability that connects to the JD's domain or the company's industry. Not generic "strong project background in X" — name a specific capability from a real project.
+- Sentence 4: FIXED — "Available for full-time roles starting August 2026."
+- EXACTLY 4 sentences. Count them before outputting. If you have 3 or 5, fix it.
+
+CRITICAL PROFILE PROHIBITIONS:
+- NEVER start the profile with education, degree name, GPA, college name, or graduation date. These already appear in Highlights bullet 1 AND in the Education section. Repeating them in sentence 1 wastes the most valuable line of the resume and makes it look like the candidate has nothing else to lead with.
+- NEVER use the candidate's name in the profile paragraph. No "Girish Bhuteja is..." or "Girish has..."
+- NEVER use third-person pronouns (he, his, him). The profile is written in impersonal resume voice, not a bio.
+- NEVER use first-person pronouns (I, my, me, we, our).
+- The profile reads like a resume summary, not a biography. Every sentence is a noun phrase or impersonal statement.
+
+CORRECT vs WRONG profile openings:
+- CORRECT: "Data-focused developer with applied experience in data analysis, stakeholder engagement, and translating complex datasets into actionable business insights."
+- CORRECT: "Developer with co-op and project experience building workflow automation and data reporting tools using Python, SQL, and Power Automate."
+- CORRECT: "Software developer experienced in building end-to-end ML pipelines and deploying full-stack applications using Python, React, and AWS."
+- WRONG: "Computer Science Honours candidate (3.74 GPA) graduating August 2026 with experience in..." (leads with credential already stated in Highlights and Education — wastes profile space)
+- WRONG: "CS Honours student at Conestoga College with deployed projects in..." (leads with school name — recruiter doesn't care about school first, they care about capabilities)
+- WRONG: "Recent graduate with a strong academic background in..." (leads with graduation status — says nothing about value)
+- WRONG: "Girish Bhuteja is a data analyst with..."
+- WRONG: "He builds and manages data-driven tools..."
+
+NO-REPEAT RULE: The profile must NOT repeat facts that already appear word-for-word in Highlights or Education. The degree, GPA, graduation date, coursework, co-op conversion, and award are all stated elsewhere. The profile's job is to SELL CAPABILITIES using JD language — it should contain information and framing that appears NOWHERE else on the resume.
+
+If the company is NOT a pure tech company (mining, insurance, banking, healthcare, retail, etc.), sentence 1 or 2 should reference the industry context naturally. Example for a mining company: "...with project experience in geospatial data analysis and infrastructure monitoring systems" rather than generic web dev language. BUT only claim experience the candidate actually has. If the candidate has no retail analytics experience, do NOT say "applied experience in retail analytics." Instead, frame real experience in ways that connect to the industry: "applied experience in data analysis, workflow automation, and stakeholder engagement" is honest and relevant to retail analytics without claiming direct retail experience.
+
+CRITICAL ANTI-FABRICATION RULE FOR PROFILE:
+Every claim in the profile must trace back to a specific fact in the master resume. If you cannot point to which project, role, or skill proves the claim, delete it. Common fabrications to watch for:
+- "experience in retail analytics" — only valid if the master resume shows retail analytics work (Home Depot freight role does NOT count)
+- "building dashboards" — only valid if a project or role actually built a dashboard (having Power BI in skills is NOT enough)
+- "proven track record of X" — too strong for a student; say "applied experience in X" or "project experience in X"
+- "expertise in X" — too strong for a graduating student; use "applied experience in X" or "project experience in X"
 
 Profile anti-patterns — NEVER use:
+- The candidate's name ("Girish Bhuteja is...", "Girish has...")
+- Third-person pronouns ("he", "his", "him")
+- Education/degree/GPA/school as the opening of sentence 1
 - "Possesses", "Utilizes" — always active voice
+- "proven track record" — say "applied experience" or "project experience"
 - "deep technical experience" — say "hands-on experience" or "applied experience"
-- "rigorous" (statistical analysis, testing, etc.) — drop the adjective
-- "robust" — say "reliable" or drop it
-- "leveraging" or "utilized" — say "using" or choose a stronger action verb
+- "rigorous", "robust" — drop the adjective or replace with evidence
+- "leveraging" or "utilized" — say "using"
+- "Adept at" — too formal; rephrase with active construction
 - "comprehensive", "cutting-edge", "innovative solutions", "fast-paced environment"
 - em dashes — use commas or semicolons
-- any first-person pronoun
+- any first-person pronoun (I, my, me, we, our)
+- Starting every profile with the identical "X developer with hands-on experience designing and deploying" pattern
 
 ===== STEP 4: HIGHLIGHTS OF QUALIFICATIONS — always exactly 5 bullets =====
 1. (always): "Bachelor of Computer Science (Honours) candidate at Conestoga College with a 3.74 GPA, graduating August 2026; coursework includes [pick 4–5 most relevant from: Software Engineering, OOP, Data Structures and Algorithms, Database Systems, Computer Networks, OS and Security, Cloud Computing, Big Data, AI and Machine Learning, Advanced Topics in AI/ML]"
@@ -460,15 +633,34 @@ Profile anti-patterns — NEVER use:
 
 NOTE on leadership: leadership is mentioned in bullet 5 — do NOT repeat it in the profile or extracurriculars bullets.
 
-===== STEP 5: EXPERIENCE BULLETS — REWORD, DON'T JUST COPY =====
-Do NOT copy master resume bullets verbatim. REWORD each bullet to echo the JD's language and framing while preserving the candidate's natural resume tone. The facts stay the same; the framing shifts to match what the JD values. Keep wording human, specific, and grounded.
+===== STEP 5: EXPERIENCE BULLETS — RECONSTRUCT, DON'T SYNONYM-SWAP =====
+Do NOT copy master resume bullets verbatim. Do NOT just swap synonyms. RECONSTRUCT each bullet from scratch to speak the JD's language while preserving the candidate's facts.
 
-Rewording examples:
+REWORDING MEANS RECONSTRUCTION:
+1. Read the JD bullet/requirement you are targeting
+2. Identify the FACT from the master resume that proves the candidate can do it
+3. Write a NEW bullet from scratch that presents that fact using the JD's framing and vocabulary
+4. The bullet should read as if someone who does this job daily wrote it about their own work
+5. Test: if you removed the JD, would this bullet still sound natural on its own? If yes, keep it. If it reads like a JD echo with names swapped in, rewrite it.
+
+RECONSTRUCTION EXAMPLES:
 - Master CV: "Developed and maintained accessible HTML and CSS templates for Pressbooks..."
-- DA/BA version: "Maintained structured data entry templates and document management workflows in SharePoint to support data organisation and cross-departmental reporting"
-- SWE version: "Built and maintained accessible HTML/CSS templates for Pressbooks and H5P Studio supporting 1,000+ students across Business, Health Sciences, and Community Services"
+- BAD reword: "Maintained accessible HTML and CSS templates for Pressbooks and other platforms" (synonym swap, same structure)
+- GOOD reword for DA/BA JD: "Maintained structured content templates and document management workflows in SharePoint and Pressbooks, supporting cross-departmental data organisation for 1,000+ users"
+- GOOD reword for SWE JD: "Built accessible HTML/CSS templates across Pressbooks and H5P Studio, tested against WCAG standards, serving 1,000+ students in three academic programs"
 
-OER role — 2 bullets by default, 3 only if the extra bullet is short and page 1 still fits. Select and reword by archetype:
+- Master CV: "Automated repetitive workflows using Power Automate and maintained GitHub repositories"
+- BAD reword: "Automated workflows using Power Automate and maintained code repositories" (barely changed)
+- GOOD reword for Data Engineer JD: "Built Power Automate pipelines to replace manual reporting tasks, cutting recurring documentation effort; maintained version-controlled repositories for all project assets"
+- GOOD reword for IT/Help Desk JD: "Automated repetitive admin workflows using Power Automate and managed GitHub repositories to track open-source contributions and issue resolution across platforms"
+
+SYNTACTIC VARIETY RULE: Do not start every bullet with the same sentence structure. Mix it up:
+- "Built X using Y, reducing Z" (standard)
+- "Using X, designed a system that does Y across Z" (inverted)
+- "X system covering Y workflows, serving Z users" (noun-led, for stack bullets)
+- Vary the position of tool names, metrics, and outcomes within the sentence
+
+OER role — 2 bullets by default, 3 only if the extra bullet is short and page 1 still fits. Select and reconstruct by archetype:
   SWE_FULLSTACK: emphasise HTML/CSS/templates, GitHub repos, WCAG accessibility testing
   AI_ML:         emphasise Power Automate automation, data-backed engagement metric (20%), open-source contributions
   DA_BA:         emphasise Power Automate automation, data management/SharePoint, engagement/metrics tracking
@@ -481,7 +673,7 @@ OER role — 2 bullets by default, 3 only if the extra bullet is short and page 
 Always include the italic context note for OER:
 "Part-time and co-op role; converted to co-op based on performance; retained after departmental restructuring"
 
-Olive Branch — keep both bullets, front-load the JD-relevant one. REWORD to echo JD language:
+Olive Branch — keep both bullets, front-load the JD-relevant one. RECONSTRUCT to echo JD language:
   DA_BA/DATA_ENGINEER: "Optimised backend architecture by integrating 5+ third-party APIs, improving data synchronisation efficiency and reducing user-facing response time"
   BACKEND_JAVA_SYSTEMS: "Integrated 5+ third-party APIs and optimized backend architecture, improving data synchronization efficiency and reducing user-facing response time"
   SWE_FULLSTACK:       "Built React components for mentorship matching workflows and implemented Node.js API routes; integrated 5+ third-party APIs and optimised backend architecture"
@@ -550,17 +742,21 @@ If the score is below 50, fitLevel is Skip, or the JD/title includes senior, lea
 - Never list Go, Golang, Spring Boot, Kubernetes, Kafka, or banking systems experience unless present in the master resume
 - Prefer backend/system projects: MediNet+, TelemetryDownloader, Zonalyze
 
-===== STEP 7: EXTRACURRICULAR — 2 always + 1 optional =====
+===== STEP 7: EXTRACURRICULAR — 2 default + 1 optional =====
 Always include (1 bullet each):
 1. President, IT Club, Conestoga College — Apr 2025 – Present
 2. Director, Student Success Team, HackTheBrain, Toronto Tech Week — Mar 2025 – Jul 2025
 
-Add 1 more ONLY if page space permits (ranked by JD relevance):
+Add the 3rd entry ONLY if you have 9 project bullets (not 10-12). The 3rd extracurricular + 10+ project bullets WILL overflow the page. Pick one or the other:
 - Area Leader, AI Build Lab, Toronto Tech Week (May 2026 – Jun 2026) — good for AI/tech roles
-- Student Experience Mentor, Conestoga College (Sept 2025 – Dec 2025)
+- Student Experience Mentor, Conestoga College (Sept 2025 – Dec 2025) — good for engagement/onboarding roles
 - Subcommittee Member, GDG Waterloo (Apr 2026 – Present)
 
 DROP: Orientation Volunteer, Leadership Workshop Facilitator, Volunteering Panel Speaker
+
+EXTRACURRICULAR VERB BAN: Do NOT use "Spearheaded" for any extracurricular bullet. Use "Led", "Planned", "Managed", "Organized", "Coordinated", or "Created" instead. "Spearheaded" is an overused AI-resume verb and will be rejected on sight. This rule is non-negotiable.
+
+Extracurricular bullet rule: Do NOT repeat leadership claims already made in Highlights bullet 5. Each bullet should state a DIFFERENT fact — what was done, who it served, or what was produced.
 
 ===== STEP 8: AWARDS — always include both =====
 1. Narhari Sharma Memorial Award, Conestoga College | April 2026
@@ -573,35 +769,112 @@ Standard: "Java SE, Oracle, 2024 · OOP Using C++, Infosys Springboard, 2024 · 
 Drop JMeter if space is tight. Never drop CIPS Ontario.
 Output as plain text only — no HTML tags.
 
+===== STEP 10: KEYWORD VERIFICATION (run before outputting) =====
+Re-read the JD keyword list from Step 1.
+For each critical keyword (required skills, tools, responsibilities):
+- Verify it appears at least once in the resume body (profile, highlights, skills, experience, or projects)
+- If missing and the candidate has the skill, add it to the most natural location
+- If missing and the candidate does NOT have the skill, leave it out (never fabricate)
+- If a JD keyword was integrated, make sure it reads naturally in context. If the bullet sounds forced with the keyword jammed in, rewrite the bullet so the keyword fits organically.
+
+===== STEP 11: FINAL SELF-CHECK (mandatory before outputting HTML) =====
+Before generating the final output, verify ALL of the following. If any check fails, fix it before outputting.
+
+PROFILE CHECK:
+□ Exactly 4 sentences? Count them. If not 4, fix.
+□ Does sentence 1 start with education, degree, GPA, school name, or graduation date? If yes, REWRITE — lead with value/capability instead.
+□ Does the profile repeat any fact that appears word-for-word in Highlights or Education? If yes, remove the repeated fact and replace with new JD-relevant information.
+□ Does the profile contain the candidate's name? If yes, remove it.
+□ Does the profile contain "he", "his", "him", "she", "her", "I", "my", "me"? If yes, rewrite.
+□ Does the profile contain "possesses", "utilizes", "leveraging", "spearheaded", "proven track record", "adept at", "expertise"? If yes, rewrite.
+□ FABRICATION CHECK: For every claim in the profile, can you point to the exact master resume fact that proves it? If not, delete or rewrite the claim.
+
+BULLET CHECK:
+□ Do any two bullets on the same page start with the same action verb? If yes, change one.
+□ Do any bullets end with a period? If yes, remove it.
+□ Do any bullets contain em dashes (—)? If yes, replace with comma or semicolon.
+□ Are any JD keywords jammed in awkwardly? Read each bullet aloud — if any keyword sounds forced, rewrite the bullet.
+□ Does any bullet use "Spearheaded", "Championed", "Orchestrated", "Pioneered", or "Revolutionized"? If yes, replace with an honest verb like "led", "built", "managed", "created", "designed", "developed".
+
+PAGE 1 DENSITY CHECK:
+□ Are all experience bullets at least 20 words each (roughly 1.5 printed lines)? If any bullet is a short single line, expand it with JD-relevant detail from the master resume.
+□ If page 1 has visible whitespace below experience, add a 3rd OER bullet (if relevant to JD) or expand existing bullets.
+
+PAGE 2 OVERFLOW CHECK (CRITICAL):
+□ Count project bullets + extracurricular entries. If you have 12 project bullets AND 3 extracurricular entries, you WILL overflow to page 3. Drop to either 9-10 project bullets with 3 extracurriculars, OR keep 12 project bullets with 2 extracurriculars.
+□ Standard budget: 9 project bullets + 2 extracurriculars + 2 education + 2 awards + 1 cert = 16 items. This always fits.
+
+PAGE 2 DENSITY CHECK:
+□ Does each project have at least 3 bullets (1 stack + 2 content)? If any project has only 1 content bullet, add another from the master resume.
+□ Are content bullets at least 20 words each? If any are under 15 words, expand with technical detail. Fill through LENGTH, not through adding more bullets.
+
+EXPERIENCE CHECK:
+□ OER has exactly 2 bullets by default (3 only if the 3rd is short and strongly relevant)?
+□ Olive Branch has exactly 2 bullets?
+□ The OER entry-note line is present?
+
 ===== WRITING QUALITY RULES (non-negotiable) =====
 - ZERO first-person pronouns — no "I", "my", "me", "we", "our" anywhere
+- ZERO third-person pronouns or name references — no "he", "his", "him", "she", "her", or the candidate's name in the profile or bullets. This is a resume, not a biography
 - No em dashes (—) anywhere — use commas or semicolons
 - No periods at the end of any bullet point
 - Round metrics: 94.9% not 94.91%, 88% not 88.14%
 - Never fabricate — every number and fact comes from the master CV exactly
 - Vary action verbs — never use the same verb as the leading word twice on the same page
 - No AI-sounding filler: "passionate about", "excited to", "team player", "detail-oriented", "results-driven", "fast-paced environment", "innovative solutions", "cutting-edge", "comprehensive", "utilized"
+- No power verbs that overstate student work: "Spearheaded", "Championed", "Orchestrated", "Revolutionized", "Pioneered" — use honest verbs like "built", "designed", "managed", "created", "led", "developed", "implemented", "automated"
 - No passive ownership verbs: "Possesses", "Utilizes", "Demonstrates" — always active voice
 - No adjective inflation: "rigorous", "robust", "deep technical experience" — drop the adjective or replace with evidence
 - Never say "leveraging" — say "using"
 - Use "candidate" not "holds" for the degree (graduation is future, August 2026)
 - Profile sentences must read like a human wrote them, not a language model
 - Bullets are direct statements of fact and impact — no preamble, no hedging
-- JD keywords appear in context, not bolted on — if a bullet sounds forced, rewrite it
+- JD keywords appear in context, not bolted on — if a bullet sounds forced or unnatural with the keyword jammed in, rewrite the bullet so the keyword fits organically. BAD: "data-driven stellar validation". GOOD: "validated model predictions against confirmed stellar classifications"
 - Do NOT repeat leadership claims: if mentioned in Highlights bullet 5, skip it in Profile and Extracurricular bullets
+- No two bullets on the same page should start with the same action verb
+- No bullet should be a near-duplicate of another bullet (same fact restated with different words)
+- Profile must be EXACTLY 4 sentences. Count before outputting.
 
-===== CONTENT DENSITY (CRITICAL) =====
-TARGET: Both pages must be completely full. A half-empty second page is a failure.
-- Use at least 3 total bullets per project: Stack first, then 2–3 content bullets
-- Use 2 bullets for OER by default, 2 for Olive Branch
-- Expand skills rows with the full list from master CV
-- If page 2 still has whitespace: add the optional 3rd extracurricular entry, expand project bullets to 3 content bullets, or add a 4th relevant project if it still fits
+===== CONTENT DENSITY (CRITICAL — READ THIS CAREFULLY) =====
+TARGET: Both pages must be completely full from top to bottom AND fit within exactly 2 pages. A second page that is 75% empty is a failure. A resume that spills to page 3 is also a failure.
 
-===== 2-PAGE MANAGEMENT (trim in this exact order if over 2 pages) =====
+THE KEY INSIGHT: Fill the page through LONGER, RICHER bullets (20-30 words each), not through MORE bullets. More bullets cause page overflow. Richer bullets fill space while adding keywords.
+
+PAGE 2 STANDARD BUDGET (follow this exactly):
+- Projects: 9 project bullets (3 projects × 3 bullets each: 1 stack + 2 content)
+- Education: 2 bullets
+- Extracurricular: 2 entries, 1 bullet each
+- Awards: 2 entries, 1 bullet each
+- Certifications: 1 line
+- TOTAL: 15 items
+
+If page 2 looks sparse with 15 items, the problem is bullet LENGTH, not bullet COUNT. Expand bullets to 25-30 words each. Only add a 3rd content bullet to one project OR a 3rd extracurricular entry — never both.
+
+PAGE 1 MINIMUM CONTENT:
+- Profile: 4 sentences
+- Highlights: 5 bullets
+- Skills: 5 rows
+- Experience: 4 bullets minimum (2 OER + 2 Olive Branch), 5 if adding 3rd OER bullet
+- All experience bullets must be at least 20 words (1.5+ printed lines). Short single-line bullets waste page 1 space.
+
+HOW TO FILL PAGE 1 SPACE (in priority order):
+1. Write longer experience bullets (20-30 words each) with JD-relevant detail from the master resume.
+2. Add a 3rd OER bullet if the master resume has one relevant to this JD.
+3. Slightly expand highlight bullets with additional coursework or tool mentions (stay at 5 bullets).
+
+CONTENT QUALITY WHILE FILLING:
+- Every added word must be a real fact from the master resume or a JD keyword integrated naturally
+- Do NOT pad with filler phrases ("in order to", "with the goal of", "as part of the overall")
+- Do NOT repeat the same fact in different words across bullets
+- Longer bullets should add TECHNICAL SPECIFICITY (tool names, data sizes, architecture decisions), not vague elaboration
+
+===== 2-PAGE MANAGEMENT =====
+
+IF OVER 2 PAGES (trim in this exact order):
 1. If a 4th project was added, drop it first
 2. Drop the optional 3rd extracurricular entry
-3. If OER has 3 bullets, reduce it to 2
-4. Reduce projects from 3 content bullets to 2 content bullets, keeping the Stack bullet and the strongest evidence bullets
+3. Reduce projects from 3 content bullets to 2 content bullets, keeping the Stack bullet and the strongest evidence bullets
+4. If OER has 3 bullets, reduce it to 2
 5. Drop JMeter from certifications line
 Never trim below 3 projects. Never trim: Education, Highlights of Qualifications, Awards, Skills table
 
@@ -767,7 +1040,8 @@ Respond in EXACTLY this format:
 <!-- every section filled with real candidate content -->
 </body>
 </html>
-===END_HTML===`;
+===END_HTML===
+`;
 
   const { result: resumeResult } = await generateGeminiContent(ai, 'generateDocs', {
     contents: [
@@ -785,40 +1059,16 @@ Respond in EXACTLY this format:
     config: {
       systemInstruction: resumeSystem,
       maxOutputTokens: 16384,
-      thinkingConfig: { thinkingBudget: 0 },
+      thinkingConfig: { thinkingBudget: 4096 },
     },
   });
 
   const resumeRaw = resumeResult.text ?? '';
   console.log('[generate-docs] resume raw (first 300):', resumeRaw.slice(0, 300));
 
-  function extractBlock(text: string, tag: string): string {
-    // Try custom delimiters: ===TAG===...===END_TAG===
-    const delim = text.match(new RegExp(`===${tag}===\\s*([\\s\\S]*?)\\s*===${tag === 'HTML' ? 'END_HTML' : 'END_MARKDOWN'}===`));
-    if (delim) return delim[1].trim();
-    // Try markdown code block (```html or ```markdown or ```)
-    const lang = tag === 'HTML' ? '(?:html)?' : '(?:markdown|md)?';
-    const code = text.match(new RegExp('```' + lang + '\\s*([\\s\\S]*?)\\s*```'));
-    if (code) return code[1].trim();
-    return '';
-  }
-
-  function extractAllHtml(text: string): string {
-    // Try custom delimiter
-    const delim = text.match(/===HTML===\s*([\s\S]*?)\s*===END_HTML===/);
-    if (delim) return delim[1].trim();
-    // Try any html code block
-    const code = text.match(/```html\s*([\s\S]*?)\s*```/);
-    if (code) return code[1].trim();
-    // Try finding <!DOCTYPE html> ... </html>
-    const doctype = text.match(/(<!DOCTYPE html[\s\S]*<\/html>)/i);
-    if (doctype) return doctype[1].trim();
-    return '';
-  }
-
   let resumeMd     = extractBlock(resumeRaw, 'MARKDOWN') || '';
   const rawHtml    = extractAllHtml(resumeRaw);
-  const resumeHtml = rawHtml.trimStart().toLowerCase().startsWith('<!doctype')
+  let resumeHtml = rawHtml.trimStart().toLowerCase().startsWith('<!doctype')
     ? canonicalizeResumeHtml(rawHtml, cvTemplate)
     : '';
   if (isPlaceholderMarkdown(resumeMd)) {
@@ -829,28 +1079,25 @@ Respond in EXACTLY this format:
 
   let resumePdfGenerated = false;
   let resumeGenerationError: string | null = null;
-  if (resumeHtml) {
-    try {
-      const resumeWarnings = collectResumeQualityWarnings(resumeHtml, resumeMd);
+  try {
+    const renderResult = await refreshDocumentPdfIfStale(id, 'resume');
+    const htmlPath = path.join(folderPath, 'resume.html');
+    const pdfPath = path.join(folderPath, 'resume.pdf');
+    const renderedHtml = fs.existsSync(htmlPath) ? fs.readFileSync(htmlPath, 'utf-8') : '';
+    if (renderedHtml) {
+      const resumeWarnings = collectResumeQualityWarnings(renderedHtml, resumeMd);
       if (resumeWarnings.length > 0) {
         warnings.push(...resumeWarnings.map(warning => `Resume: ${warning}`));
         console.warn('[generate-docs] resume quality warnings:', resumeWarnings.join('; '));
       }
-      const htmlPath = path.join(folderPath, 'resume.html');
-      const pdfPath  = path.join(folderPath, 'resume.pdf');
-      fs.writeFileSync(htmlPath, resumeHtml);
-      const pdfResult = await generatePdf(htmlPath, pdfPath);
-      if (pdfResult.pageCount && pdfResult.pageCount > 2) {
-        warnings.push(`Resume rendered to ${pdfResult.pageCount} pages; expected a maximum of 2 pages.`);
-        console.warn(`[generate-docs] resume page warning: rendered to ${pdfResult.pageCount} pages`);
-      }
-      resumePdfGenerated = fs.existsSync(pdfPath);
-    } catch (e) {
-      resumeGenerationError = e instanceof Error ? e.message : String(e);
-      console.error('Resume PDF failed:', e);
     }
-  } else {
-    resumeGenerationError = 'Resume HTML was not generated. The model output did not include a complete <!DOCTYPE html> document.';
+    if (renderResult.pageCount && renderResult.pageCount > 2) {
+      warnings.push(`Resume rendered to ${renderResult.pageCount} pages. Reduce content in resume.md and download again to regenerate from the locked template.`);
+    }
+    resumePdfGenerated = fs.existsSync(pdfPath);
+  } catch (e) {
+    resumeGenerationError = e instanceof Error ? e.message : String(e);
+    console.error('Resume PDF failed:', e);
   }
 
   // ── 2. COVER LETTER ────────────────────────────────────────────────────────
@@ -933,27 +1180,20 @@ Respond in EXACTLY this format (no other text):
   const clRaw = clResult.text ?? '';
   console.log('[generate-docs] cover letter raw (first 300):', clRaw.slice(0, 300));
 
-  const clMdBody  = sanitizeCoverLetterLanguage(extractBlock(clRaw, 'MARKDOWN') || clRaw);
-  const clHtml    = sanitizeCoverLetterLanguage(extractAllHtml(clRaw));
-  const clMdFull  = `# Cover Letter: ${app.jobTitle} at ${app.company}\n\n**Date:** ${today}\n**Application:** applications/${id}/\n\n---\n\n${clMdBody}`;
+  const clMdBody = sanitizeCoverLetterLanguage(extractBlock(clRaw, 'MARKDOWN') || clRaw);
+  const clMdFull = `# Cover Letter: ${app.jobTitle} at ${app.company}\n\n**Date:** ${today}\n**Application:** applications/${id}/\n\n---\n\n${clMdBody}`;
 
   fs.writeFileSync(path.join(folderPath, 'cover-letter.md'), clMdFull);
 
   let clPdfGenerated = false;
   let coverLetterGenerationError: string | null = null;
-  if (clHtml) {
-    const clHtmlPath = path.join(folderPath, 'cover-letter.html');
-    const clPdfPath  = path.join(folderPath, 'cover-letter.pdf');
-    fs.writeFileSync(clHtmlPath, clHtml);
-    try {
-      await generatePdf(clHtmlPath, clPdfPath);
-      clPdfGenerated = fs.existsSync(clPdfPath);
-    } catch (e) {
-      coverLetterGenerationError = e instanceof Error ? e.message : String(e);
-      console.error('Cover letter PDF failed:', e);
-    }
-  } else {
-    coverLetterGenerationError = 'Cover letter HTML was not generated.';
+  try {
+    await refreshDocumentPdfIfStale(id, 'cover-letter');
+    const clPdfPath = path.join(folderPath, 'cover-letter.pdf');
+    clPdfGenerated = fs.existsSync(clPdfPath);
+  } catch (e) {
+    coverLetterGenerationError = e instanceof Error ? e.message : String(e);
+    console.error('Cover letter PDF failed:', e);
   }
 
   // ── 3. UPDATE DATA STORES ──────────────────────────────────────────────────

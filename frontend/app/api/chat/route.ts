@@ -4,8 +4,10 @@ import { getApplication } from '@/lib/filesystem';
 import { saveDocumentEdit } from '@/lib/filesystem';
 import { apiErrorMessage } from '@/lib/errors';
 import { generateGeminiContent } from '@/lib/ai-config';
+import { refreshDocumentPdfIfStale } from '@/lib/document-renderer';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+export const maxDuration = 120;
 
 interface ChatRequest {
   applicationId: string;
@@ -80,12 +82,14 @@ Your job:
   const resumeMatch = text.match(/===RESUME_UPDATE===\n([\s\S]*?)\n===END_RESUME_UPDATE===/);
   if (resumeMatch) {
     saveDocumentEdit(applicationId, 'resume.md', resumeMatch[1]);
+    await refreshDocumentPdfIfStale(applicationId, 'resume');
     appliedEdit = 'resume.md';
   }
 
   const clMatch = text.match(/===COVERLETTER_UPDATE===\n([\s\S]*?)\n===END_COVERLETTER_UPDATE===/);
   if (clMatch) {
     saveDocumentEdit(applicationId, 'cover-letter.md', clMatch[1]);
+    await refreshDocumentPdfIfStale(applicationId, 'cover-letter');
     appliedEdit = 'cover-letter.md';
   }
 

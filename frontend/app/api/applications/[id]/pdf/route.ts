@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getApplication } from '@/lib/filesystem';
+import { refreshDocumentPdfIfStale } from '@/lib/document-renderer';
 import fs from 'fs';
 import path from 'path';
 
 const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
+export const maxDuration = 120;
 
 export async function GET(
   req: Request,
@@ -22,6 +24,17 @@ export async function GET(
 
   const filename = type === 'resume' ? 'resume.pdf' : 'cover-letter.pdf';
   const pdfPath = path.join(/*turbopackIgnore: true*/ ROOT, app.applicationFolder, filename);
+
+  try {
+    await refreshDocumentPdfIfStale(id, type);
+  } catch (err) {
+    const existingPdf = fs.existsSync(pdfPath);
+    const message = err instanceof Error ? err.message : 'PDF refresh failed';
+    if (!existingPdf) {
+      return NextResponse.json({ error: message }, { status: 404 });
+    }
+    console.warn(`[pdf-download] Serving existing ${type} PDF after refresh failed for ${id}: ${message}`);
+  }
 
   if (!fs.existsSync(pdfPath)) {
     return NextResponse.json({ error: 'PDF not found — generate documents first' }, { status: 404 });

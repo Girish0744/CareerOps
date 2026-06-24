@@ -169,6 +169,10 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const [interviewGenerated, setInterviewGenerated] = useState(false);
   const [interviewError, setInterviewError] = useState<string | null>(null);
   const [sourceMode, setSourceMode] = useState(false);
+  const [sourceDraft, setSourceDraft] = useState('');
+  const [sourceSaving, setSourceSaving] = useState(false);
+  const [sourceError, setSourceError] = useState<string | null>(null);
+  const [sourceSavedAt, setSourceSavedAt] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
   const [contacts, setContacts] = useState<ContactLead[]>([]);
   const [contactLoading, setContactLoading] = useState(false);
@@ -205,6 +209,52 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       .then((data: ApplySession) => setApplySession(data))
       .catch(() => setApplySession(null));
   }, [id, refreshTick]);
+
+  useEffect(() => {
+    if (!sourceMode) return;
+    const content = activeTab === 'resume'
+      ? app?.resumeMd
+      : activeTab === 'cover-letter'
+        ? app?.coverLetterMd
+        : activeTab === 'job-description'
+          ? app?.jobDescription
+          : activeTab === 'interview'
+            ? app?.interviewMd
+            : activeTab === 'notes'
+              ? app?.notesMd
+              : '';
+    setSourceDraft(content ?? '');
+    setSourceError(null);
+    setSourceSavedAt(null);
+  }, [sourceMode, activeTab, app?.resumeMd, app?.coverLetterMd, app?.jobDescription, app?.interviewMd, app?.notesMd]);
+
+  const editableSourceFilename = activeTab === 'resume'
+    ? 'resume.md'
+    : activeTab === 'cover-letter'
+      ? 'cover-letter.md'
+      : null;
+
+  async function saveSourceEdit() {
+    if (!editableSourceFilename) return;
+    setSourceSaving(true);
+    setSourceError(null);
+    setSourceSavedAt(null);
+    try {
+      const res = await fetch(`/api/applications/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: editableSourceFilename, content: sourceDraft }),
+      });
+      const data = await res.json().catch(() => ({})) as ApplicationDetail & { error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Could not save document edits.');
+      setApp(data);
+      setSourceSavedAt(new Date().toISOString());
+    } catch (err) {
+      setSourceError(err instanceof Error ? err.message : 'Could not save document edits.');
+    } finally {
+      setSourceSaving(false);
+    }
+  }
 
   async function changeStatus(newStatus: string) {
     if (!app) return;
@@ -413,6 +463,10 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       case 'notes':           return app.notesMd;
     }
   };
+
+  const isEditableSource = activeTab === 'resume' || activeTab === 'cover-letter';
+  const sourceDirty = isEditableSource && sourceDraft !== (activeContent() ?? '');
+  const sourceSavedLabel = sourceSavedAt ? formatDateTime(sourceSavedAt) : null;
 
   const outreachPanel = (
     <div className="p-5 space-y-4">
@@ -882,22 +936,60 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             ))}
             </div>
             {(activeTab === 'resume' || activeTab === 'cover-letter' || activeTab === 'job-description' || activeTab === 'interview') && activeContent() && (
-              <button
-                onClick={() => setSourceMode(v => !v)}
-                className="mb-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
-              >
-                {sourceMode ? <Eye className="w-3.5 h-3.5" /> : <Code2 className="w-3.5 h-3.5" />}
-                {sourceMode ? 'Preview' : 'Source'}
-              </button>
+              <div className="mb-2 flex items-center gap-2 shrink-0">
+                {sourceMode && isEditableSource && (
+                  <>
+                    <button
+                      onClick={() => { setSourceDraft(activeContent() ?? ''); setSourceError(null); setSourceSavedAt(null); }}
+                      disabled={!sourceDirty || sourceSaving}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      onClick={() => void saveSourceEdit()}
+                      disabled={!sourceDirty || sourceSaving}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {sourceSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                      Save
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => setSourceMode(v => !v)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50"
+                >
+                  {sourceMode ? <Eye className="w-3.5 h-3.5" /> : <Code2 className="w-3.5 h-3.5" />}
+                  {sourceMode ? 'Preview' : 'Source'}
+                </button>
+              </div>
             )}
           </div>
 
           {/* Content */}
           <div className="flex-1 bg-white border border-t-0 border-slate-200 rounded-b-xl overflow-hidden min-h-96">
             {activeTab === 'outreach' ? outreachPanel : activeTab === 'apply' ? applyPanel : activeContent() && sourceMode ? (
-              <pre className="p-6 text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed overflow-y-auto h-full max-h-[700px]">
-                {activeContent()}
-              </pre>
+              isEditableSource ? (
+                <div className="flex h-full max-h-[760px] flex-col bg-slate-950">
+                  <textarea
+                    value={sourceDraft}
+                    onChange={e => { setSourceDraft(e.target.value); setSourceError(null); setSourceSavedAt(null); }}
+                    spellCheck={false}
+                    className="min-h-[620px] flex-1 resize-none bg-slate-950 p-6 font-mono text-xs leading-relaxed text-slate-100 outline-none"
+                  />
+                  <div className="flex min-h-10 items-center justify-between gap-3 border-t border-slate-800 bg-slate-900 px-4 py-2 text-xs">
+                    <span className={sourceError ? 'text-red-300' : sourceDirty ? 'text-amber-200' : sourceSavedLabel ? 'text-emerald-300' : 'text-slate-400'}>
+                      {sourceError ?? (sourceDirty ? 'Unsaved changes' : sourceSavedLabel ? `Saved ${sourceSavedLabel}` : 'Markdown source is saved')}
+                    </span>
+                    <span className="text-slate-500">Download regenerates the PDF from this Markdown</span>
+                  </div>
+                </div>
+              ) : (
+                <pre className="p-6 text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed overflow-y-auto h-full max-h-[700px]">
+                  {activeContent()}
+                </pre>
+              )
             ) : activeContent() ? (
               <div className="overflow-y-auto h-full max-h-[760px] bg-slate-50 p-5">
                 <div className="mx-auto max-w-[850px] min-h-[900px] bg-white shadow-sm border border-slate-200 px-10 py-9">
