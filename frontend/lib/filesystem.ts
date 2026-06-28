@@ -66,6 +66,26 @@ export interface DocumentVersion {
   };
 }
 
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+}
+
+export interface ChatSessionSummary {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  lastMessagePreview: string;
+}
+
+export interface ChatSession extends ChatSessionSummary {
+  messages: ChatMessage[];
+}
+
 export interface ApplicationDetail extends ApplicationEntry {
   jobDescription: string | null;
   resumeMd: string | null;
@@ -756,6 +776,164 @@ export function createApplication(
   return actualId;
 }
 
+
+function chatSessionsDir(app: ApplicationEntry): string {
+  return rootPath(app.applicationFolder, 'chat-sessions');
+}
+
+function chatManifestPath(app: ApplicationEntry): string {
+  return path.join(chatSessionsDir(app), 'manifest.json');
+}
+
+function chatSessionPath(app: ApplicationEntry, sessionId: string): string {
+  return path.join(chatSessionsDir(app), `${sessionId}.json`);
+}
+
+function chatSessionId(createdAt: string): string {
+  return `chat-${createdAt.replace(/[:.]/g, '-').replace(/Z$/, 'z')}`;
+}
+
+function isSafeChatSessionId(value: string): boolean {
+  return /^chat-[a-z0-9-]+$/i.test(value);
+}
+
+function readChatManifest(app: ApplicationEntry): ChatSessionSummary[] {
+  const manifestPath = chatManifestPath(app);
+  if (!fs.existsSync(manifestPath)) return [];
+  try {
+    const data = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as { sessions?: ChatSessionSummary[] } | ChatSessionSummary[];
+    const sessions = Array.isArray(data) ? data : Array.isArray(data.sessions) ? data.sessions : [];
+    return sessions.sort((a, b) => timestampValue(b.updatedAt) - timestampValue(a.updatedAt));
+  } catch {
+    return [];
+  }
+}
+
+function writeChatManifest(app: ApplicationEntry, sessions: ChatSessionSummary[]): void {
+  const sorted = sessions.sort((a, b) => timestampValue(b.updatedAt) - timestampValue(a.updatedAt));
+  fs.mkdirSync(chatSessionsDir(app), { recursive: true });
+  fs.writeFileSync(chatManifestPath(app), JSON.stringify({ sessions: sorted }, null, 2));
+}
+
+function chatPreview(content: string): string {
+  return content.replace(/\s+/g, ' ').trim().slice(0, 120);
+}
+
+function chatTitleFromMessage(message: string): string {
+  const compact = message.replace(/\s+/g, ' ').trim();
+  if (!compact) return 'New chat';
+  return compact.length > 64 ? `${compact.slice(0, 61)}...` : compact;
+}
+
+function summarizeChatSession(session: ChatSession): ChatSessionSummary {
+  const lastMessage = session.messages.at(-1);
+  return {
+    id: session.id,
+    title: session.title || 'New chat',
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    messageCount: session.messages.length,
+    lastMessagePreview: lastMessage ? chatPreview(lastMessage.content) : '',
+  };
+}
+
+function writeChatSession(app: ApplicationEntry, session: ChatSession): ChatSession {
+  fs.mkdirSync(chatSessionsDir(app), { recursive: true });
+  fs.writeFileSync(chatSessionPath(app, session.id), JSON.stringify(session, null, 2));
+
+  const summary = summarizeChatSession(session);
+  const sessions = readChatManifest(app).filter(existing => existing.id !== session.id);
+  sessions.unshift(summary);
+  writeChatManifest(app, sessions);
+  return session;
+}
+
+export function getChatSessions(id: string): ChatSessionSummary[] {
+  const app = getAllApplications().find(a => a.id === id);
+  return app ? readChatManifest(app) : [];
+}
+
+export function getChatSession(id: string, sessionId: string): ChatSession | null {
+  const app = getAllApplications().find(a => a.id === id);
+  if (!app || !isSafeChatSessionId(sessionId)) return null;
+
+  const existsInManifest = readChatManifest(app).some(session => session.id === sessionId);
+  if (!existsInManifest) return null;
+
+  const filePath = chatSessionPath(app, sessionId);
+  if (!fs.existsSync(filePath)) return null;
+
+  try {
+    const session = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as ChatSession;
+    return {
+      ...session,
+      messages: Array.isArray(session.messages) ? session.messages : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function createChatSession(id: string, title?: string): ChatSession {
+  const app = getAllApplications().find(a => a.id === id);
+  if (!app) throw new Error(`Application not found: ${id}`);
+
+  const createdAt = nowIso();
+  const session: ChatSession = {
+    id: chatSessionId(createdAt),
+    title: title?.trim() || 'New chat',
+    createdAt,
+    updatedAt: createdAt,
+    messageCount: 0,
+    lastMessagePreview: '',
+    messages: [],
+  };
+
+  return writeChatSession(app, session);
+}
+
+export function appendChatMessages(
+  id: string,
+  sessionId: string | null | undefined,
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+): ChatSession {
+  const app = getAllApplications().find(a => a.id === id);
+  if (!app) throw new Error(`Application not found: ${id}`);
+
+  const firstUserMessage = messages.find(message => message.role === 'user')?.content ?? '';
+  let session = sessionId ? getChatSession(id, sessionId) : null;
+  if (!session) {
+    session = createChatSession(id, chatTitleFromMessage(firstUserMessage));
+  }
+
+  const nextMessages = messages
+    .filter(message => message.content.trim())
+    .map(message => {
+      const createdAt = nowIso();
+      return {
+        id: `msg-${createdAt.replace(/[:.]/g, '-').replace(/Z$/, 'z')}-${Math.random().toString(36).slice(2, 8)}`,
+        role: message.role,
+        content: message.content,
+        createdAt,
+      } satisfies ChatMessage;
+    });
+
+  if (nextMessages.length === 0) return session;
+
+  const updatedAt = nowIso();
+  const hadNoMessages = session.messages.length === 0;
+  const updatedSession: ChatSession = {
+    ...session,
+    title: hadNoMessages && firstUserMessage ? chatTitleFromMessage(firstUserMessage) : session.title,
+    updatedAt,
+    messages: [...session.messages, ...nextMessages],
+    messageCount: session.messages.length + nextMessages.length,
+    lastMessagePreview: chatPreview(nextMessages.at(-1)?.content ?? ''),
+  };
+
+  return writeChatSession(app, updatedSession);
+}
+
 export function updateApplicationFields(
   id: string,
   updates: Partial<ApplicationEntry>,
@@ -792,5 +970,6 @@ export function updateApplicationFields(
 
   return true;
 }
+
 
 

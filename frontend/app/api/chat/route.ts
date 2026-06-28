@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
-import { getApplication } from '@/lib/filesystem';
-import { saveDocumentEdit } from '@/lib/filesystem';
+import {
+  appendChatMessages,
+  getApplication,
+  getChatSession,
+  getChatSessions,
+  saveDocumentEdit,
+} from '@/lib/filesystem';
 import { apiErrorMessage } from '@/lib/errors';
 import { generateGeminiContent } from '@/lib/ai-config';
 import { refreshDocumentPdfIfStale } from '@/lib/document-renderer';
@@ -11,19 +16,27 @@ export const maxDuration = 120;
 
 interface ChatRequest {
   applicationId: string;
+  sessionId?: string | null;
   message: string;
-  history: Array<{ role: 'user' | 'assistant'; content: string }>;
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
 }
 
 export async function POST(req: Request) {
   try {
-  const body = await req.json() as ChatRequest;
-  const { applicationId, message, history } = body;
+    const body = await req.json() as ChatRequest;
+    const { applicationId, message, sessionId } = body;
 
-  const app = getApplication(applicationId);
-  if (!app) return NextResponse.json({ error: 'Application not found' }, { status: 404 });
+    if (!message?.trim()) {
+      return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+    }
 
-  const systemPrompt = `You are a career assistant helping with the job application for:
+    const app = getApplication(applicationId);
+    if (!app) return NextResponse.json({ error: 'Application not found' }, { status: 404 });
+
+    const savedSession = sessionId ? getChatSession(applicationId, sessionId) : null;
+    const priorMessages = savedSession?.messages ?? [];
+
+    const systemPrompt = `You are a career assistant helping with the job application for:
 
 Company: ${app.company}
 Role: ${app.jobTitle}
@@ -44,7 +57,7 @@ ${app.notesMd ?? ''}
 
 Your job:
 1. Help edit the resume or cover letter when asked. Make ONLY the requested change. Do not rewrite the whole document unless explicitly asked.
-2. Answer questions about this application, the company, or interview prep.
+2. Answer questions about this application, the company, outreach, hiring-manager messages, interview prep, or application strategy.
 3. Never invent experience not in the resume. Never edit the master profile (cv.md).
 4. When you make an edit to resume.md or cover-letter.md, return the FULL updated file content wrapped like this:
    ===RESUME_UPDATE===
@@ -54,52 +67,61 @@ Your job:
    ===COVERLETTER_UPDATE===
    {full updated cover-letter.md content}
    ===END_COVERLETTER_UPDATE===
-5. Keep responses concise. Lead with what changed, then show the changed section.`;
+5. Keep responses concise. Lead with the answer or what changed, then show the useful draft/section.`;
 
-  const contents = [
-    ...history.map(h => ({
-      role: h.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: h.content }],
-    })),
-    { role: 'user', parts: [{ text: message }] },
-  ];
+    const contents = [
+      ...priorMessages.map(h => ({
+        role: h.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: h.content }],
+      })),
+      { role: 'user', parts: [{ text: message }] },
+    ];
 
-  const { result } = await generateGeminiContent(ai, 'chat', {
-    contents,
-    config: {
-      systemInstruction: systemPrompt,
-      maxOutputTokens: 8192,
-      temperature: 0.2,
-      thinkingConfig: { thinkingBudget: 0 },
-    },
-  });
-  const text = result.text ?? '';
-  if (!text.trim()) throw new Error('Gemini returned an empty chat response.');
+    const { result } = await generateGeminiContent(ai, 'chat', {
+      contents,
+      config: {
+        systemInstruction: systemPrompt,
+        maxOutputTokens: 8192,
+        temperature: 0.2,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    });
+    const text = result.text ?? '';
+    if (!text.trim()) throw new Error('Gemini returned an empty chat response.');
 
-  // Auto-apply document edits if Claude returned an update block
-  let appliedEdit: string | null = null;
+    let appliedEdit: string | null = null;
 
-  const resumeMatch = text.match(/===RESUME_UPDATE===\n([\s\S]*?)\n===END_RESUME_UPDATE===/);
-  if (resumeMatch) {
-    saveDocumentEdit(applicationId, 'resume.md', resumeMatch[1]);
-    await refreshDocumentPdfIfStale(applicationId, 'resume');
-    appliedEdit = 'resume.md';
-  }
+    const resumeMatch = text.match(/===RESUME_UPDATE===\n([\s\S]*?)\n===END_RESUME_UPDATE===/);
+    if (resumeMatch) {
+      saveDocumentEdit(applicationId, 'resume.md', resumeMatch[1]);
+      await refreshDocumentPdfIfStale(applicationId, 'resume');
+      appliedEdit = 'resume.md';
+    }
 
-  const clMatch = text.match(/===COVERLETTER_UPDATE===\n([\s\S]*?)\n===END_COVERLETTER_UPDATE===/);
-  if (clMatch) {
-    saveDocumentEdit(applicationId, 'cover-letter.md', clMatch[1]);
-    await refreshDocumentPdfIfStale(applicationId, 'cover-letter');
-    appliedEdit = 'cover-letter.md';
-  }
+    const clMatch = text.match(/===COVERLETTER_UPDATE===\n([\s\S]*?)\n===END_COVERLETTER_UPDATE===/);
+    if (clMatch) {
+      saveDocumentEdit(applicationId, 'cover-letter.md', clMatch[1]);
+      await refreshDocumentPdfIfStale(applicationId, 'cover-letter');
+      appliedEdit = 'cover-letter.md';
+    }
 
-  // Strip the raw update blocks from the reply shown to the user
-  const cleanText = text
-    .replace(/===RESUME_UPDATE===[\s\S]*?===END_RESUME_UPDATE===/g, '')
-    .replace(/===COVERLETTER_UPDATE===[\s\S]*?===END_COVERLETTER_UPDATE===/g, '')
-    .trim() || (appliedEdit ? `Updated ${appliedEdit}. The live preview has been refreshed.` : 'Done.');
+    const cleanText = text
+      .replace(/===RESUME_UPDATE===[\s\S]*?===END_RESUME_UPDATE===/g, '')
+      .replace(/===COVERLETTER_UPDATE===[\s\S]*?===END_COVERLETTER_UPDATE===/g, '')
+      .trim() || (appliedEdit ? `Updated ${appliedEdit}. The live preview has been refreshed.` : 'Done.');
 
-  return NextResponse.json({ reply: cleanText, appliedEdit });
+    const session = appendChatMessages(applicationId, savedSession?.id ?? sessionId ?? null, [
+      { role: 'user', content: message },
+      { role: 'assistant', content: cleanText },
+    ]);
+
+    return NextResponse.json({
+      reply: cleanText,
+      appliedEdit,
+      sessionId: session.id,
+      session,
+      sessions: getChatSessions(applicationId),
+    });
   } catch (err) {
     return NextResponse.json({ error: apiErrorMessage(err) }, { status: 500 });
   }
