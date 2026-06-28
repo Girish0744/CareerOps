@@ -4,6 +4,8 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { extractApplicantProfile } from './apply-assistant';
 import { getApplication, updateApplicationFields } from './filesystem';
+import { formatCoverLetterDate } from './date-format';
+import { formatJobReferenceForSubject, formatJobReferenceValue } from './job-reference';
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
@@ -82,13 +84,32 @@ function stripMarkdownDecoration(value: string): string {
     .trim();
 }
 
+function normalizeHref(value: string): string {
+  const trimmed = value.trim();
+  if (/^(?:mailto:|tel:|https?:\/\/)/i.test(trimmed)) return trimmed;
+  return `https://${trimmed.replace(/^www\./i, 'www.')}`;
+}
+
+function linkHtml(label: string, href: string): string {
+  return `<a href="${escapeHtml(normalizeHref(href))}">${escapeHtml(label)}</a>`;
+}
+
+function autolinkBareUrls(value: string): string {
+  return value.replace(
+    /(^|[\s(|])((?:https?:\/\/|www\.)[^\s<>()]+|(?:github\.com|linkedin\.com|girishbhuteja\.com|[a-z0-9-]+\.vercel\.app|eth0s\.online)\/[^\s<>()]+|(?:github\.com|linkedin\.com|girishbhuteja\.com|eth0s\.online|[a-z0-9-]+\.vercel\.app)\b)([.,;:!?)]?)/gi,
+    (_match, prefix: string, rawUrl: string, trailing: string) => `${prefix}${linkHtml(rawUrl, rawUrl)}${trailing}`,
+  );
+}
+
 function inlineMarkdown(value: string): string {
   const links: string[] = [];
-  let text = escapeHtml(value).replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label: string, href: string) => {
+  const withLinkTokens = value.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label: string, href: string) => {
     const token = `@@LINK_${links.length}@@`;
-    links.push(`<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`);
+    links.push(linkHtml(label, href));
     return token;
   });
+
+  let text = autolinkBareUrls(escapeHtml(withLinkTokens));
 
   text = text
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -428,14 +449,30 @@ function resumeHtmlFromMarkdown(markdown: string): string {
   });
 }
 
+const COVER_LETTER_METADATA_LINE = /^\s*(?:\*\*)?\s*(?:Date|Application|Job\s*(?:ID|Number|No\.?|Ref(?:erence)?|Code)|Req(?:uisition)?\s*(?:ID|Number|No\.?|#)?|Reference|Ref)\s*(?:\*\*)?\s*:/i;
+
 function stripCoverLetterMetadata(markdown: string): string {
   const afterRule = markdown.includes('\n---\n') ? markdown.split('\n---\n').slice(1).join('\n---\n') : markdown;
   return afterRule
     .split(/\r?\n/)
     .filter(line => !/^#\s+/.test(line.trim()))
-    .filter(line => !/^\*\*(Date|Application):\*\*/i.test(line.trim()))
+    .filter(line => !COVER_LETTER_METADATA_LINE.test(line.trim()))
     .join('\n')
     .trim();
+}
+
+function manualCoverLetterJobReference(markdown: string): string {
+  const line = markdown
+    .split(/\r?\n/)
+    .map(value => value.trim())
+    .find(value => /^\s*(?:\*\*)?\s*(?:Job\s*(?:ID|Number|No\.?|Ref(?:erence)?|Code)|Req(?:uisition)?\s*(?:ID|Number|No\.?|#)?|Reference|Ref)\s*(?:\*\*)?\s*:/i.test(value));
+  if (!line) return '';
+
+  const value = line
+    .replace(/^\s*(?:\*\*)?\s*(?:Job\s*(?:ID|Number|No\.?|Ref(?:erence)?|Code)|Req(?:uisition)?\s*(?:ID|Number|No\.?|#)?|Reference|Ref)\s*(?:\*\*)?\s*:/i, '')
+    .replace(/\*\*/g, '')
+    .trim();
+  return formatJobReferenceValue(value);
 }
 
 function coverLetterHtmlFromMarkdown(markdown: string, app: NonNullable<ReturnType<typeof getApplication>>): string {
@@ -443,7 +480,7 @@ function coverLetterHtmlFromMarkdown(markdown: string, app: NonNullable<ReturnTy
   const profileYml = readRoot('config/profile.yml');
   const contact = contactPlaceholders(profileYml);
   const body = markdownToHtml(stripCoverLetterMetadata(markdown));
-  const today = new Date().toISOString().split('T')[0];
+  const today = formatCoverLetterDate();
 
   return replaceAll(template, {
     LANG: 'en',
@@ -464,7 +501,7 @@ function coverLetterHtmlFromMarkdown(markdown: string, app: NonNullable<ReturnTy
     COMPANY: app.company,
     COMPANY_ADDRESS: app.location ?? '',
     JOB_TITLE: app.jobTitle,
-    JOB_REF: '',
+    JOB_REF: manualCoverLetterJobReference(markdown) || formatJobReferenceForSubject(app.jobDescription),
     SALUTATION: 'Hiring Team',
     BODY: body,
   });

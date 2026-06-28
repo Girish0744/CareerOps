@@ -5,14 +5,16 @@ import Link from 'next/link';
 import StatusBadge, { ALL_STATUSES } from '@/components/StatusBadge';
 import ScoreBadge from '@/components/ScoreBadge';
 import ChatPanel from '@/components/ChatPanel';
-import type { ApplicationDetail } from '@/lib/filesystem';
+import type { ApplicationDetail, DocumentVersion } from '@/lib/filesystem';
 import {
   ArrowLeft, ExternalLink, FileText, Mail, Briefcase,
   ChevronDown, Loader2, MapPin, Link2, BookOpen, Sparkles, Download, Code2, Eye,
-  UserSearch, Send, Copy, AlertTriangle, CheckCircle2, Upload, CalendarClock,
+  UserSearch, Send, Copy, AlertTriangle, CheckCircle2, Upload, CalendarClock, RotateCcw,
 } from 'lucide-react';
 
 type Tab = 'resume' | 'cover-letter' | 'job-description' | 'interview' | 'outreach' | 'apply' | 'notes';
+type DocumentGenerationType = 'resume' | 'cover-letter';
+type DocumentGenerationNotice = { kind: 'success' | 'warning'; message: string } | null;
 
 interface ContactLead {
   id: string;
@@ -148,6 +150,11 @@ function formatDateTime(value?: string | null) {
   });
 }
 
+function versionOptionLabel(version: DocumentVersion) {
+  const created = formatDateTime(version.createdAt) ?? version.createdAt;
+  return `${created} - ${version.label}`;
+}
+
 function DocumentPreview({ content }: { content: string }) {
   return (
     <article
@@ -173,6 +180,11 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const [sourceSaving, setSourceSaving] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [sourceSavedAt, setSourceSavedAt] = useState<string | null>(null);
+  const [documentGenerating, setDocumentGenerating] = useState<DocumentGenerationType | null>(null);
+  const [documentGenerationError, setDocumentGenerationError] = useState<string | null>(null);
+  const [documentGenerationNotice, setDocumentGenerationNotice] = useState<DocumentGenerationNotice>(null);
+  const [selectedVersionId, setSelectedVersionId] = useState('');
+  const [versionRestoring, setVersionRestoring] = useState(false);
   const [refreshTick, setRefreshTick] = useState(0);
   const [contacts, setContacts] = useState<ContactLead[]>([]);
   const [contactLoading, setContactLoading] = useState(false);
@@ -195,6 +207,16 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       .then((data: ApplicationDetail) => { setApp(data); setLoading(false); })
       .catch(() => setLoading(false));
   }, [id, refreshTick]);
+
+  useEffect(() => {
+    const type = activeTab === 'resume'
+      ? 'resume'
+      : activeTab === 'cover-letter'
+        ? 'cover-letter'
+        : null;
+    const versions = type ? (app?.documentVersions ?? []).filter(version => version.type === type) : [];
+    setSelectedVersionId(versions[0]?.id ?? '');
+  }, [activeTab, app?.documentVersions]);
 
   useEffect(() => {
     fetch(`/api/applications/${id}/contacts`)
@@ -341,15 +363,110 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     return data;
   }
 
+  async function generateApplicationDocument(type: DocumentGenerationType) {
+    const label = type === 'resume' ? 'resume' : 'cover letter';
+    const action = type === 'resume'
+      ? app?.resumeMd || app?.resumePath ? 'Regenerated' : 'Generated'
+      : app?.coverLetterMd || app?.coverLetterPath ? 'Regenerated' : 'Generated';
+
+    if (sourceDirty) {
+      setDocumentGenerationError('Save or reset your source edits before regenerating a document.');
+      return;
+    }
+
+    setDocumentGenerating(type);
+    setDocumentGenerationError(null);
+    setDocumentGenerationNotice(null);
+    try {
+      const res = await fetch(`/api/generate-docs/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
+      const data = await res.json().catch(() => ({})) as {
+        error?: string;
+        warnings?: string[];
+      };
+      if (!res.ok) throw new Error(data.error ?? `Could not generate ${label}.`);
+
+      const refreshed = await refreshApplication();
+      setActiveTab(type);
+      setSourceMode(false);
+      setSourceDraft(type === 'resume' ? refreshed?.resumeMd ?? '' : refreshed?.coverLetterMd ?? '');
+      const warning = Array.isArray(data.warnings) && data.warnings.length > 0 ? data.warnings[0] : null;
+      setDocumentGenerationNotice({
+        kind: warning ? 'warning' : 'success',
+        message: warning ? `${action} ${label}. Warning: ${warning}` : `${action} ${label}.`,
+      });
+    } catch (err) {
+      setDocumentGenerationError(err instanceof Error ? err.message : `Could not generate ${label}.`);
+    } finally {
+      setDocumentGenerating(null);
+    }
+  }
+  async function restoreSelectedDocumentVersion() {
+    if (!selectedDocumentVersion) return;
+
+    if (sourceDirty) {
+      setDocumentGenerationError('Save or reset your source edits before restoring a previous version.');
+      return;
+    }
+
+    setVersionRestoring(true);
+    setDocumentGenerationError(null);
+    setDocumentGenerationNotice(null);
+    try {
+      const res = await fetch(`/api/applications/${id}/versions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ versionId: selectedDocumentVersion.id }),
+      });
+      const data = await res.json().catch(() => ({})) as {
+        application?: ApplicationDetail;
+        restored?: DocumentVersion;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? 'Could not restore document version.');
+
+      const updated = data.application ?? await refreshApplication();
+      if (updated) setApp(updated);
+      const restoredType = data.restored?.type ?? selectedDocumentVersion.type;
+      setActiveTab(restoredType);
+      setSourceMode(false);
+      setSourceDraft(restoredType === 'resume' ? updated?.resumeMd ?? '' : updated?.coverLetterMd ?? '');
+      setDocumentGenerationNotice({
+        kind: 'success',
+        message: `Restored ${restoredType === 'resume' ? 'resume' : 'cover letter'} from ${formatDateTime(selectedDocumentVersion.createdAt) ?? selectedDocumentVersion.createdAt}.`,
+      });
+    } catch (err) {
+      setDocumentGenerationError(err instanceof Error ? err.message : 'Could not restore document version.');
+    } finally {
+      setVersionRestoring(false);
+    }
+  }
+
   async function generateMissingDocsIfNeeded(current: ApplicationDetail) {
     if (current.resumePath && current.coverLetterPath) return current;
     setApplyDocsLoading(true);
-    const res = await fetch(`/api/generate-docs/${id}`, { method: 'POST' });
-    const data = await res.json().catch(() => ({})) as { error?: string };
-    setApplyDocsLoading(false);
-    if (!res.ok) throw new Error(data.error ?? 'Document generation failed before apply prep.');
-    const refreshed = await refreshApplication();
-    return refreshed ?? current;
+    const missingTypes: Array<'resume' | 'cover-letter'> = [];
+    if (!current.resumePath) missingTypes.push('resume');
+    if (!current.coverLetterPath) missingTypes.push('cover-letter');
+
+    try {
+      for (const type of missingTypes) {
+        const res = await fetch(`/api/generate-docs/${id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type }),
+        });
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        if (!res.ok) throw new Error(data.error ?? 'Document generation failed before apply prep.');
+      }
+      const refreshed = await refreshApplication();
+      return refreshed ?? current;
+    } finally {
+      setApplyDocsLoading(false);
+    }
   }
 
   async function startApplySession(openPosting = true) {
@@ -467,6 +584,18 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const isEditableSource = activeTab === 'resume' || activeTab === 'cover-letter';
   const sourceDirty = isEditableSource && sourceDraft !== (activeContent() ?? '');
   const sourceSavedLabel = sourceSavedAt ? formatDateTime(sourceSavedAt) : null;
+  const activeDocumentGenerationType: DocumentGenerationType | null = activeTab === 'resume'
+    ? 'resume'
+    : activeTab === 'cover-letter'
+      ? 'cover-letter'
+      : null;
+  const documentGenerationBlocked = sourceDirty || sourceSaving;
+  const activeDocumentVersions = activeDocumentGenerationType
+    ? (app.documentVersions ?? []).filter(version => version.type === activeDocumentGenerationType)
+    : [];
+  const selectedDocumentVersion = activeDocumentVersions.find(version => version.id === selectedVersionId)
+    ?? activeDocumentVersions[0]
+    ?? null;
 
   const outreachPanel = (
     <div className="p-5 space-y-4">
@@ -802,6 +931,26 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             </a>
           )}
 
+          <button
+            onClick={() => void generateApplicationDocument('resume')}
+            disabled={!!documentGenerating || documentGenerationBlocked}
+            title={documentGenerationBlocked ? 'Save or reset source edits before regenerating.' : undefined}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+          >
+            {documentGenerating === 'resume'
+              ? <><Loader2 className="w-4 h-4 animate-spin" />Generating resume...</>
+              : <><Sparkles className="w-4 h-4" />{app.resumeMd || app.resumePath ? 'Regenerate Resume' : 'Generate Resume'}</>}
+          </button>
+          <button
+            onClick={() => void generateApplicationDocument('cover-letter')}
+            disabled={!!documentGenerating || documentGenerationBlocked}
+            title={documentGenerationBlocked ? 'Save or reset source edits before regenerating.' : undefined}
+            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+          >
+            {documentGenerating === 'cover-letter'
+              ? <><Loader2 className="w-4 h-4 animate-spin" />Generating cover...</>
+              : <><Sparkles className="w-4 h-4" />{app.coverLetterMd || app.coverLetterPath ? 'Regenerate Cover Letter' : 'Generate Cover Letter'}</>}
+          </button>
           {/* Divider if both download buttons and interview button shown */}
           {(app.resumePath || app.coverLetterPath) && (
             <div className="w-px h-6 bg-slate-200 hidden sm:block" />
@@ -911,6 +1060,16 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             {jobDescriptionError}
           </div>
         )}
+        {documentGenerationError && (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {documentGenerationError}
+          </div>
+        )}
+        {documentGenerationNotice && (
+          <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${documentGenerationNotice.kind === 'warning' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+            {documentGenerationNotice.message}
+          </div>
+        )}
       </div>
 
       {/* Main layout: doc viewer + chat */}
@@ -937,6 +1096,45 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             </div>
             {(activeTab === 'resume' || activeTab === 'cover-letter' || activeTab === 'job-description' || activeTab === 'interview') && activeContent() && (
               <div className="mb-2 flex items-center gap-2 shrink-0">
+                {activeDocumentGenerationType && (
+                  <button
+                    onClick={() => void generateApplicationDocument(activeDocumentGenerationType)}
+                    disabled={!!documentGenerating || documentGenerationBlocked}
+                    title={documentGenerationBlocked ? 'Save or reset source edits before regenerating.' : undefined}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {documentGenerating === activeDocumentGenerationType
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Sparkles className="w-3.5 h-3.5" />}
+                    {activeDocumentGenerationType === 'resume'
+                      ? app.resumeMd || app.resumePath ? 'Regenerate' : 'Generate'
+                      : app.coverLetterMd || app.coverLetterPath ? 'Regenerate' : 'Generate'}
+                  </button>
+                )}
+                {activeDocumentGenerationType && activeDocumentVersions.length > 0 && (
+                  <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1">
+                    <label className="sr-only" htmlFor="document-version-select">Document version</label>
+                    <select
+                      id="document-version-select"
+                      value={selectedDocumentVersion?.id ?? ''}
+                      onChange={e => setSelectedVersionId(e.target.value)}
+                      className="max-w-52 bg-transparent text-xs font-medium text-slate-600 outline-none"
+                    >
+                      {activeDocumentVersions.map(version => (
+                        <option key={version.id} value={version.id}>{versionOptionLabel(version)}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => void restoreSelectedDocumentVersion()}
+                      disabled={!selectedDocumentVersion || versionRestoring || documentGenerationBlocked}
+                      title={documentGenerationBlocked ? 'Save or reset source edits before restoring.' : undefined}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-md text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      {versionRestoring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                      Restore
+                    </button>
+                  </div>
+                )}
                 {sourceMode && isEditableSource && (
                   <>
                     <button
@@ -1027,3 +1225,10 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     </div>
   );
 }
+
+
+
+
+
+
+

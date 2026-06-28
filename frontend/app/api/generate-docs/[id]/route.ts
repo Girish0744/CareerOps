@@ -4,10 +4,12 @@ import fs from 'fs';
 import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { getApplication, saveJobDescriptionSnapshot, updateApplicationFields } from '@/lib/filesystem';
+import { getApplication, saveJobDescriptionSnapshot, snapshotDocumentVersion, updateApplicationFields } from '@/lib/filesystem';
 import { apiErrorMessage } from '@/lib/errors';
 import { generateGeminiContent } from '@/lib/ai-config';
 import { refreshDocumentPdfIfStale } from '@/lib/document-renderer';
+import { formatCoverLetterDate } from '@/lib/date-format';
+import { formatJobReferenceForSubject } from '@/lib/job-reference';
 import { extractApplicantProfile } from '@/lib/apply-assistant';
 import {
   assertUsableJobDescription,
@@ -79,6 +81,24 @@ function stripHtml(value: string): string {
     .trim();
 }
 
+function decodeBasicHtmlEntities(value: string): string {
+  return value
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .trim();
+}
+
+function markdownLinkFromAnchor(attrs: string, labelHtml: string): string {
+  const quotedHref = attrs.match(/\bhref\s*=\s*(["'])(.*?)\1/i)?.[2];
+  const unquotedHref = attrs.match(/\bhref\s*=\s*([^\s>]+)/i)?.[1];
+  const href = decodeBasicHtmlEntities(quotedHref ?? unquotedHref ?? '');
+  const label = stripHtml(labelHtml) || href;
+  if (!href) return label;
+  return `[${label}](${href})`;
+}
+
 function sanitizeCoverLetterLanguage(value: string): string {
   return value
     .replace(/\bI am eager to contribute to\b/gi, 'I can contribute to')
@@ -115,14 +135,42 @@ function uniqueUrls(values: Array<string | null | undefined>): string[] {
   return urls;
 }
 
-function isWeakJobDescription(text: string | null | undefined): boolean {
+function jobDescriptionBody(text: string | null | undefined): string {
+  if (!text) return '';
+  const separatorIndex = text.indexOf('\n---\n');
+  return (separatorIndex >= 0 ? text.slice(separatorIndex + 5) : text).trim();
+}
+
+function isFallbackOnlyJobDescription(text: string | null | undefined): boolean {
   if (!text) return true;
   const normalized = text.toLowerCase();
-  const hasFallbackMarker = normalized.includes('archived job listing snapshot from scan source')
+  return normalized.includes('archived job listing snapshot from scan source')
+    || normalized.includes('limited job metadata from scan card')
     || normalized.includes('preliminary scan score')
     || normalized.includes('scan summary');
-  const hasRealSections = /\b(responsibilities|requirements|qualifications|what you'?ll do|what you bring|about the role)\b/i.test(text);
-  return hasFallbackMarker || text.trim().length < 1200 || !hasRealSections;
+}
+
+function isPastedJobDescription(app: NonNullable<ReturnType<typeof getApplication>>): boolean {
+  return app.scoreData?.extractionMode === 'pasted-text'
+    || /^\*\*URL:\*\*\s*Pasted JD\b/im.test(app.jobDescription ?? '');
+}
+
+function isWeakJobDescription(text: string | null | undefined): boolean {
+  const body = jobDescriptionBody(text);
+  if (!body) return true;
+  if (isFallbackOnlyJobDescription(body)) return true;
+
+  const hasRealSections = /\b(responsibilities|requirements|qualifications|what you'?ll do|what you bring|about the role|what you'll need|required skills|preferred skills|key accountabilities|duties)\b/i.test(body);
+  const hasRoleSignals = /\b(role|job|position|team|candidate|experience|skills|work|develop|support|analy(?:s|z)e|manage|build|collaborate)\b/i.test(body);
+  return body.length < 500 || (body.length < 1200 && !hasRealSections && !hasRoleSignals);
+}
+
+function normalizeGeneratedPunctuation(value: string): string {
+  return value
+    .replace(/\u2014/g, ',')
+    .replace(/\u2013/g, '-')
+    .replace(/\u2212/g, '-')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '');
 }
 
 async function bestAvailableJobDescription(
@@ -131,6 +179,10 @@ async function bestAvailableJobDescription(
   warnings: string[],
 ): Promise<string> {
   const savedJobDescription = app.jobDescription ?? '';
+  const savedBody = jobDescriptionBody(savedJobDescription);
+  if (isPastedJobDescription(app) && savedBody && !isFallbackOnlyJobDescription(savedBody)) {
+    return savedJobDescription;
+  }
   if (!isWeakJobDescription(savedJobDescription)) return savedJobDescription;
 
   const urls = uniqueUrls([
@@ -166,7 +218,8 @@ async function bestAvailableJobDescription(
 function collectResumeQualityWarnings(html: string, markdown: string) {
   const warnings: string[] = [];
   const htmlLower = html.toLowerCase();
-  const plainText = stripHtml(`${html}\n${markdown}`);
+  const visibleHtml = html.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1] ?? html;
+  const plainText = stripHtml(`${visibleHtml}\n${markdown}`);
 
   if (!html.trimStart().toLowerCase().startsWith('<!doctype html>')) {
     warnings.push('resume HTML should start with <!DOCTYPE html>');
@@ -315,7 +368,7 @@ function markdownFromResumeHtml(html: string): string {
     .replace(/<li\b[^>]*>([\s\S]*?)<\/li>/gi, '\n- $1')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(?:p|div|tr|ul)>/gi, '\n')
-    .replace(/<a\b[^>]*>([\s\S]*?)<\/a>/gi, '$1')
+    .replace(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi, (_match, attrs: string, label: string) => markdownLinkFromAnchor(attrs, label))
     .replace(/<strong\b[^>]*>([\s\S]*?)<\/strong>/gi, '**$1**')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/gi, ' ')
@@ -363,7 +416,7 @@ function extractAllHtml(text: string): string {
 }
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
@@ -371,6 +424,14 @@ export async function POST(
 
   const app = getApplication(id);
   if (!app) return NextResponse.json({ error: 'Application not found' }, { status: 404 });
+
+  const body = await req.json().catch(() => ({})) as { type?: string; documentType?: string };
+  const requestedType = body.type ?? body.documentType ?? 'both';
+  if (requestedType !== 'resume' && requestedType !== 'cover-letter' && requestedType !== 'both') {
+    return NextResponse.json({ error: 'type must be resume, cover-letter, or both' }, { status: 400 });
+  }
+  const shouldGenerateResume = requestedType === 'resume' || requestedType === 'both';
+  const shouldGenerateCoverLetter = requestedType === 'cover-letter' || requestedType === 'both';
 
   const cv         = readRoot('cv.md');
   const profile    = readRoot('config/profile.yml');
@@ -384,11 +445,15 @@ export async function POST(
   const folderPath = path.join(/*turbopackIgnore: true*/ ROOT, app.applicationFolder);
   const warnings: string[] = [];
   const jobDescriptionText = await bestAvailableJobDescription(id, app, warnings);
+  const jobRefForSubject = formatJobReferenceForSubject(jobDescriptionText);
 
   // ── 1. RESUME ──────────────────────────────────────────────────────────────
 
-  const resumeSystem = `
-You are an expert ATS resume writer. Produce the strongest possible tailored 2-page resume for this candidate. The resume must clear ATS first, then read naturally for HR, and give a technical manager confidence that the evidence is real.
+  let resumePdfGenerated = fs.existsSync(path.join(folderPath, 'resume.pdf'));
+  let resumeGenerationError: string | null = null;
+
+  if (shouldGenerateResume) {
+  const resumeSystem = `You are an expert ATS resume writer. Produce the strongest possible tailored 2-page resume for this candidate. The resume must clear ATS first, then read naturally for HR, and give a technical manager confidence that the evidence is real.
 
 Use this workflow in order:
 1. Read the job description carefully.
@@ -490,7 +555,7 @@ COMBINATIONS THAT OVERFLOW TO PAGE 3 (never use):
 - 12 project bullets + 3 extracurricular entries (this is what causes 3-page overflow)
 - Any combination with 4+ projects
 
-PROJECT URLS (use exactly these in HTML links):
+PROJECT URLS (use exactly these in HTML links, and use markdown links in the MARKDOWN block):
 - Zonalyze: GitHub https://github.com/Girish0744/Zonalyze
 - ETHOS: GitHub https://github.com/Girish0744/ETHOS-MLPROJECT | Live https://eth0s.online
 - AegisGrid: GitHub https://github.com/Girish0744/AegisGrid | Live https://aegis-grid.vercel.app
@@ -715,14 +780,14 @@ AI/ML & Data:
 Databases (same for all): PostgreSQL, SQL Server, MongoDB, MySQL, SQLite
 
 Tools & Infrastructure:
-  DA_BA:          AWS (Athena, S3, EC2), Azure, Docker, Git, GitHub, CI/CD, Postman, SharePoint, Power BI, Excel
-  DATA_ENGINEER:  AWS (Athena, S3, EC2, Lambda), Azure, Docker, Git, GitHub, CI/CD, Postman, Power Automate
-  AI_ML:          AWS (EC2, S3, Athena, Lambda), Azure, Docker, Vercel, Git, GitHub, CI/CD, Postman
-  SWE_FULLSTACK / GENERAL: AWS (EC2, S3, Athena, Lambda), Azure, Docker, Vercel, Git, GitHub, CI/CD, Postman, Selenium
-  BACKEND_JAVA_SYSTEMS: Docker, Git, GitHub, CI/CD, Postman, AWS (EC2, S3), Azure, Vercel, Selenium
-  SYSTEMS_CPP:    AWS (EC2, S3), Azure, Docker, Git, GitHub, CI/CD, Postman, Vercel
-  CSHARP_DOTNET:  AWS (EC2, S3), Azure, Docker, Vercel, Git, GitHub, CI/CD, Postman, Selenium
-  HELPDESK_IT:    AWS (EC2, S3), Azure, Docker, Git, GitHub, CI/CD, Postman, SharePoint, Power Automate, Selenium
+  DA_BA:          AWS, Azure, Docker, Git, GitHub, CI/CD, Postman, SharePoint, Power BI, Excel
+  DATA_ENGINEER:  AWS, Azure, Docker, Git, GitHub, CI/CD, Postman, Power Automate
+  AI_ML:          AWS, Azure, Docker, Vercel, Git, GitHub, CI/CD, Postman
+  SWE_FULLSTACK / GENERAL: AWS, Azure, Docker, Vercel, Git, GitHub, CI/CD, Postman, Selenium
+  BACKEND_JAVA_SYSTEMS: Docker, Git, GitHub, CI/CD, Postman, AWS, Azure, Vercel, Selenium
+  SYSTEMS_CPP:    AWS, Azure, Docker, Git, GitHub, CI/CD, Postman, Vercel
+  CSHARP_DOTNET:  AWS, Azure, Docker, Vercel, Git, GitHub, CI/CD, Postman, Selenium
+  HELPDESK_IT:    AWS, Azure, Docker, Git, GitHub, CI/CD, Postman, SharePoint, Power Automate, Selenium
 
 Post-selection check: scan the JD keyword list. If any required tool is missing from the skills rows AND the candidate genuinely has it, add it to the appropriate row:
 - Excel → Tools & Infrastructure (real skill, used at OER; add for any DA/BA/data role that lists it)
@@ -1075,10 +1140,13 @@ Respond in EXACTLY this format:
     resumeMd = resumeHtml ? markdownFromResumeHtml(resumeHtml) : cv;
   }
 
+  resumeMd = normalizeGeneratedPunctuation(resumeMd);
+  resumeHtml = normalizeGeneratedPunctuation(resumeHtml);
+
+  snapshotDocumentVersion(id, 'resume', 'regenerate');
   fs.writeFileSync(path.join(folderPath, 'resume.md'),   resumeMd);
 
-  let resumePdfGenerated = false;
-  let resumeGenerationError: string | null = null;
+  resumePdfGenerated = false;
   try {
     const renderResult = await refreshDocumentPdfIfStale(id, 'resume');
     const htmlPath = path.join(folderPath, 'resume.html');
@@ -1099,32 +1167,399 @@ Respond in EXACTLY this format:
     resumeGenerationError = e instanceof Error ? e.message : String(e);
     console.error('Resume PDF failed:', e);
   }
+  }
 
   // ── 2. COVER LETTER ────────────────────────────────────────────────────────
 
-  const dateFormatted = new Date().toLocaleDateString('en-CA', {
-    year: 'numeric', month: 'long', day: 'numeric',
-  });
+  let clPdfGenerated = fs.existsSync(path.join(folderPath, 'cover-letter.pdf'));
+  let coverLetterGenerationError: string | null = null;
 
-  const clSystem = `You generate professional, tailored cover letters.
+  if (shouldGenerateCoverLetter) {
+  const dateFormatted = formatCoverLetterDate();
 
-RULES:
-- Exactly 3 short paragraphs. 220-280 words total.
-- Human, direct, plainspoken, and specific. Not sycophantic, inflated, or generic.
-- Do NOT start paragraph 1 with "I".
-- Never use: "I am passionate about", "I would love the opportunity", "I believe I would be a great fit", "I am writing to apply", "I am eager", "leveraging", "robust", "comprehensive", "extensive experience", "technical rigors", "enterprise-scale environments"
-- Reference something specific from the company/JD
-- Only use facts from the CV — never invent experience or metrics
-- If the role is senior or low-fit, write conservatively and do not pretend the candidate meets seniority requirements
-- Never imply hands-on Golang, Spring Boot, Kubernetes, Kafka, or banking platform experience unless those facts appear in the CV/profile
-- For Java/Golang backend roles, frame Java as Java SE certification/fundamentals and emphasize adjacent C#/C++/SQL/TCP/API systems evidence
-- Do not mention "Golang" except in the job title unless the candidate has real Go experience in the source material
-- Do not close with a generic enthusiasm sentence. Close with a calm, concrete fit statement
+  const clSystem = `You are a senior recruiter, hiring manager, and career writer.
 
-FONT PATHS: The HTML is saved at applications/${id}/cover-letter.html.
+You generate tailored cover letters that feel personally written, not AI-generated.
+
+The resume proves technical ability.
+The cover letter proves relevance, judgment, personality, and why this candidate makes sense for this exact role.
+
+Your job is NOT to summarize the resume.
+Your job is to connect the candidate's real experience to the company's real needs.
+
+The reader should finish thinking:
+"This person understands what we need, has done related work before, and is worth interviewing."
+
+========================
+CORE OBJECTIVE
+========================
+
+Write a cover letter that:
+
+1. Feels specific to this company and role
+2. Uses first-person voice
+3. Tells a relevant story, not a full life story
+4. Connects Girish's experience directly to the job responsibilities
+5. Shows value without sounding desperate or exaggerated
+6. Uses only facts from the CV, profile, narrative, and job description
+7. Avoids resume-style technical dumping
+8. Sounds like Girish spent time writing this letter himself
+
+Do not write a generic cover letter.
+Do not write a paragraph version of the resume.
+Do not simply match keywords.
+
+Interpret the resume.
+Explain why the selected experience matters for this employer.
+
+========================
+INTERNAL THINKING PROCESS
+DO NOT OUTPUT THIS
+========================
+
+Before writing, silently complete these steps:
+
+1. Read the full job description.
+
+2. Identify:
+   - What the company does
+   - What this department or team likely needs
+   - The top 3 responsibilities of the role
+   - The top 3 human qualities the employer seems to value
+   - The top 3 technical or analytical skills required
+   - Any company mission, product, client group, or business problem mentioned
+
+3. Read the candidate CV, profile, and narrative.
+
+4. Select only the strongest evidence from Girish's background.
+
+Prefer evidence in this order:
+   1. Professional or co-op experience
+   2. Volunteer technical experience
+   3. Major projects
+   4. Leadership experience
+   5. Awards
+   6. Coursework
+
+5. Choose ONE central story for the letter.
+
+The story should answer:
+"Why does Girish make sense for this specific role?"
+
+6. Decide which 1 or 2 experiences best prove that story.
+
+Do not mention everything.
+One strong, relevant story is better than five disconnected qualifications.
+
+========================
+COVER LETTER STRUCTURE
+========================
+
+Exactly 3 paragraphs.
+220 to 300 words total.
+No bullet points.
+No headings inside the body.
+
+PARAGRAPH 1:
+Open with the company, role, team, mission, or job responsibility.
+
+Do NOT start with "I".
+
+This paragraph should:
+- Mention the exact role naturally
+- Reference something specific from the job description or company
+- Explain why this opportunity connects with Girish's actual experience
+- Briefly introduce the main value Girish brings
+
+PARAGRAPH 2:
+Tell the evidence story.
+
+This is the most important paragraph.
+
+Pick the most relevant experience or project from the CV.
+Do not summarize it.
+Do not list technologies.
+
+Use this structure naturally:
+- What was the problem or responsibility?
+- What did Girish actually do?
+- What decision, habit, or approach does this show?
+- Why does that matter for this role?
+
+CRITICAL:
+Paragraph 2 must not mention more than TWO technologies, tools, models, or technical methods total.
+The goal is not to prove the candidate knows tools.
+The goal is to show how the candidate thinks through a problem.
+If paragraph 2 contains more than two tool names or technical methods, rewrite it.
+
+Bad:
+"I used Python, SQL, Random Forest, FastAPI, PostgreSQL, WebSocket, Docker, and LLM tools..."
+
+Good:
+"That project taught me to take scattered information, structure it carefully, and turn it into something people could actually use to make a decision."
+
+PARAGRAPH 3:
+Connect the story back to the employer's needs.
+
+This paragraph should:
+- Explain why this role is a natural next step
+- Show what Girish can contribute
+- Sound confident but not arrogant
+- Include contact information at the end
+
+The final sentence must include:
+"I can be reached at ${contact.email} or ${contact.phone}"
+
+========================
+VOICE AND STYLE
+========================
+
+Write in first person.
+
+The letter should sound like:
+- thoughtful
+- grounded
+- specific
+- respectful
+- human
+- confident
+- honest
+- early-career but capable
+
+It should NOT sound:
+- robotic
+- inflated
+- desperate
+- generic
+- overly polished
+- like marketing copy
+- like a resume summary
+- like a template
+
+Use natural contractions when appropriate:
+- I've
+- I'm
+- that's
+- it's
+
+Use varied sentence lengths.
+Mix short sentences with longer ones.
+Avoid repeating the same sentence pattern.
+
+========================
+COMPANY CONNECTION RULES
+========================
+
+Reference something specific from the job description or company.
+
+Good:
+"The emphasis on using data to support claims decisions stood out because my strongest work has involved turning raw information into something people can actually act on."
+
+Bad:
+"Your company is a leader in innovation."
+
+Do not flatter the company.
+Connect to it.
+
+========================
+EVIDENCE SELECTION RULES
+========================
+
+Do not automatically pick the most technically impressive project.
+Pick the experience that best connects to the job.
+
+For data analyst roles:
+Prefer Zonalyze, Student Dropout Risk Analysis, ETHOS, Power Automate, SharePoint, SQL, Python, data interpretation, and decision support.
+
+For software/full-stack roles:
+Prefer Zonalyze, AegisGrid, MediTwin, Olive Branch, React, FastAPI, APIs, full-stack delivery, deployment, and user-facing systems.
+
+For AI/ML roles:
+Prefer ETHOS, Zonalyze, MLflow, scikit-learn, Random Forest, model comparison, data cleaning, and deployed ML workflows.
+
+For IT/support roles:
+Prefer Open Education, technical support, accessibility, SharePoint, workflow automation, troubleshooting, student/staff support, and platform issues.
+
+For leadership/program roles:
+Prefer IT Club, HackTheBrain, AI Build Lab, mentorship, event coordination, cross-functional communication, and student engagement.
+
+For business/operations roles:
+Prefer Home Depot, Open Education, Student Ambassador, process improvement, training, inventory workflows, communication, and technical-business bridge.
+
+========================
+AUTHENTICITY RULES
+========================
+
+Never invent:
+- projects
+- metrics
+- technologies
+- company research
+- responsibilities
+- leadership examples
+- outcomes
+- awards
+- certifications
+- employment history
+
+Every claim must trace back to:
+- CANDIDATE CV
+- CANDIDATE PROFILE
+- NARRATIVE
+- JOB DESCRIPTION
+
+You may interpret real facts.
+You may not invent new facts.
+
+========================
+TECHNICAL ACCURACY RULES
+========================
+
+Never imply hands-on experience with:
+- Golang
+- Spring Boot
+- Kubernetes
+- Kafka
+- banking platforms
+- enterprise Java systems
+
+unless explicitly present in the CV/profile.
+
+For Java roles:
+- Mention Java SE certification or Java fundamentals only if relevant
+- Emphasize adjacent evidence such as C#, C++, SQL, REST APIs, TCP systems, backend architecture, testing, and database work
+- Do not pretend professional Java enterprise experience
+
+For senior roles:
+- Be conservative
+- Do not pretend Girish meets seniority requirements
+- Frame him as early-career with strong project, co-op, and leadership evidence
+
+========================
+LANGUAGE BANS
+========================
+
+Never use these phrases or words:
+
+I am writing to apply
+I am passionate about
+I would love the opportunity
+I believe I would be a great fit
+I am eager
+eager
+eager to contribute
+excited to apply
+thrilled
+leveraging
+utilizing
+utilize
+robust
+comprehensive
+extensive experience
+technical rigors
+enterprise-scale
+dynamic environment
+cutting-edge
+drive innovation
+hit the ground running
+synergy
+proven track record
+adept at
+perfect fit
+uniquely qualified
+
+Before final output, scan the letter for every banned phrase.
+If any banned phrase appears, rewrite that sentence.
+
+========================
+GRAMMAR AND PUNCTUATION
+========================
+
+Before final output, silently review:
+
+- No em dashes
+- No awkward hyphen usage
+- No clause-joining hyphens
+- No phrase like "analysis-such as"
+- No run-on sentences
+- No missing commas after introductory clauses
+- No grammar errors
+- No repeated words
+- No overly long sentence
+- No generic closing
+- No fake company details
+- No unsupported claims
+
+Never connect clauses with hyphens.
+Use commas, periods, or parentheses where appropriate.
+
+Wrong:
+"analysis-such as"
+
+Correct:
+"analysis, such as"
+
+Use commas and periods cleanly.
+The letter must show attention to detail.
+
+Never use hyphens to connect phrases.
+Incorrect: datasets-including
+Correct: datasets, including
+
+Incorrect: analysis-such as
+Correct: analysis, such as
+
+========================
+ENDING RULES
+========================
+
+Do not end with:
+- "Thank you for your consideration."
+- "I look forward to hearing from you."
+- "I would love the opportunity..."
+- "I am excited to..."
+- "I am eager..."
+
+End with a calm, concrete fit statement and the required contact sentence.
+
+Never use two consecutive sentences that both ask to discuss alignment, fit, or experience.
+If the required contact sentence is used, the sentence before it must NOT mention discussing, connecting, aligning, opportunity, chance, or fit.
+
+========================
+SELF-REVIEW BEFORE OUTPUT
+DO NOT OUTPUT THIS
+========================
+
+Ask yourself:
+
+1. Does this letter explain why Girish fits THIS specific job?
+2. Does it sound like a human wrote it?
+3. Is paragraph 2 a story, not a resume summary?
+4. Does paragraph 2 avoid technology dumping?
+5. Does paragraph 2 mention no more than TWO technologies/tools/methods?
+6. Does every claim come from the CV/profile/narrative/JD?
+7. Did I avoid generic praise?
+8. Did I avoid every banned phrase, including "eager"?
+9. Are punctuation and grammar polished?
+10. Could this letter be reused for another company?
+    - If yes, rewrite it.
+11. Would this make a hiring manager more likely to interview Girish?
+    - If no, rewrite it.
+
+========================
+HTML RULES
+========================
+
+FONT PATHS:
+The HTML is saved at applications/${id}/cover-letter.html.
 Replace all font src URLs in the template with ../../fonts/{filename}.
 
-TEMPLATE (fill every {{PLACEHOLDER}}):
+Use the provided HTML template exactly.
+Fill every placeholder.
+Do not leave bracketed notes.
+Do not output explanations.
+
+TEMPLATE:
 ${clTemplate}
 
 PLACEHOLDER VALUES:
@@ -1142,13 +1577,13 @@ PLACEHOLDER VALUES:
 - {{GITHUB_DISPLAY}} → ${contact.githubDisplay}
 - {{DATE}} → ${dateFormatted}
 - {{HIRING_MANAGER}} → Hiring Manager
-- {{RECIPIENT_TITLE_LINE}} → (empty — leave blank)
-- {{COMPANY}} → [company from JD]
-- {{COMPANY_ADDRESS}} → (empty — leave blank)
-- {{JOB_TITLE}} → [exact job title from JD]
-- {{JOB_REF}} → (empty — unless ref# in JD)
+- {{RECIPIENT_TITLE_LINE}} → (empty, leave blank)
+- {{COMPANY}} → ${app.company}
+- {{COMPANY_ADDRESS}} → (empty, leave blank)
+- {{JOB_TITLE}} → ${app.jobTitle}
+- {{JOB_REF}} → ${jobRefForSubject || '(empty, no confident job reference found)'}
 - {{SALUTATION}} → Hiring Manager
-- {{BODY}} → [3-4 paragraphs in <p>...</p> tags]
+- {{BODY}} → exactly 3 paragraphs in <p>...</p> tags
 
 CANDIDATE CV:
 ${cv}
@@ -1159,10 +1594,12 @@ ${profile}
 NARRATIVE:
 ${profileMd}
 
-Respond in EXACTLY this format (no other text):
+Respond in EXACTLY this format and nothing else:
+
 ===MARKDOWN===
-[Cover letter text without HTML — clean prose]
+[Cover letter text only, clean prose, no HTML]
 ===END_MARKDOWN===
+
 ===HTML===
 <!DOCTYPE html>
 [Complete filled HTML starting with <!DOCTYPE html>]
@@ -1180,13 +1617,14 @@ Respond in EXACTLY this format (no other text):
   const clRaw = clResult.text ?? '';
   console.log('[generate-docs] cover letter raw (first 300):', clRaw.slice(0, 300));
 
-  const clMdBody = sanitizeCoverLetterLanguage(extractBlock(clRaw, 'MARKDOWN') || clRaw);
-  const clMdFull = `# Cover Letter: ${app.jobTitle} at ${app.company}\n\n**Date:** ${today}\n**Application:** applications/${id}/\n\n---\n\n${clMdBody}`;
+  const clMdBody = sanitizeCoverLetterLanguage(normalizeGeneratedPunctuation(extractBlock(clRaw, 'MARKDOWN') || clRaw));
+  const jobRefMetadata = jobRefForSubject.match(/^\s*\(Job ID:\s*(.*?)\)\s*$/)?.[1] ?? '';
+  const clMdFull = `# Cover Letter: ${app.jobTitle} at ${app.company}\n\n**Date:** ${today}\n**Application:** applications/${id}/\n**Job ID:** ${jobRefMetadata}\n\n---\n\n${clMdBody}`;
 
+  snapshotDocumentVersion(id, 'cover-letter', 'regenerate');
   fs.writeFileSync(path.join(folderPath, 'cover-letter.md'), clMdFull);
 
-  let clPdfGenerated = false;
-  let coverLetterGenerationError: string | null = null;
+  clPdfGenerated = false;
   try {
     await refreshDocumentPdfIfStale(id, 'cover-letter');
     const clPdfPath = path.join(folderPath, 'cover-letter.pdf');
@@ -1195,6 +1633,7 @@ Respond in EXACTLY this format (no other text):
     coverLetterGenerationError = e instanceof Error ? e.message : String(e);
     console.error('Cover letter PDF failed:', e);
   }
+  }
 
   // ── 3. UPDATE DATA STORES ──────────────────────────────────────────────────
 
@@ -1202,20 +1641,20 @@ Respond in EXACTLY this format (no other text):
   const clRelPath     = `${app.applicationFolder}/cover-letter.pdf`;
 
   const updates: Parameters<typeof updateApplicationFields>[1] = {};
-  if (resumePdfGenerated) {
+  if (shouldGenerateResume && resumePdfGenerated) {
     updates.resumePath = resumeRelPath;
     updates.resumeGeneratedAt = generatedAt;
   }
-  if (clPdfGenerated) {
+  if (shouldGenerateCoverLetter && clPdfGenerated) {
     updates.coverLetterPath = clRelPath;
     updates.coverLetterGeneratedAt = generatedAt;
   }
-  if (resumePdfGenerated || clPdfGenerated) {
+  if ((shouldGenerateResume && resumePdfGenerated) || (shouldGenerateCoverLetter && clPdfGenerated)) {
     updates.lastDocumentGeneratedAt = generatedAt;
   }
-  if (resumePdfGenerated && clPdfGenerated) {
+  if (shouldGenerateCoverLetter && clPdfGenerated) {
     updates.status = 'Cover Letter Generated';
-  } else if (resumePdfGenerated) {
+  } else if (shouldGenerateResume && resumePdfGenerated && !app.coverLetterPath && app.status !== 'Cover Letter Generated') {
     updates.status = 'Resume Generated';
   }
 
@@ -1223,17 +1662,18 @@ Respond in EXACTLY this format (no other text):
     updateApplicationFields(id, updates);
   }
 
-  if (!resumePdfGenerated || !clPdfGenerated) {
+  if ((shouldGenerateResume && !resumePdfGenerated) || (shouldGenerateCoverLetter && !clPdfGenerated)) {
     throw new Error(
-      `Document source was generated, but PDF generation was incomplete. Resume PDF: ${resumePdfGenerated ? 'ok' : resumeGenerationError ?? 'failed'}; cover letter PDF: ${clPdfGenerated ? 'ok' : coverLetterGenerationError ?? 'failed'}.`,
+      `Document source was generated, but PDF generation was incomplete. Resume PDF: ${shouldGenerateResume ? (resumePdfGenerated ? 'ok' : resumeGenerationError ?? 'failed') : 'skipped'}; cover letter PDF: ${shouldGenerateCoverLetter ? (clPdfGenerated ? 'ok' : coverLetterGenerationError ?? 'failed') : 'skipped'}.`,
     );
   }
 
   return NextResponse.json({
     success: true,
     applicationId: id,
-    resumePath: resumeRelPath,
-    coverLetterPath: clRelPath,
+    requestedType,
+    resumePath: resumePdfGenerated ? resumeRelPath : null,
+    coverLetterPath: clPdfGenerated ? clRelPath : null,
     resumePdfGenerated,
     coverLetterPdfGenerated: clPdfGenerated,
     warnings,
@@ -1242,3 +1682,5 @@ Respond in EXACTLY this format (no other text):
     return NextResponse.json({ error: apiErrorMessage(err) }, { status: 500 });
   }
 }
+
+

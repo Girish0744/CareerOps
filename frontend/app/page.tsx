@@ -82,11 +82,13 @@ interface SourceSummaryItem {
   count: number;
 }
 
+type DocumentGenerationType = 'resume' | 'cover-letter';
+
 type Stage =
   | { kind: 'idle' }
   | { kind: 'evaluating' }
   | { kind: 'evaluated'; result: EvalResult }
-  | { kind: 'generating'; result: EvalResult }
+  | { kind: 'generating'; result: EvalResult; documentType: DocumentGenerationType; resumePdf?: boolean; coverLetterPdf?: boolean }
   | { kind: 'done'; result: EvalResult; resumePdf: boolean; coverLetterPdf: boolean; warnings?: string[] }
   | { kind: 'error'; message: string };
 
@@ -178,7 +180,7 @@ function ScoreCard({
 }: {
   result: EvalResult;
   stage: Stage;
-  onGenerate: () => void;
+  onGenerate: (type: DocumentGenerationType) => void;
   onReset: () => void;
 }) {
   const [showDetails, setShowDetails] = useState(false);
@@ -193,6 +195,9 @@ function ScoreCard({
   const c = colorMap[color];
 
   const generating = stage.kind === 'generating';
+  const generatingType = stage.kind === 'generating' ? stage.documentType : null;
+  const resumeGenerated = (stage.kind === 'done' || stage.kind === 'generating') ? !!stage.resumePdf : false;
+  const coverLetterGenerated = (stage.kind === 'done' || stage.kind === 'generating') ? !!stage.coverLetterPdf : false;
   const done = stage.kind === 'done';
 
   return (
@@ -279,7 +284,11 @@ function ScoreCard({
             <div className="flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
                 <CheckCircle2 className="w-4 h-4" />
-                Documents generated
+                {stage.resumePdf && stage.coverLetterPdf
+                  ? 'Documents generated'
+                  : stage.resumePdf
+                    ? 'Resume generated'
+                    : 'Cover letter generated'}
               </div>
               <Link
                 href={`/applications/${result.applicationId}`}
@@ -287,6 +296,20 @@ function ScoreCard({
               >
                 Open Application <ArrowRight className="w-3.5 h-3.5" />
               </Link>
+              <button
+                onClick={() => onGenerate('resume')}
+                disabled={generating}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 bg-white text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+              >
+                <Sparkles className="w-4 h-4" />{resumeGenerated ? 'Regenerate Resume' : 'Generate Resume'}
+              </button>
+              <button
+                onClick={() => onGenerate('cover-letter')}
+                disabled={generating}
+                className="inline-flex items-center gap-2 px-4 py-2 border border-slate-300 bg-white text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+              >
+                <Sparkles className="w-4 h-4" />{coverLetterGenerated ? 'Regenerate Cover Letter' : 'Generate Cover Letter'}
+              </button>
             </div>
             {stage.kind === 'done' && stage.warnings && stage.warnings.length > 0 && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -299,7 +322,7 @@ function ScoreCard({
             <div className="text-sm text-slate-600">
               {result.score < 70
                 ? <span className={`${c.text} font-medium`}>Score below 70 — you can still generate docs if you want this role.</span>
-                : <span className="text-slate-600">Ready to generate a tailored resume and cover letter.</span>}
+                : <span className="text-slate-600">Ready to generate a tailored resume or cover letter.</span>}
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <button
@@ -316,13 +339,22 @@ function ScoreCard({
                 View evaluation only
               </Link>
               <button
-                onClick={onGenerate}
+                onClick={() => onGenerate('resume')}
                 disabled={generating}
                 className="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
               >
-                {generating
-                  ? <><Loader2 className="w-4 h-4 animate-spin" />Generating…</>
-                  : <><Sparkles className="w-4 h-4" />Generate Resume &amp; Cover Letter</>}
+                {generatingType === 'resume'
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Generating resume…</>
+                  : <><Sparkles className="w-4 h-4" />{resumeGenerated ? 'Regenerate Resume' : 'Generate Resume'}</>}
+              </button>
+              <button
+                onClick={() => onGenerate('cover-letter')}
+                disabled={generating}
+                className="inline-flex items-center gap-2 px-5 py-2.5 border border-slate-300 bg-white text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+              >
+                {generatingType === 'cover-letter'
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />Generating cover letter…</>
+                  : <><Sparkles className="w-4 h-4" />{coverLetterGenerated ? 'Regenerate Cover Letter' : 'Generate Cover Letter'}</>}
               </button>
             </div>
           </>
@@ -511,25 +543,30 @@ export default function JobDiscoveryPage() {
     }
   }
 
-  async function handleGenerateDocsForJob(job: ScannedJob) {
+  async function handleGenerateDocsForJob(job: ScannedJob, type: DocumentGenerationType) {
     if (!job.applicationId) {
       setScanError('Evaluate this job first so an application folder exists.');
       return;
     }
-    setJobActionLoading(`docs:${job.id}`);
+    const label = type === 'resume' ? 'resume' : 'cover letter';
+    setJobActionLoading(`docs:${type}:${job.id}`);
     setScanError(null);
     setScanMessage(null);
     try {
-      const res = await fetch(`/api/generate-docs/${job.applicationId}`, { method: 'POST' });
+      const res = await fetch(`/api/generate-docs/${job.applicationId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
+      });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? 'Document generation failed');
+      if (!res.ok) throw new Error(data.error ?? `${label} generation failed`);
       await loadScannedJobs();
       const warning = Array.isArray(data.warnings) && data.warnings.length > 0
         ? ` Warning: ${data.warnings[0]}`
         : '';
-      setScanMessage(`Documents generated for ${job.company} — ${job.jobTitle}.${warning}`);
+      setScanMessage(`Generated ${label} for ${job.company} — ${job.jobTitle}.${warning}`);
     } catch (err) {
-      setScanError(err instanceof Error ? err.message : 'Document generation failed');
+      setScanError(err instanceof Error ? err.message : `${label} generation failed`);
     } finally {
       setJobActionLoading(null);
     }
@@ -627,14 +664,24 @@ export default function JobDiscoveryPage() {
     { label: 'Skip', jobs: filteredScannedJobs.filter(job => job.score < 50) },
   ].filter(lane => lane.jobs.length > 0), [filteredScannedJobs]);
 
-  async function handleGenerate() {
-    if (stage.kind !== 'evaluated') return;
+  async function handleGenerate(type: DocumentGenerationType) {
+    if (stage.kind !== 'evaluated' && stage.kind !== 'done') return;
     const { result } = stage;
-    setStage({ kind: 'generating', result });
+    const existingResumePdf = stage.kind === 'done' ? stage.resumePdf : false;
+    const existingCoverLetterPdf = stage.kind === 'done' ? stage.coverLetterPdf : false;
+    setStage({
+      kind: 'generating',
+      result,
+      documentType: type,
+      resumePdf: existingResumePdf,
+      coverLetterPdf: existingCoverLetterPdf,
+    });
 
     try {
       const res = await fetch(`/api/generate-docs/${result.applicationId}`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Generation failed');
@@ -642,8 +689,8 @@ export default function JobDiscoveryPage() {
       setStage({
         kind: 'done',
         result,
-        resumePdf: data.resumePdfGenerated,
-        coverLetterPdf: data.coverLetterPdfGenerated,
+        resumePdf: existingResumePdf || !!data.resumePdfGenerated,
+        coverLetterPdf: existingCoverLetterPdf || !!data.coverLetterPdfGenerated,
         warnings: Array.isArray(data.warnings) ? data.warnings : [],
       });
       void loadScannedJobs();
@@ -1011,15 +1058,26 @@ export default function JobDiscoveryPage() {
                     </Link>
                   )}
                   {job.applicationId && job.reviewState !== 'applied' && (
-                    <button
-                      onClick={() => void handleGenerateDocsForJob(job)}
-                      disabled={busy || jobActionLoading === `docs:${job.id}`}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {jobActionLoading === `docs:${job.id}`
-                        ? <><Loader2 className="w-3 h-3 animate-spin" />Generating</>
-                        : <><Sparkles className="w-3 h-3" />{job.hasResume || job.hasCoverLetter ? 'Regenerate docs' : 'Generate docs'}</>}
-                    </button>
+                    <>
+                      <button
+                        onClick={() => void handleGenerateDocsForJob(job, 'resume')}
+                        disabled={busy || jobActionLoading === `docs:resume:${job.id}`}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {jobActionLoading === `docs:resume:${job.id}`
+                          ? <><Loader2 className="w-3 h-3 animate-spin" />Generating</>
+                          : <><Sparkles className="w-3 h-3" />{job.hasResume ? 'Regenerate resume' : 'Generate resume'}</>}
+                      </button>
+                      <button
+                        onClick={() => void handleGenerateDocsForJob(job, 'cover-letter')}
+                        disabled={busy || jobActionLoading === `docs:cover-letter:${job.id}`}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {jobActionLoading === `docs:cover-letter:${job.id}`
+                          ? <><Loader2 className="w-3 h-3 animate-spin" />Generating</>
+                          : <><Sparkles className="w-3 h-3" />{job.hasCoverLetter ? 'Regenerate cover letter' : 'Generate cover letter'}</>}
+                      </button>
+                    </>
                   )}
                   {job.applicationId && job.reviewState !== 'applied' && (
                     <button

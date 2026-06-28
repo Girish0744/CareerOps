@@ -115,7 +115,7 @@ export async function POST(req: Request) {
         }
       }
     } else {
-      jdText = normalizeJobDescriptionText(text!);
+      jdText = normalizeJobDescriptionText(text!, { maxChars: null });
       extractionMode = 'pasted-text';
     }
 

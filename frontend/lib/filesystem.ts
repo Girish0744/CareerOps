@@ -51,6 +51,21 @@ export interface ApplicationEntry {
   lastActivityAt: string | null;
 }
 
+export type DocumentKind = 'resume' | 'cover-letter';
+
+export interface DocumentVersion {
+  id: string;
+  type: DocumentKind;
+  createdAt: string;
+  reason: string;
+  label: string;
+  files: {
+    markdown?: string;
+    html?: string;
+    pdf?: string;
+  };
+}
+
 export interface ApplicationDetail extends ApplicationEntry {
   jobDescription: string | null;
   resumeMd: string | null;
@@ -62,6 +77,7 @@ export interface ApplicationDetail extends ApplicationEntry {
   scoreData: ScoreData | null;
   resumePdfPath: string | null;
   coverLetterPdfPath: string | null;
+  documentVersions: DocumentVersion[];
 }
 
 export interface ScoreData {
@@ -73,6 +89,7 @@ export interface ScoreData {
   notes: string | null;
   categories: Record<string, number | null>;
   originalScore?: number | null;
+  extractionMode?: 'url' | 'apply-url' | 'pasted-text' | 'scan-metadata-fallback';
   sourceUrl?: string | null;
   applyUrl?: string | null;
   adjustedByGuardrails?: boolean;
@@ -289,6 +306,7 @@ export function getApplication(id: string): ApplicationDetail | null {
     scoreData:         readJson('score.json') as ScoreData | null,
     resumePdfPath:     resumePath,
     coverLetterPdfPath: coverLetterPath,
+    documentVersions:  getDocumentVersions(id),
   };
 }
 
@@ -371,12 +389,161 @@ export function saveInterviewPrep(id: string, content: string): string {
   updateInterviewPrepPath(id, relativePath);
   return relativePath;
 }
+function documentFiles(type: DocumentKind) {
+  return type === 'resume'
+    ? { markdown: 'resume.md', html: 'resume.html', pdf: 'resume.pdf' }
+    : { markdown: 'cover-letter.md', html: 'cover-letter.html', pdf: 'cover-letter.pdf' };
+}
+
+function versionIdFor(type: DocumentKind, createdAt: string): string {
+  return `${type}-${createdAt.replace(/[:.]/g, '-').replace(/Z$/, 'z')}`;
+}
+
+function versionManifestPath(app: ApplicationEntry): string {
+  return rootPath(app.applicationFolder, 'versions', 'manifest.json');
+}
+
+function readDocumentVersionsForApp(app: ApplicationEntry): DocumentVersion[] {
+  const manifestPath = versionManifestPath(app);
+  if (!fs.existsSync(manifestPath)) return [];
+  try {
+    const data = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as { versions?: DocumentVersion[] } | DocumentVersion[];
+    const versions = Array.isArray(data) ? data : Array.isArray(data.versions) ? data.versions : [];
+    return versions.sort((a, b) => timestampValue(b.createdAt) - timestampValue(a.createdAt));
+  } catch {
+    return [];
+  }
+}
+
+function writeDocumentVersionsForApp(app: ApplicationEntry, versions: DocumentVersion[]): void {
+  const manifestPath = versionManifestPath(app);
+  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+  fs.writeFileSync(manifestPath, JSON.stringify({ versions }, null, 2));
+}
+
+function appendDocumentHistory(app: ApplicationEntry, entry: Record<string, unknown>): void {
+  const historyPath = rootPath(app.applicationFolder, 'edit-history.json');
+  let history: unknown[] = [];
+  if (fs.existsSync(historyPath)) {
+    try { history = JSON.parse(fs.readFileSync(historyPath, 'utf-8')); } catch { history = []; }
+  }
+  history.push(entry);
+  fs.writeFileSync(historyPath, JSON.stringify(history, null, 2));
+}
+
+export function getDocumentVersions(id: string): DocumentVersion[] {
+  const app = getAllApplications().find(a => a.id === id);
+  return app ? readDocumentVersionsForApp(app) : [];
+}
+
+export function snapshotDocumentVersion(id: string, type: DocumentKind, reason: string): DocumentVersion | null {
+  const app = getAllApplications().find(a => a.id === id);
+  if (!app) throw new Error(`Application not found: ${id}`);
+
+  const folderPath = rootPath(app.applicationFolder);
+  const files = documentFiles(type);
+  const existing = Object.entries(files)
+    .map(([kind, filename]) => ({ kind: kind as keyof DocumentVersion['files'], filename, abs: path.join(folderPath, filename) }))
+    .filter(file => fs.existsSync(file.abs));
+
+  if (existing.length === 0) return null;
+
+  const createdAt = nowIso();
+  const versionId = versionIdFor(type, createdAt);
+  const versionRelDir = `${app.applicationFolder}/versions/${versionId}`;
+  const versionAbsDir = rootPath(versionRelDir);
+  fs.mkdirSync(versionAbsDir, { recursive: true });
+
+  const copiedFiles: DocumentVersion['files'] = {};
+  for (const file of existing) {
+    const targetAbs = path.join(versionAbsDir, file.filename);
+    try {
+      fs.copyFileSync(file.abs, targetAbs);
+      copiedFiles[file.kind] = `${versionRelDir}/${file.filename}`;
+    } catch {
+      // A PDF can be locked by a viewer; keep the source snapshot instead of failing the regenerate.
+    }
+  }
+
+  if (Object.keys(copiedFiles).length === 0) return null;
+
+  const version: DocumentVersion = {
+    id: versionId,
+    type,
+    createdAt,
+    reason,
+    label: `${type === 'resume' ? 'Resume' : 'Cover letter'} before ${reason}`,
+    files: copiedFiles,
+  };
+
+  const versions = readDocumentVersionsForApp(app).filter(v => v.id !== version.id);
+  versions.unshift(version);
+  writeDocumentVersionsForApp(app, versions);
+  appendDocumentHistory(app, { timestamp: createdAt, document: type, action: 'snapshot', reason, versionId });
+  return version;
+}
+
+export function restoreDocumentVersion(id: string, versionId: string): DocumentVersion {
+  const app = getAllApplications().find(a => a.id === id);
+  if (!app) throw new Error(`Application not found: ${id}`);
+
+  const version = readDocumentVersionsForApp(app).find(v => v.id === versionId);
+  if (!version) throw new Error(`Document version not found: ${versionId}`);
+
+  const folderPath = rootPath(app.applicationFolder);
+  snapshotDocumentVersion(id, version.type, 'restore');
+
+  const files = documentFiles(version.type);
+  const copyBack = (sourceRel: string | undefined, targetName: string) => {
+    if (!sourceRel) return false;
+    const sourceAbs = rootPath(sourceRel);
+    if (!fs.existsSync(sourceAbs)) return false;
+    try {
+      fs.copyFileSync(sourceAbs, path.join(folderPath, targetName));
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const restoredMarkdown = copyBack(version.files.markdown, files.markdown);
+  copyBack(version.files.html, files.html);
+  const restoredPdf = copyBack(version.files.pdf, files.pdf);
+
+  if (!restoredMarkdown && !restoredPdf) {
+    throw new Error(`Document version has no restorable files: ${versionId}`);
+  }
+
+  const now = nowIso();
+  if (version.type === 'resume') {
+    updateApplicationFields(id, {
+      resumePath: restoredPdf ? `${app.applicationFolder}/${files.pdf}` : app.resumePath,
+      resumeGeneratedAt: now,
+      lastDocumentGeneratedAt: now,
+    });
+  } else {
+    updateApplicationFields(id, {
+      coverLetterPath: restoredPdf ? `${app.applicationFolder}/${files.pdf}` : app.coverLetterPath,
+      coverLetterGeneratedAt: now,
+      lastDocumentGeneratedAt: now,
+    });
+  }
+
+  appendDocumentHistory(app, { timestamp: now, document: version.type, action: 'restore', versionId });
+  return version;
+}
 
 export function saveDocumentEdit(id: string, filename: 'resume.md' | 'cover-letter.md', content: string): void {
   const app = getAllApplications().find(a => a.id === id);
   if (!app) throw new Error(`Application not found: ${id}`);
 
   const filePath = rootPath(app.applicationFolder, filename);
+  if (fs.existsSync(filePath)) {
+    const current = fs.readFileSync(filePath, 'utf-8');
+    if (current !== content) {
+      snapshotDocumentVersion(id, filename === 'resume.md' ? 'resume' : 'cover-letter', 'manual edit');
+    }
+  }
   fs.writeFileSync(filePath, content);
 
   // Append to edit-history.json
@@ -625,3 +792,5 @@ export function updateApplicationFields(
 
   return true;
 }
+
+

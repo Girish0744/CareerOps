@@ -3,6 +3,12 @@ interface ExtractedJobDescription {
   source: 'structured' | 'html';
 }
 
+interface NormalizeJobDescriptionOptions {
+  maxChars?: number | null;
+}
+
+const DEFAULT_NORMALIZED_JOB_DESCRIPTION_MAX_CHARS = 50000;
+
 export class JobDescriptionExtractionError extends Error {
   constructor(message: string) {
     super(message);
@@ -53,7 +59,7 @@ function isBoilerplateLine(line: string): boolean {
   ].some(pattern => lower.includes(pattern));
 }
 
-export function normalizeJobDescriptionText(raw: string): string {
+export function normalizeJobDescriptionText(raw: string, options: NormalizeJobDescriptionOptions = {}): string {
   const text = htmlToText(raw);
   const seen = new Set<string>();
   const lines = text
@@ -68,7 +74,11 @@ export function normalizeJobDescriptionText(raw: string): string {
       return true;
     });
 
-  return lines.join('\n').slice(0, 16000).trim();
+  const normalized = lines.join('\n').trim();
+  const maxChars = options.maxChars === undefined
+    ? DEFAULT_NORMALIZED_JOB_DESCRIPTION_MAX_CHARS
+    : options.maxChars;
+  return maxChars == null ? normalized : normalized.slice(0, maxChars).trim();
 }
 
 function blockedPageReason(text: string): string | null {
