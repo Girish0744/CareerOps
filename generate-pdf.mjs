@@ -74,6 +74,25 @@ function normalizeTextForATS(html) {
   }
 }
 
+/**
+ * Strip active content from HTML before rendering (SEC-06).
+ *
+ * The resume/cover-letter HTML is partly model-generated, so remove <script>
+ * blocks, inline event-handler attributes (on*), and javascript: URLs before
+ * Chromium renders it. The locked templates contain no scripts or handlers, so
+ * this is a no-op for them and only neutralizes anything an injected job
+ * description could have coaxed the model into emitting. CSS/<style> is kept.
+ */
+function stripActiveContent(html) {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<script\b[^>]*\/?>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, '')
+    .replace(/\son[a-z]+\s*=\s*'[^']*'/gi, '')
+    .replace(/\son[a-z]+\s*=\s*[^\s>]+/gi, '')
+    .replace(/(href|src)\s*=\s*("|')\s*javascript:[^"']*\2/gi, '$1=$2#$2');
+}
+
 async function generatePDF() {
   const args = process.argv.slice(2);
 
@@ -111,6 +130,9 @@ async function generatePDF() {
 
   // Read HTML to inject font paths as absolute file:// URLs
   let html = await readFile(inputPath, 'utf-8');
+
+  // Remove any active content (scripts / inline handlers) before rendering (SEC-06)
+  html = stripActiveContent(html);
 
   // Resolve font paths relative to career-ops/fonts/
   const fontsDir = resolve(__dirname, 'fonts');

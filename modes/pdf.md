@@ -8,7 +8,7 @@
 4. Detect role archetype (see Archetype Detection below)
 5. Detect company location → paper format: US/Canada → `letter`, rest of world → `a4`
 6. Select the most relevant projects using the Project Selection Matrix: 3 projects by default, 4 only if page 2 needs density and space allows
-7. Write the tailored profile paragraph (4 sentences, zero first-person)
+7. Write the tailored profile paragraph (3-4 sentences, zero first-person)
 8. Build Highlights of Qualifications (always exactly 5 bullets)
 9. Select experience bullets by archetype
 10. Reorder skills within each category by JD relevance
@@ -116,11 +116,11 @@ There is no dynamic resume theme or format selection. If a generated resume look
 
 ### Profile (Step 7)
 
-4 sentences, zero first-person pronouns anywhere:
+3-4 sentences, zero first-person pronouns anywhere:
 - Sentence 1: Identity + primary stack for this archetype using JD vocabulary
 - Sentence 2: Capability (what end-to-end means for this role) from real project evidence
 - Sentence 3: Project background — cite 1–2 project names
-- Sentence 4: FIXED — "Available for full-time roles starting August 2026."
+- Optional sentence 4: Add only if it strengthens the JD fit with another real capability; do not use availability as filler
 
 Profile starters by archetype (adapt, do not copy verbatim):
 - SWE_FULLSTACK: "Full-stack developer with 3+ years of hands-on experience building and deploying web applications using React, TypeScript, FastAPI, and PostgreSQL..."

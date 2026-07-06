@@ -5,6 +5,7 @@ import { getApplication } from '@/lib/filesystem';
 import { apiErrorMessage } from '@/lib/errors';
 import { extractApplicantProfile, standardApplyFields } from '@/lib/apply-assistant';
 import { isRestrictedApplyHost } from '@/lib/apply-automation-core';
+import { assertPublicHttpUrl } from '@/lib/url-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -76,6 +77,13 @@ export async function POST(
     if (isRestrictedApplyHost(applyUrl)) {
       return NextResponse.json({
         error: 'This is a restricted job-board URL. Open or save the employer/ATS apply link first.',
+      }, { status: 400 });
+    }
+    try {
+      await assertPublicHttpUrl(applyUrl);
+    } catch (err) {
+      return NextResponse.json({
+        error: err instanceof Error ? err.message : 'This apply URL cannot be opened.',
       }, { status: 400 });
     }
     if (!app.resumePath || !app.coverLetterPath) {

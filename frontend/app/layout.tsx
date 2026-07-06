@@ -14,7 +14,7 @@ export default function RootLayout({
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col bg-[#f8fafc]" suppressHydrationWarning>
         <Nav />
-        <main className="flex-1">{children}</main>
+        <main className="flex-1 min-w-0">{children}</main>
       </body>
     </html>
   );

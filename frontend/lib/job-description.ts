@@ -1,3 +1,5 @@
+import { assertPublicHttpUrl } from './url-guard';
+
 interface ExtractedJobDescription {
   text: string;
   source: 'structured' | 'html';
@@ -200,7 +202,13 @@ async function tryLever(url: URL): Promise<string | null> {
 }
 
 export async function extractJobDescriptionFromUrl(rawUrl: string): Promise<ExtractedJobDescription> {
-  const url = new URL(rawUrl);
+  // SSRF guard: only fetch public http(s) hosts (SEC-02).
+  let url: URL;
+  try {
+    url = await assertPublicHttpUrl(rawUrl);
+  } catch (err) {
+    throw new JobDescriptionExtractionError(err instanceof Error ? err.message : 'This URL cannot be fetched.');
+  }
 
   for (const extractor of [tryGreenhouse, tryAshby, tryLever]) {
     try {

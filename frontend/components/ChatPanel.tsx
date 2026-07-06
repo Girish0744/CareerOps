@@ -160,7 +160,7 @@ export default function ChatPanel({ applicationId, onDocumentUpdated }: Props) {
   const activeSession = activeSessionId ? sessions.find(session => session.id === activeSessionId) : null;
 
   return (
-    <div className="flex flex-col h-full bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
 
       <div className="px-4 py-3.5 border-b border-slate-100 bg-slate-50">
         <div className="flex items-center justify-between gap-3">
@@ -206,7 +206,7 @@ export default function ChatPanel({ applicationId, onDocumentUpdated }: Props) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && !historyLoading && (
           <div className="mt-4">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-3 text-center">
@@ -245,7 +245,7 @@ export default function ChatPanel({ applicationId, onDocumentUpdated }: Props) {
               </div>
             )}
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap
+              className={`max-w-[85%] break-words rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap
                 ${m.role === 'user'
                   ? 'bg-slate-900 text-white rounded-br-sm'
                   : 'bg-slate-100 text-slate-800 rounded-bl-sm'}`}
@@ -282,7 +282,7 @@ export default function ChatPanel({ applicationId, onDocumentUpdated }: Props) {
         <div className="flex gap-2 bg-white border border-slate-200 rounded-xl p-2 shadow-sm focus-within:ring-2 focus-within:ring-slate-900 focus-within:border-transparent transition-all">
           <textarea
             ref={textareaRef}
-            className="flex-1 resize-none text-sm bg-transparent text-slate-800 placeholder:text-slate-400 focus:outline-none py-1 px-1 leading-relaxed"
+            className="min-w-0 flex-1 resize-none text-sm bg-transparent text-slate-800 placeholder:text-slate-400 focus:outline-none py-1 px-1 leading-relaxed"
             rows={2}
             placeholder="Ask something or request an edit... (Enter to send)"
             value={input}

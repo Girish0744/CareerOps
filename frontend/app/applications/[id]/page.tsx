@@ -557,7 +557,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     { key: 'cover-letter',    label: 'Cover Letter',    icon: <Mail className="w-3.5 h-3.5" />,       available: !!app.coverLetterMd },
     { key: 'job-description', label: 'Job Description', icon: <Briefcase className="w-3.5 h-3.5" />, available: !!app.jobDescription },
     { key: 'interview',       label: 'Interview Prep',  icon: <BookOpen className="w-3.5 h-3.5" />,  available: !!app.interviewMd || interviewGenerated },
-    { key: 'outreach',        label: 'Outreach',        icon: <UserSearch className="w-3.5 h-3.5" />, available: contacts.length > 0 },
+    { key: 'outreach',        label: 'Outreach',        icon: <UserSearch className="w-3.5 h-3.5" />, available: true },
     { key: 'apply',           label: 'Apply',           icon: <Send className="w-3.5 h-3.5" />,       available: true },
     { key: 'notes',           label: 'Notes',           icon: <FileText className="w-3.5 h-3.5" />,  available: !!app.notesMd },
   ];
@@ -601,6 +601,33 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     <div className="p-5 space-y-4">
       <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
         Public-source and user-provided contacts only. No automated LinkedIn scraping, no auto-messaging, and no hidden phone-number collection.
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-[1fr_1fr_auto]">
+          <input
+            type="text"
+            placeholder="Optional LinkedIn/profile URLs"
+            value={contactLinkedinUrls}
+            onChange={e => setContactLinkedinUrls(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900"
+          />
+          <input
+            type="text"
+            placeholder="Optional public notes/source"
+            value={contactPublicNotes}
+            onChange={e => setContactPublicNotes(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900"
+          />
+          <button
+            onClick={generateContacts}
+            disabled={contactLoading}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {contactLoading
+              ? <><Loader2 className="w-4 h-4 animate-spin" />Generating...</>
+              : <><UserSearch className="w-4 h-4" />Generate Outreach</>}
+          </button>
+        </div>
       </div>
       {contacts.length === 0 ? (
         <div className="py-12 text-center text-slate-500">
@@ -648,6 +675,8 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     </div>
   );
 
+  const applyDocuments = applySession?.documents ?? { resumePath: null, coverLetterPath: null, transcriptPath: null };
+
   const applyPanel = (
     <div className="p-5 space-y-5">
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -671,11 +700,11 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
         </div>
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-xs font-semibold text-slate-500 uppercase mb-2">Transcript</p>
-          <p className={`text-sm font-medium ${applySession?.documents.transcriptPath ? 'text-emerald-700' : 'text-amber-700'}`}>
-            {applySession?.documents.transcriptPath ? 'Configured' : 'Needs private path if requested'}
+          <p className={`text-sm font-medium ${applyDocuments.transcriptPath ? 'text-emerald-700' : 'text-amber-700'}`}>
+            {applyDocuments.transcriptPath ? 'Configured' : 'Needs private path if requested'}
           </p>
-          {applySession?.documents.transcriptPath && (
-            <p className="text-xs text-slate-400 mt-1 break-all">{applySession.documents.transcriptPath}</p>
+          {applyDocuments.transcriptPath && (
+            <p className="text-xs text-slate-400 mt-1 break-all">{applyDocuments.transcriptPath}</p>
           )}
         </div>
       </div>
@@ -704,7 +733,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           <button
             onClick={() => void startAssistedFill()}
             disabled={applyLoading || applyDocsLoading || applyAutomationLoading}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {applyAutomationLoading
               ? <><Loader2 className="w-4 h-4 animate-spin" />Opening browser...</>
@@ -713,7 +742,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           <button
             onClick={() => void startApplySession(true)}
             disabled={applyLoading || applyDocsLoading || applyAutomationLoading}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {applyLoading || applyDocsLoading
               ? <><Loader2 className="w-4 h-4 animate-spin" />{applyDocsLoading ? 'Generating docs...' : 'Preparing...'}</>
@@ -843,23 +872,23 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8">
+    <div className="w-full overflow-x-hidden px-3 py-3 pb-8 sm:px-4 lg:px-5">
 
       {/* Back */}
       <Link href="/applications"
-        className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 mb-6 transition-colors font-medium">
+        className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-slate-900">
         <ArrowLeft className="w-4 h-4" /> Back to tracker
       </Link>
 
       {/* Header card */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-5">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center text-lg font-bold text-slate-600 shrink-0">
+      <div className="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-base font-bold text-slate-600 shrink-0">
               {app.company[0]}
             </div>
-            <div>
-              <h1 className="text-xl font-bold text-slate-900">{app.company}</h1>
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold text-slate-900">{app.company}</h1>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-sm text-slate-500">
                 <span>{app.jobTitle}</span>
                 {app.location && (
@@ -878,7 +907,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           </div>
 
           {/* Score + Status */}
-          <div className="flex items-center gap-4 shrink-0">
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
             <ScoreBadge score={app.score} fitLevel={app.fitLevel} />
             <div className="flex items-center gap-2">
               <StatusBadge status={app.status} />
@@ -899,7 +928,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
         </div>
 
         {timelineItems.length > 0 && (
-          <div className="mt-5 pt-5 border-t border-slate-100 flex flex-wrap gap-2">
+          <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-2">
             {timelineItems.map(item => (
               <span key={item.label} className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                 <CalendarClock className="w-3.5 h-3.5 text-slate-400" />
@@ -910,13 +939,13 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
         )}
 
         {/* Actions row: PDF downloads + Interview Guide */}
-        <div className="mt-5 pt-5 border-t border-slate-100 flex flex-wrap items-center gap-3">
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
           {/* PDF downloads — only shown when PDFs exist */}
           {app.resumePath && (
             <a
               href={`/api/applications/${id}/pdf?type=resume`}
               download
-              className="inline-flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
             >
               <Download className="w-4 h-4" /> Resume PDF
             </a>
@@ -925,32 +954,36 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             <a
               href={`/api/applications/${id}/pdf?type=cover-letter`}
               download
-              className="inline-flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-sm"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50"
             >
               <Download className="w-4 h-4" /> Cover Letter PDF
             </a>
           )}
 
-          <button
-            onClick={() => void generateApplicationDocument('resume')}
-            disabled={!!documentGenerating || documentGenerationBlocked}
-            title={documentGenerationBlocked ? 'Save or reset source edits before regenerating.' : undefined}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-          >
-            {documentGenerating === 'resume'
-              ? <><Loader2 className="w-4 h-4 animate-spin" />Generating resume...</>
-              : <><Sparkles className="w-4 h-4" />{app.resumeMd || app.resumePath ? 'Regenerate Resume' : 'Generate Resume'}</>}
-          </button>
-          <button
-            onClick={() => void generateApplicationDocument('cover-letter')}
-            disabled={!!documentGenerating || documentGenerationBlocked}
-            title={documentGenerationBlocked ? 'Save or reset source edits before regenerating.' : undefined}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-          >
-            {documentGenerating === 'cover-letter'
-              ? <><Loader2 className="w-4 h-4 animate-spin" />Generating cover...</>
-              : <><Sparkles className="w-4 h-4" />{app.coverLetterMd || app.coverLetterPath ? 'Regenerate Cover Letter' : 'Generate Cover Letter'}</>}
-          </button>
+          {!(app.resumeMd || app.resumePath) && (
+            <button
+              onClick={() => void generateApplicationDocument('resume')}
+              disabled={!!documentGenerating || documentGenerationBlocked}
+              title={documentGenerationBlocked ? 'Save or reset source edits before generating.' : undefined}
+              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {documentGenerating === 'resume'
+                ? <><Loader2 className="w-4 h-4 animate-spin" />Generating resume...</>
+                : <><Sparkles className="w-4 h-4" />Generate Resume</>}
+            </button>
+          )}
+          {!(app.coverLetterMd || app.coverLetterPath) && (
+            <button
+              onClick={() => void generateApplicationDocument('cover-letter')}
+              disabled={!!documentGenerating || documentGenerationBlocked}
+              title={documentGenerationBlocked ? 'Save or reset source edits before generating.' : undefined}
+              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {documentGenerating === 'cover-letter'
+                ? <><Loader2 className="w-4 h-4 animate-spin" />Generating cover...</>
+                : <><Sparkles className="w-4 h-4" />Generate Cover Letter</>}
+            </button>
+          )}
           {/* Divider if both download buttons and interview button shown */}
           {(app.resumePath || app.coverLetterPath) && (
             <div className="w-px h-6 bg-slate-200 hidden sm:block" />
@@ -960,7 +993,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             <button
               onClick={() => void refreshJobDescriptionSnapshot()}
               disabled={jobDescriptionLoading}
-              className="inline-flex items-center gap-2 px-4 py-2.5 border border-slate-200 text-slate-700 text-sm font-semibold rounded-xl hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {jobDescriptionLoading
                 ? <><Loader2 className="w-4 h-4 animate-spin" />Fetching JD...</>
@@ -971,7 +1004,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           <button
             onClick={() => void startApplySession(true)}
             disabled={applyLoading || applyDocsLoading}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {applyLoading || applyDocsLoading
               ? <><Loader2 className="w-4 h-4 animate-spin" />{applyDocsLoading ? 'Generating docs...' : 'Preparing apply...'}</>
@@ -984,7 +1017,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             <button
               onClick={() => setShowLinkedinPrompt(true)}
               disabled={interviewLoading}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {interviewLoading
                 ? <><Loader2 className="w-4 h-4 animate-spin" />Generating guide...</>
@@ -1003,7 +1036,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                   placeholder="linkedin.com/in/..."
                   value={linkedinUrl}
                   onChange={e => setLinkedinUrl(e.target.value)}
-                  className="w-52 text-sm px-3 py-2 border border-emerald-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white text-slate-800"
+                  className="w-full sm:w-52 text-sm px-3 py-2 border border-emerald-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white text-slate-800"
                 />
                 <button onClick={generateInterview}
                   className="px-4 py-2 bg-emerald-600 text-white text-sm font-medium rounded-lg hover:bg-emerald-700 transition-colors">
@@ -1017,33 +1050,15 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             </div>
           )}
 
+
           <div className="w-px h-6 bg-slate-200 hidden sm:block" />
 
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-            <input
-              type="text"
-              placeholder="Optional LinkedIn/profile URLs"
-              value={contactLinkedinUrls}
-              onChange={e => setContactLinkedinUrls(e.target.value)}
-              className="w-64 text-sm px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white text-slate-800"
-            />
-            <input
-              type="text"
-              placeholder="Optional public notes/source"
-              value={contactPublicNotes}
-              onChange={e => setContactPublicNotes(e.target.value)}
-              className="w-64 text-sm px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white text-slate-800"
-            />
-            <button
-              onClick={generateContacts}
-              disabled={contactLoading}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white text-sm font-semibold rounded-xl hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-            >
-              {contactLoading
-                ? <><Loader2 className="w-4 h-4 animate-spin" />Generating outreach...</>
-                : <><UserSearch className="w-4 h-4" />Outreach</>}
-            </button>
-          </div>
+          <button
+            onClick={() => setActiveTab('outreach')}
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-700"
+          >
+            <UserSearch className="w-4 h-4" />Outreach
+          </button>
         </div>
         {interviewError && (
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -1073,13 +1088,13 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       </div>
 
       {/* Main layout: doc viewer + chat */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-5">
+      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
 
         {/* Left: document viewer */}
-        <div className="flex flex-col">
+        <div className="flex min-w-0 flex-col">
           {/* Tabs */}
-          <div className="flex items-end justify-between gap-3 bg-white border border-slate-200 rounded-t-xl px-2 pt-2">
-            <div className="flex gap-0.5 overflow-x-auto">
+          <div className="flex min-w-0 items-end justify-between gap-2 bg-white border border-slate-200 rounded-t-xl px-2 pt-2">
+            <div className="flex min-w-0 gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {tabs.map(tab => (
               <button
                 key={tab.key}
@@ -1095,7 +1110,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             ))}
             </div>
             {(activeTab === 'resume' || activeTab === 'cover-letter' || activeTab === 'job-description' || activeTab === 'interview') && activeContent() && (
-              <div className="mb-2 flex items-center gap-2 shrink-0">
+              <div className="mb-2 flex min-w-0 shrink-0 items-center gap-2">
                 {activeDocumentGenerationType && (
                   <button
                     onClick={() => void generateApplicationDocument(activeDocumentGenerationType)}
@@ -1166,15 +1181,15 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           </div>
 
           {/* Content */}
-          <div className="flex-1 bg-white border border-t-0 border-slate-200 rounded-b-xl overflow-hidden min-h-96">
-            {activeTab === 'outreach' ? outreachPanel : activeTab === 'apply' ? applyPanel : activeContent() && sourceMode ? (
+          <div className="min-h-[70vh] overflow-hidden rounded-b-xl border border-t-0 border-slate-200 bg-white">
+            {activeTab === 'outreach' ? <div className="bg-slate-50">{outreachPanel}</div> : activeTab === 'apply' ? <div className="bg-slate-50">{applyPanel}</div> : activeContent() && sourceMode ? (
               isEditableSource ? (
-                <div className="flex h-full max-h-[760px] flex-col bg-slate-950">
+                <div className="flex min-h-[70vh] flex-col bg-slate-950">
                   <textarea
                     value={sourceDraft}
                     onChange={e => { setSourceDraft(e.target.value); setSourceError(null); setSourceSavedAt(null); }}
                     spellCheck={false}
-                    className="min-h-[620px] flex-1 resize-none bg-slate-950 p-6 font-mono text-xs leading-relaxed text-slate-100 outline-none"
+                    className="min-h-[calc(70vh-2.5rem)] flex-1 resize-none bg-slate-950 p-6 font-mono text-xs leading-relaxed text-slate-100 outline-none"
                   />
                   <div className="flex min-h-10 items-center justify-between gap-3 border-t border-slate-800 bg-slate-900 px-4 py-2 text-xs">
                     <span className={sourceError ? 'text-red-300' : sourceDirty ? 'text-amber-200' : sourceSavedLabel ? 'text-emerald-300' : 'text-slate-400'}>
@@ -1184,13 +1199,13 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
                   </div>
                 </div>
               ) : (
-                <pre className="p-6 text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed overflow-y-auto h-full max-h-[700px]">
+                <pre className="overflow-x-auto p-6 text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
                   {activeContent()}
                 </pre>
               )
             ) : activeContent() ? (
-              <div className="overflow-y-auto h-full max-h-[760px] bg-slate-50 p-5">
-                <div className="mx-auto max-w-[850px] min-h-[900px] bg-white shadow-sm border border-slate-200 px-10 py-9">
+              <div className="bg-slate-50 p-4 sm:p-5">
+                <div className="mx-auto min-h-[70vh] w-full max-w-[850px] border border-slate-200 bg-white px-5 py-6 shadow-sm sm:px-8 lg:px-10 lg:py-9">
                   <DocumentPreview content={activeContent() ?? ''} />
                 </div>
               </div>
@@ -1211,7 +1226,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
         </div>
 
         {/* Right: chat */}
-        <div className="h-[640px] lg:h-auto">
+        <div className="h-[60vh] min-h-[420px] lg:sticky lg:top-20 lg:h-[calc(100vh-6rem)]">
           <ChatPanel
             applicationId={id}
             onDocumentUpdated={(filename) => {
@@ -1225,10 +1240,3 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     </div>
   );
 }
-
-
-
-
-
-
-
