@@ -86,6 +86,7 @@ export declare function verifyResumeContent(
   analysis?: ResumeAnalysis,
 ): { issues: ContentIssue[]; keywordCoverage: KeywordCoverageEntry[] };
 export declare function trimResumeForOverflow(content: ResumeContent): { content: ResumeContent; action: string | null };
+export declare function varyLeadingVerbs(content: ResumeContent): { content: ResumeContent; changes: string[] };
 export declare function buildCoverLetterChecks(
   letterText: string,
   options?: { email?: string; phone?: string },

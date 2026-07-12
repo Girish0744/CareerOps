@@ -10,6 +10,7 @@ import {
   buildResumeMarkdown,
   verifyResumeContent,
   trimResumeForOverflow,
+  varyLeadingVerbs,
   buildCoverLetterChecks,
   countProjectBulletItems,
   PROJECT_CATALOG,
@@ -127,7 +128,39 @@ check('trim step 3 drops the 3rd OER bullet', /OER/.test(step3.action ?? ''), st
 check('project bullet accounting matches builder output',
   countProjectBulletItems(step2.content) === countProjectBulletItems(step1.content) - 1);
 
-// ── 4. Cover letter checks ───────────────────────────────────────────────────
+// ── 4. Leading-verb variety pass ─────────────────────────────────────────────
+
+const verbDupContent = normalizeResumeContent({
+  ...good.resume,
+  highlights: [
+    'Built five things for the first highlight of the page',
+    'Built five more things for the second highlight of the page',
+    'Completed 2 co-op work terms at Conestoga College with strong reviews',
+    'Deployed 8+ full-stack projects using React and Docker across GitHub',
+    'Narhari Sharma Memorial Award recipient coordinating programs for 100+ students',
+  ],
+  projects: good.resume.projects.map((project, index) => index === 0
+    ? { ...project, bullets: ['Engineered the first platform module for live updates', 'Engineered the second platform module for data processing'] }
+    : project),
+});
+const verbPass = varyLeadingVerbs(verbDupContent);
+const verbIssues = verifyResumeContent(verbPass.content, good.analysis).issues
+  .filter(issue => issue.code === 'duplicate-lead-verb');
+check('varyLeadingVerbs removes all duplicate-lead-verb warnings', verbIssues.length === 0,
+  verbIssues.map(issue => issue.message).join(' | '));
+check('verb pass keeps first occurrence and only changes the lead word',
+  verbPass.content.highlights[0].startsWith('Built five things')
+  && !verbPass.content.highlights[1].startsWith('Built')
+  && verbPass.content.highlights[1].endsWith('five more things for the second highlight of the page')
+  && verbPass.content.projects[0].bullets[0].startsWith('Engineered')
+  && !verbPass.content.projects[0].bullets[1].startsWith('Engineered'),
+  JSON.stringify(verbPass.changes));
+check('verb pass reports its changes', verbPass.changes.length >= 2, JSON.stringify(verbPass.changes));
+const noDupResult = verifyResumeContent(varyLeadingVerbs(normalizeResumeContent(good.resume)).content, good.analysis);
+check('verb pass leaves the good fixture with zero duplicate-lead-verb warnings too',
+  !noDupResult.issues.some(issue => issue.code === 'duplicate-lead-verb'));
+
+// ── 5. Cover letter checks ───────────────────────────────────────────────────
 
 const letters = loadFixture('cover-letters.json');
 const contactOptions = { email: letters.email, phone: letters.phone };

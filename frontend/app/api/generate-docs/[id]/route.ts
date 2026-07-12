@@ -18,6 +18,7 @@ import {
   buildResumeMarkdown,
   verifyResumeContent,
   trimResumeForOverflow,
+  varyLeadingVerbs,
   buildCoverLetterChecks,
 } from '@/lib/document-content-core.mjs';
 import type { ResumeContent, ResumeAnalysis, ContentIssue, KeywordCoverageEntry } from '@/lib/document-content-core';
@@ -314,8 +315,10 @@ export async function POST(
   if (fixIssues.length > 0) {
     debugLog('[generate-docs] resume repair triggered:', fixIssues.map(issue => issue.code).join(', '));
     try {
+      // The repair call is triggered by hard failures, but it also receives the
+      // minor issues so the model can clean those up in the same pass.
       const { result: repairResult } = await generateGeminiContent(ai, 'generateDocs', {
-        contents: buildResumeRepairPrompt({ resume: resumeContent, issues: fixIssues, analysis }),
+        contents: buildResumeRepairPrompt({ resume: resumeContent, issues, analysis }),
         config: {
           systemInstruction: resumeSystem,
           maxOutputTokens: 8192,
@@ -342,6 +345,17 @@ export async function POST(
     } catch (repairErr) {
       debugLog('[generate-docs] resume repair failed:', apiErrorMessage(repairErr));
     }
+  }
+
+  // Deterministic verb-variety pass: duplicate leading verbs get a same-family
+  // synonym in code, so no page ships with two bullets starting the same way.
+  const verbPass = varyLeadingVerbs(resumeContent);
+  if (verbPass.changes.length > 0) {
+    resumeContent = verbPass.content;
+    debugLog('[generate-docs] leading verbs varied:', verbPass.changes.join(', '));
+    const finalCheck = verifyResumeContent(resumeContent, analysis);
+    issues = finalCheck.issues;
+    keywordCoverage = finalCheck.keywordCoverage;
   }
 
   // Never block generation on residual issues — surface them instead.

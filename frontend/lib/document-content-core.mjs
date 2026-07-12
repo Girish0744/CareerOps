@@ -550,6 +550,117 @@ export function verifyResumeContent(content, analysis = {}) {
   return { issues, keywordCoverage };
 }
 
+// ── Leading-verb variety (deterministic, no LLM) ─────────────────────────────
+
+// Resume-safe synonym families: every replacement describes the same action at
+// the same level of honesty, so a swap can never fabricate or inflate a claim.
+const LEAD_VERB_SYNONYMS = {
+  built: ['developed', 'created', 'engineered', 'constructed'],
+  developed: ['built', 'created', 'engineered', 'designed'],
+  created: ['built', 'developed', 'produced', 'designed'],
+  engineered: ['built', 'developed', 'implemented', 'designed'],
+  implemented: ['built', 'developed', 'integrated', 'engineered'],
+  designed: ['created', 'developed', 'built', 'architected'],
+  architected: ['designed', 'built', 'engineered'],
+  constructed: ['built', 'developed'],
+  produced: ['created', 'developed'],
+  managed: ['led', 'coordinated', 'oversaw', 'directed'],
+  led: ['directed', 'managed', 'coordinated'],
+  directed: ['led', 'managed', 'coordinated'],
+  oversaw: ['managed', 'led'],
+  coordinated: ['organized', 'managed', 'led'],
+  organized: ['coordinated', 'planned', 'led'],
+  planned: ['organized', 'coordinated'],
+  automated: ['streamlined'],
+  streamlined: ['automated', 'simplified'],
+  analyzed: ['examined', 'assessed', 'investigated'],
+  examined: ['analyzed', 'assessed'],
+  deployed: ['shipped', 'launched', 'released'],
+  launched: ['deployed', 'released'],
+  maintained: ['managed', 'supported'],
+  supported: ['assisted', 'maintained'],
+  integrated: ['connected', 'implemented'],
+  optimized: ['improved', 'refined', 'streamlined'],
+  improved: ['enhanced', 'strengthened', 'optimized'],
+  enhanced: ['improved', 'strengthened'],
+  delivered: ['shipped', 'produced'],
+  wrote: ['authored'],
+};
+
+function leadWordOf(bullet) {
+  return bullet.split(/\s+/)[0]?.toLowerCase().replace(/[^a-z]/g, '') ?? '';
+}
+
+function matchCase(original, replacement) {
+  return /^[A-Z]/.test(original)
+    ? replacement.charAt(0).toUpperCase() + replacement.slice(1)
+    : replacement;
+}
+
+/**
+ * Deterministically fix duplicate leading verbs per page: the first occurrence
+ * keeps its verb, later duplicates get a same-family synonym not already used
+ * on that page. Only the first word of a bullet ever changes. Verbs without a
+ * safe synonym are left alone (they stay as a warning). No LLM calls.
+ * Returns { content, changes: string[] }.
+ */
+export function varyLeadingVerbs(content) {
+  const next = {
+    ...content,
+    highlights: [...content.highlights],
+    experience: content.experience.map(entry => ({ ...entry, bullets: [...entry.bullets] })),
+    projects: content.projects.map(project => ({ ...project, bullets: [...project.bullets] })),
+    extracurricular: content.extracurricular.map(entry => ({ ...entry })),
+  };
+  const changes = [];
+
+  // Page-wise bullet references (get/set so we can rewrite in place).
+  const pages = [
+    ['page 1', [
+      ...next.highlights.map((_, i) => ({
+        get: () => next.highlights[i],
+        set: value => { next.highlights[i] = value; },
+      })),
+      ...next.experience.flatMap(entry => entry.bullets.map((_, i) => ({
+        get: () => entry.bullets[i],
+        set: value => { entry.bullets[i] = value; },
+      }))),
+    ]],
+    ['page 2', [
+      ...next.projects.flatMap(project => project.bullets.map((_, i) => ({
+        get: () => project.bullets[i],
+        set: value => { project.bullets[i] = value; },
+      }))),
+      ...next.extracurricular.map(entry => ({
+        get: () => entry.bullet,
+        set: value => { entry.bullet = value; },
+      })),
+    ]],
+  ];
+
+  for (const [page, refs] of pages) {
+    const used = new Set();
+    for (const ref of refs) {
+      const bullet = ref.get();
+      const lead = leadWordOf(bullet);
+      if (!lead) continue;
+      if (!used.has(lead)) {
+        used.add(lead);
+        continue;
+      }
+      const synonyms = LEAD_VERB_SYNONYMS[lead] ?? [];
+      const replacement = synonyms.find(candidate => !used.has(candidate));
+      if (!replacement) continue; // no safe swap — verifier keeps the warning
+      const firstWord = bullet.split(/\s+/)[0];
+      ref.set(`${matchCase(firstWord, replacement)}${bullet.slice(firstWord.length)}`);
+      used.add(replacement);
+      changes.push(`${page}: "${lead}" → "${replacement}"`);
+    }
+  }
+
+  return { content: next, changes };
+}
+
 // ── Overflow trimming (deterministic, no LLM) ────────────────────────────────
 
 /**
