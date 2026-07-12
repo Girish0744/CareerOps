@@ -20,7 +20,8 @@
     "eval:qa": "node test-evaluation-guardrails.mjs",
     "scan:qa": "node --no-warnings test-scan-utils.mjs",
     "contacts:qa": "node --no-warnings test-contact-intel.mjs",
-    "apply:qa": "node --no-warnings test-apply-assistant.mjs"
+    "apply:qa": "node --no-warnings test-apply-assistant.mjs",
+    "docs:qa": "node --no-warnings test-document-content.mjs"
   },
   "keywords": [
     "ai",

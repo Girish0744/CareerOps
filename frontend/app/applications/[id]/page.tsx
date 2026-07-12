@@ -393,10 +393,10 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       setActiveTab(type);
       setSourceMode(false);
       setSourceDraft(type === 'resume' ? refreshed?.resumeMd ?? '' : refreshed?.coverLetterMd ?? '');
-      const warning = Array.isArray(data.warnings) && data.warnings.length > 0 ? data.warnings[0] : null;
+      const warnings = Array.isArray(data.warnings) ? data.warnings : [];
       setDocumentGenerationNotice({
-        kind: warning ? 'warning' : 'success',
-        message: warning ? `${action} ${label}. Warning: ${warning}` : `${action} ${label}.`,
+        kind: warnings.length > 0 ? 'warning' : 'success',
+        message: warnings.length > 0 ? `${action} ${label}. ${warnings.join(' · ')}` : `${action} ${label}.`,
       });
     } catch (err) {
       setDocumentGenerationError(err instanceof Error ? err.message : `Could not generate ${label}.`);
@@ -1084,6 +1084,49 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
           <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${documentGenerationNotice.kind === 'warning' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
             {documentGenerationNotice.message}
           </div>
+        )}
+        {app.generationReport?.resume && (
+          <details className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">
+            <summary className="cursor-pointer font-semibold text-slate-900">
+              Generation report — ATS keywords {app.generationReport.resume.keywordCoverage.filter(k => k.present).length}/{app.generationReport.resume.keywordCoverage.length} covered
+              {app.generationReport.resume.archetype ? ` · ${app.generationReport.resume.archetype}` : ''}
+              {app.generationReport.resume.pageCount ? ` · ${app.generationReport.resume.pageCount} pages` : ''}
+            </summary>
+            <div className="mt-3 space-y-2">
+              {app.generationReport.resume.projectRationale && (
+                <p className="text-slate-600"><span className="font-medium text-slate-800">Project selection:</span> {app.generationReport.resume.projectRationale}</p>
+              )}
+              <div className="flex flex-wrap gap-1.5">
+                {app.generationReport.resume.keywordCoverage.map(entry => (
+                  <span
+                    key={entry.keyword}
+                    title={entry.present ? `Found in: ${entry.locations.join(', ')}` : 'Not found in the resume (no truthful evidence or missed)'}
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${entry.present ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500 border border-slate-200 line-through'}`}
+                  >
+                    {entry.keyword}
+                  </span>
+                ))}
+              </div>
+              {(app.generationReport.resume.trimsApplied?.length ?? 0) > 0 && (
+                <p className="text-slate-600"><span className="font-medium text-slate-800">Auto-trimmed to fit 2 pages:</span> {app.generationReport.resume.trimsApplied!.join('; ')}</p>
+              )}
+              {app.generationReport.resume.remainingIssues.length > 0 && (
+                <ul className="list-disc pl-5 text-amber-800">
+                  {app.generationReport.resume.remainingIssues.map((issue, index) => (
+                    <li key={index}>{issue.message}</li>
+                  ))}
+                </ul>
+              )}
+              {app.generationReport.coverLetter && (
+                <p className="text-slate-600">
+                  <span className="font-medium text-slate-800">Cover letter:</span> {app.generationReport.coverLetter.wordCount ?? '?'} words
+                  {app.generationReport.coverLetter.remainingIssues.length > 0
+                    ? ` · ${app.generationReport.coverLetter.remainingIssues.map(issue => issue.message).join(' · ')}`
+                    : ' · all checks passed'}
+                </p>
+              )}
+            </div>
+          </details>
         )}
       </div>
 

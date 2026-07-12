@@ -478,11 +478,15 @@ Frontend workflow statuses are authoritative for this personalized fork. Legacy 
 
 **Apply QA:** run `npm run apply:qa` before changing apply-answer truth tables, private apply profile parsing, field matching, checkbox/radio handling, or upload-path handling. It verifies work authorization, sponsorship, natural labels, safe review-only fields, current-application document paths, and missing-field review flags without calling Gemini.
 
+**Docs QA:** run `npm run docs:qa` before changing resume/cover-letter generation, the fixed-fact catalogs, the markdown builder, the content verifier, the overflow trimmer, or the cover-letter checks. It round-trips fixture content through `frontend/lib/document-content-core.mjs` and confirms every planted violation is caught, without calling Gemini.
+
 **Job Discovery reset:** every evaluated score card should let the user evaluate another job without refreshing the page. Keep this available for Maybe/Skip outcomes as well as Apply outcomes.
 
 **Application detail previews:** resume, cover letter, and interview prep are viewable inside the platform with a Preview/Source toggle. Chat edits refresh the live Markdown preview immediately.
 
 **Resume format lock:** all generated resumes use `templates/cv-template.html` as the single final visual format. There is no runtime format/theme selection. `/api/generate-docs/{id}` may tailor content and project selection, but final resume styling is canonicalized to the template before PDF rendering. Preserve this template unless Girish explicitly requests a layout/design change.
+
+**Document generation pipeline (staged, verified):** `/api/generate-docs/{id}` runs per document: one Gemini call returning structured content JSON (JD analysis with must-have ATS keywords first), programmatic verification in `frontend/lib/document-content-core.mjs` (keyword coverage, banned phrases/verbs, voice, bullet budgets, fabrication tripwires), at most ONE targeted repair call for fix-severity issues, deterministic markdown build (fixed facts come from code catalogs, never from the model), locked-template render, then deterministic trims + re-render if the PDF exceeds 2 pages. Results land in `applications/{id}/generation-report.json` and the UI. When the candidate's fixed facts change, update the catalogs in `frontend/lib/document-content-core.mjs` and the prompts in `frontend/lib/document-prompts.ts`.
 
 ### Scan Queue — How It Works (Phase 13)
 
@@ -535,7 +539,9 @@ frontend/                        Next.js app — run with: cd frontend && npm ru
   app/applications/page.tsx      Application Tracker (localhost:3000/applications)
   app/applications/[id]/page.tsx Application Detail — resume, cover letter, chat, interview guide
   app/api/evaluate/route.ts      POST — Gemini 2.5 Flash: score JD, extract info, create app folder
-  app/api/generate-docs/[id]/    POST — Gemini 2.5 Flash ×2 + Playwright: resume PDF + cover letter PDF
+  app/api/generate-docs/[id]/    POST — staged pipeline: content JSON → verify → repair → locked-template PDF
+  lib/document-content-core.mjs  Deterministic content layer: fixed-fact catalogs, markdown builder, verifier, trimmer
+  lib/document-prompts.ts        Trimmed resume/cover-letter prompts + Gemini JSON response schemas
   app/api/applications/          GET all / GET one / PUT status / GET pdf
   app/api/chat/                  POST — configurable Gemini chat model: multi-turn chat for document editing
   app/api/interview/             POST — configurable Gemini interview model: generate interview.md
@@ -568,7 +574,7 @@ Font paths in generated HTML use `../../fonts/` (relative to `applications/{id}/
 
 The frontend shell uses the local system font stack rather than `next/font/google`, so `npm run build` does not depend on Google Fonts network access. Turbopack may still print a trace warning because API routes intentionally read career-ops root files outside `frontend/`.
 
-`export const maxDuration = 120` on generate-docs route (PDF gen takes 45–90s).
+`export const maxDuration = 120` on generate-docs route (typical staged generation takes 15–40s; repair + overflow trims can extend it).
 
 ### Key Scripts
 

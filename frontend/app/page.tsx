@@ -89,8 +89,21 @@ type Stage =
   | { kind: 'evaluating' }
   | { kind: 'evaluated'; result: EvalResult }
   | { kind: 'generating'; result: EvalResult; documentType: DocumentGenerationType; resumePdf?: boolean; coverLetterPdf?: boolean }
-  | { kind: 'done'; result: EvalResult; resumePdf: boolean; coverLetterPdf: boolean; warnings?: string[] }
+  | { kind: 'done'; result: EvalResult; resumePdf: boolean; coverLetterPdf: boolean; warnings?: string[]; coverage?: KeywordCoverageSummary | null }
   | { kind: 'error'; message: string };
+
+interface KeywordCoverageSummary {
+  covered: number;
+  total: number;
+  missing: string[];
+}
+
+function summarizeKeywordCoverage(report: unknown): KeywordCoverageSummary | null {
+  const coverage = (report as { keywordCoverage?: Array<{ keyword: string; present: boolean }> } | null)?.keywordCoverage;
+  if (!Array.isArray(coverage) || coverage.length === 0) return null;
+  const missing = coverage.filter(entry => !entry.present).map(entry => entry.keyword);
+  return { covered: coverage.length - missing.length, total: coverage.length, missing };
+}
 
 type ReviewFilter = 'new' | 'viewed' | 'evaluated' | 'docs' | 'applied' | 'archived' | 'all';
 
@@ -311,9 +324,21 @@ function ScoreCard({
                 <Sparkles className="w-4 h-4" />{coverLetterGenerated ? 'Regenerate Cover Letter' : 'Generate Cover Letter'}
               </button>
             </div>
+            {stage.kind === 'done' && stage.coverage && (
+              <div className={`rounded-xl border px-4 py-3 text-sm ${stage.coverage.missing.length === 0
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+                : 'border-blue-200 bg-blue-50 text-blue-900'}`}>
+                <span className="font-semibold">ATS keywords: {stage.coverage.covered}/{stage.coverage.total} covered.</span>
+                {stage.coverage.missing.length > 0 && (
+                  <span> Not covered (no truthful evidence): {stage.coverage.missing.join(', ')}</span>
+                )}
+              </div>
+            )}
             {stage.kind === 'done' && stage.warnings && stage.warnings.length > 0 && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                {stage.warnings[0]}
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 space-y-1">
+                {stage.warnings.map((warning, index) => (
+                  <div key={index}>{warning}</div>
+                ))}
               </div>
             )}
           </div>
@@ -561,10 +586,12 @@ export default function JobDiscoveryPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? `${label} generation failed`);
       await loadScannedJobs();
+      const coverage = summarizeKeywordCoverage(data.resumeReport);
+      const coverageNote = coverage ? ` ATS keywords covered: ${coverage.covered}/${coverage.total}.` : '';
       const warning = Array.isArray(data.warnings) && data.warnings.length > 0
         ? ` Warning: ${data.warnings[0]}`
         : '';
-      setScanMessage(`Generated ${label} for ${job.company} — ${job.jobTitle}.${warning}`);
+      setScanMessage(`Generated ${label} for ${job.company} — ${job.jobTitle}.${coverageNote}${warning}`);
     } catch (err) {
       setScanError(err instanceof Error ? err.message : `${label} generation failed`);
     } finally {
@@ -692,6 +719,7 @@ export default function JobDiscoveryPage() {
         resumePdf: existingResumePdf || !!data.resumePdfGenerated,
         coverLetterPdf: existingCoverLetterPdf || !!data.coverLetterPdfGenerated,
         warnings: Array.isArray(data.warnings) ? data.warnings : [],
+        coverage: summarizeKeywordCoverage(data.resumeReport),
       });
       void loadScannedJobs();
     } catch (err) {

@@ -1,0 +1,53 @@
+{
+  "id": "planted-violations",
+  "analysis": {
+    "archetype": "SWE_FULLSTACK",
+    "companyDomain": "banking",
+    "mustHaveKeywords": ["React", "GraphQL", "Terraform"]
+  },
+  "expectedIssueCodes": [
+    "profile-sentence-count",
+    "profile-education-first",
+    "highlights-count",
+    "skills-rows",
+    "project-count",
+    "experience-missing",
+    "extracurricular-missing",
+    "first-person",
+    "power-verb",
+    "ai-filler",
+    "fabrication-tripwire",
+    "missing-keywords"
+  ],
+  "resume": {
+    "profileSentences": [
+      "Computer Science Honours candidate at Conestoga College graduating August 2026",
+      "I build things with my team using cutting-edge tools",
+      "Sentence three",
+      "Sentence four",
+      "Sentence five"
+    ],
+    "highlights": [
+      "Spearheaded 8+ projects with a passionate about attitude",
+      "Built systems with Golang and Kubernetes",
+      "Third highlight",
+      "Fourth highlight"
+    ],
+    "skills": [
+      { "category": "Languages", "items": ["Python"] },
+      { "category": "Tools", "items": ["Docker"] }
+    ],
+    "experience": [
+      { "key": "oer", "bullets": ["Did one thing"] },
+      { "key": "not-a-real-role", "bullets": ["Ghost bullet"] }
+    ],
+    "projects": [
+      { "key": "zonalyze", "stack": "React", "bullets": ["Only one bullet"] },
+      { "key": "fake-project", "stack": "Vue", "bullets": ["Should be dropped", "By normalization"] }
+    ],
+    "educationCoursework": ["Software Engineering"],
+    "extracurricular": [
+      { "key": "it-club", "bullet": "Ran the club" }
+    ]
+  }
+}

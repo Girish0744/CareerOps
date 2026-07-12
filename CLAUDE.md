@@ -439,6 +439,8 @@ This project has been customized into a personal job application command center 
 
 **Resume format lock:** all generated resumes use `templates/cv-template.html` as the single final visual format. There is no runtime format/theme selection. `/api/generate-docs/{id}` may tailor content and project selection, but final resume styling is canonicalized to the template before PDF rendering. Preserve this template unless Girish explicitly requests a layout/design change.
 
+**Document generation pipeline (staged, verified):** `/api/generate-docs/{id}` no longer asks Gemini for HTML. Per document it runs: (1) one Gemini call returning structured JSON (`analysis` with archetype + must-have ATS keywords first, then content fields); (2) programmatic verification in `frontend/lib/document-content-core.mjs` — keyword coverage, banned phrases/verbs, voice, bullet budgets, fabrication tripwires; (3) at most ONE targeted Gemini repair call when fix-severity issues remain; (4) deterministic markdown build from the JSON (fixed facts — project names/URLs/dates, employer headers, education, awards, certifications — come from code catalogs in `document-content-core.mjs`, never from the model); (5) render through the locked template via `document-renderer.ts`; (6) if the PDF exceeds 2 pages, deterministic content trims + re-render (no extra AI calls). Results are written to `applications/{id}/generation-report.json` (keyword coverage, remaining issues, repairs, trims, page count) and surfaced in the Job Discovery done-card and the Application Detail "Generation report" panel. When Girish's fixed facts change (new project, award, role), update the catalogs in `frontend/lib/document-content-core.mjs` AND the prompts in `frontend/lib/document-prompts.ts`.
+
 **Score thresholds:** 85+ Strong Apply (emerald) · 70–84 Apply (blue) · 50–69 Maybe (amber) · <50 Skip (red). Gate is informational, not blocking.
 
 ### Scan Review State
@@ -465,7 +467,9 @@ frontend/                        Next.js app — run with: cd frontend && npm ru
   app/applications/page.tsx      Application Tracker (localhost:3000/applications)
   app/applications/[id]/page.tsx Application Detail — resume, cover letter, chat, interview guide, apply, contacts
   app/api/evaluate/route.ts      POST — score JD, extract info, create app folder
-  app/api/generate-docs/[id]/    POST — resume PDF + cover letter PDF (Gemini + Playwright)
+  app/api/generate-docs/[id]/    POST — staged pipeline: content JSON → verify → repair → locked-template PDF
+  lib/document-content-core.mjs  Deterministic content layer: fixed-fact catalogs, markdown builder, verifier, trimmer
+  lib/document-prompts.ts        Trimmed resume/cover-letter prompts + Gemini JSON response schemas
   app/api/applications/          GET all / GET one / PUT status / GET pdf
   app/api/chat/                  POST — multi-turn chat for document editing
   app/api/interview/             POST — generate interview.md
@@ -501,7 +505,7 @@ Response parsing uses a 3-fallback chain: `===DELIMITERS===` → markdown code b
 
 Font paths in generated HTML use `../../fonts/` (relative to `applications/{id}/`) — resolves to `career-ops/fonts/` when Playwright renders via `file://`.
 
-`export const maxDuration = 120` on generate-docs route (PDF gen takes 45–90s). `maxDuration = 180` on scan/run. `maxDuration = 300` on apply/automate.
+`export const maxDuration = 120` on generate-docs route (typical staged generation takes 15–40s; repair + overflow trims can extend it). `maxDuration = 180` on scan/run. `maxDuration = 300` on apply/automate.
 
 **Production plan:** Switch to `claude-sonnet-4-6` via Anthropic API once pipeline is validated end-to-end. `@anthropic-ai/sdk` is listed in `frontend/package.json` as the planned production SDK.
 
@@ -525,6 +529,7 @@ npm run eval:qa        # evaluation guardrails
 npm run scan:qa        # scanner ranking + Eluta parsing
 npm run contacts:qa    # contact extraction policy
 npm run apply:qa       # apply form safety
+npm run docs:qa        # resume/cover-letter content layer (builder, verifier, trimmer, CL checks)
 cd frontend && npm run build  # frontend compiles cleanly
 ```
 

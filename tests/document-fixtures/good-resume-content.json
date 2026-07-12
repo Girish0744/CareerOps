@@ -1,0 +1,83 @@
+{
+  "id": "good-swe-fullstack",
+  "analysis": {
+    "archetype": "SWE_FULLSTACK",
+    "companyDomain": "pure tech",
+    "topResponsibilities": [
+      "Build full-stack web features with React and TypeScript",
+      "Design REST APIs and integrate PostgreSQL data models",
+      "Ship containerized services with CI/CD"
+    ],
+    "mustHaveKeywords": ["React", "TypeScript", "Python", "REST APIs", "PostgreSQL", "Docker", "CI/CD", "Node.js"],
+    "niceToHaveKeywords": ["WebSocket", "AWS"],
+    "projectRationale": "Zonalyze, AegisGrid, and MediTwin show end-to-end React plus API delivery matching the JD stack."
+  },
+  "resume": {
+    "profileSentences": [
+      "Full-stack developer with applied experience building and deploying web applications using React, TypeScript, FastAPI, and PostgreSQL",
+      "Comfortable owning features end to end, from REST API design and data modeling through responsive frontends and containerized deployment",
+      "Built a real-time business feasibility platform with WebSocket updates across 8 monitoring modules on live census data"
+    ],
+    "highlights": [
+      "Bachelor of Computer Science (Honours) candidate at Conestoga College with a 3.74 GPA, graduating August 2026; coursework includes Software Engineering, Data Structures and Algorithms, Database Systems, Cloud Computing",
+      "Completed 2 co-op work terms at Conestoga College; converted from part-time to co-op based on performance and retained through departmental restructuring",
+      "Deployed 8+ full-stack and ML projects using React, TypeScript, FastAPI, Python, PostgreSQL, AWS EC2, Docker, and Vercel; all publicly available on GitHub",
+      "Built real-time WebSocket systems, containerised deployments with Docker Compose, and LLM-powered chat interfaces across multiple full-stack projects",
+      "Narhari Sharma Memorial Award recipient (April 2026); IT Club President coordinating workshops, hackathons, and mentorship programs for 100+ students"
+    ],
+    "skills": [
+      { "category": "Languages", "items": ["Python", "JavaScript", "TypeScript", "SQL", "C", "C++", "C#", "HTML", "CSS"] },
+      { "category": "Frameworks & Libraries", "items": ["React", "Next.js", "FastAPI", "Flask", "Node.js", "REST APIs", "WebSocket"] },
+      { "category": "AI/ML & Data", "items": ["scikit-learn", "MLflow", "Random Forest", "Pandas", "NumPy"] },
+      { "category": "Databases", "items": ["PostgreSQL", "SQL Server", "MongoDB", "MySQL", "SQLite"] },
+      { "category": "Tools & Infrastructure", "items": ["AWS", "Azure", "Docker", "Vercel", "Git", "GitHub", "CI/CD", "Postman"] }
+    ],
+    "experience": [
+      {
+        "key": "oer",
+        "bullets": [
+          "Built accessible HTML/CSS templates across Pressbooks and H5P Studio, tested against WCAG standards, serving 1,000+ students in three academic programs",
+          "Automated repetitive publishing workflows with Power Automate and maintained version-controlled GitHub repositories for all open-course assets"
+        ]
+      },
+      {
+        "key": "olive-branch",
+        "bullets": [
+          "Designed new React components and Node.js API routes for mentorship matching workflows, improving platform functionality and user engagement",
+          "Integrated 5+ third-party APIs and optimized backend architecture, improving data synchronization efficiency and reducing user-facing response time"
+        ]
+      }
+    ],
+    "projects": [
+      {
+        "key": "zonalyze",
+        "stack": "React, TypeScript, FastAPI, PostgreSQL, scikit-learn, WebSocket, Docker, LLM | Capstone (In Progress)",
+        "bullets": [
+          "Architected a full-stack business feasibility platform evaluating location viability across 26 business types in 552 Ontario municipalities using census and OpenStreetMap data",
+          "Implemented a real-time WebSocket architecture with a centralized message bus broadcasting updates across 8 independent monitoring modules in under 2 seconds"
+        ]
+      },
+      {
+        "key": "aegisgrid",
+        "stack": "Python, FastAPI, DBSCAN, React, TypeScript, Vercel | ConHacks 2026",
+        "bullets": [
+          "Engineered the full stack in a 48-hour hackathon, pairing a FastAPI threat-scoring backend with a React/TypeScript frontend for live tactical visualization",
+          "Classified and ranked multi-source aerial threats in real time using DBSCAN spatial clustering to determine severity and proximity"
+        ]
+      },
+      {
+        "key": "meditwin",
+        "stack": "Next.js 15, React 19, Flask, Google Gemini 1.5 Flash, OpenFDA API",
+        "bullets": [
+          "Developed an AI health companion analyzing medications against personal health profiles, surfacing patient-specific drug interaction warnings and safety guidance",
+          "Engineered a sequential dual-API pipeline fetching official FDA drug label data through OpenFDA and enforcing strict JSON output across five analysis dimensions"
+        ]
+      }
+    ],
+    "educationCoursework": ["Software Engineering", "Data Structures and Algorithms", "Database Systems", "Cloud Computing", "Computer Networks"],
+    "extracurricular": [
+      { "key": "it-club", "bullet": "Planned the club's annual roadmap of Build Nights and technical workshops, delivering portfolio-ready project experience to members across disciplines" },
+      { "key": "hackthebrain", "bullet": "Managed end-to-end participant operations for a 250+ attendee AI hackathon, covering onboarding, team assignments, and post-event certification" }
+    ]
+  }
+}

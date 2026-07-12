@@ -98,6 +98,31 @@ export interface ApplicationDetail extends ApplicationEntry {
   resumePdfPath: string | null;
   coverLetterPdfPath: string | null;
   documentVersions: DocumentVersion[];
+  generationReport: GenerationReport | null;
+}
+
+export interface GenerationReport {
+  updatedAt?: string;
+  resume?: {
+    generatedAt: string;
+    modelUsed?: string;
+    archetype?: string | null;
+    companyDomain?: string | null;
+    projectRationale?: string | null;
+    keywordCoverage: Array<{ keyword: string; present: boolean; locations: string[] }>;
+    issuesFixedByRepair?: number;
+    remainingIssues: Array<{ code: string; severity: string; section?: string; message: string }>;
+    repairApplied?: boolean;
+    trimsApplied?: string[];
+    pageCount?: number | null;
+  };
+  coverLetter?: {
+    generatedAt: string;
+    modelUsed?: string;
+    wordCount?: number;
+    remainingIssues: Array<{ code: string; severity: string; message: string }>;
+    repairApplied?: boolean;
+  };
 }
 
 export interface ScoreData {
@@ -327,6 +352,7 @@ export function getApplication(id: string): ApplicationDetail | null {
     resumePdfPath:     resumePath,
     coverLetterPdfPath: coverLetterPath,
     documentVersions:  getDocumentVersions(id),
+    generationReport:  readJson('generation-report.json') as GenerationReport | null,
   };
 }
 
