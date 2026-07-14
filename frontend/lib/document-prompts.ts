@@ -23,13 +23,17 @@ export interface ResumeGenerationPayload {
 
 const resumeContentSchema: Schema = {
   type: Type.OBJECT,
-  required: ['profileSentences', 'highlights', 'skills', 'experience', 'projects', 'educationCoursework', 'extracurricular'],
-  propertyOrdering: ['profileSentences', 'highlights', 'skills', 'experience', 'projects', 'educationCoursework', 'extracurricular'],
+  required: ['profileSentences', 'reserveProfileSentence', 'highlights', 'skills', 'experience', 'projects', 'educationCoursework', 'extracurricular', 'reserveExtracurricular'],
+  propertyOrdering: ['profileSentences', 'reserveProfileSentence', 'highlights', 'skills', 'experience', 'projects', 'educationCoursework', 'extracurricular', 'reserveExtracurricular'],
   properties: {
     profileSentences: {
       type: Type.ARRAY,
       description: 'Exactly 3-4 sentences. Impersonal resume voice.',
       items: { type: Type.STRING },
+    },
+    reserveProfileSentence: {
+      type: Type.STRING,
+      description: 'One additional truthful profile sentence (impersonal voice, adds a real capability not already stated). Code promotes it as the 4th sentence ONLY if page 1 renders short. Empty string if profileSentences already has 4.',
     },
     highlights: {
       type: Type.ARRAY,
@@ -53,10 +57,15 @@ const resumeContentSchema: Schema = {
       description: 'Both fixed roles, bullets only (headers are fixed facts added by code).',
       items: {
         type: Type.OBJECT,
-        required: ['key', 'bullets'],
+        required: ['key', 'bullets', 'reserveBullets'],
         properties: {
           key: { type: Type.STRING, enum: EXPERIENCE_KEYS },
           bullets: { type: Type.ARRAY, items: { type: Type.STRING } },
+          reserveBullets: {
+            type: Type.ARRAY,
+            description: '1-2 additional truthful bullets ranked next-best for this role (empty array only if the master CV truly has nothing more). Code promotes them ONLY if the rendered page comes up short. Same rules as main bullets.',
+            items: { type: Type.STRING },
+          },
         },
       },
     },
@@ -65,11 +74,16 @@ const resumeContentSchema: Schema = {
       description: 'Exactly 3 projects chosen for THIS job. Names/URLs/dates are fixed facts added by code.',
       items: {
         type: Type.OBJECT,
-        required: ['key', 'stack', 'bullets'],
+        required: ['key', 'stack', 'bullets', 'reserveBullets'],
         properties: {
           key: { type: Type.STRING, enum: PROJECT_KEYS },
           stack: { type: Type.STRING, description: 'Stack line without the "Stack:" prefix, JD-relevant tech first' },
           bullets: { type: Type.ARRAY, description: '2-3 content bullets, metric-bearing first', items: { type: Type.STRING } },
+          reserveBullets: {
+            type: Type.ARRAY,
+            description: '3 additional truthful bullets ranked next-best for this project, each stating a DIFFERENT master-CV fact than the main bullets and than each other. Load them with JD must-have keywords wherever the master CV genuinely supports it — code promotes them to fill page 2. Vary the leading verb. Same anti-fabrication rules as main bullets.',
+            items: { type: Type.STRING },
+          },
         },
       },
     },
@@ -81,6 +95,18 @@ const resumeContentSchema: Schema = {
     extracurricular: {
       type: Type.ARRAY,
       description: '2-3 entries. it-club and hackthebrain are required; optionally add ONE of ai-build-lab, mentor, gdg.',
+      items: {
+        type: Type.OBJECT,
+        required: ['key', 'bullet'],
+        properties: {
+          key: { type: Type.STRING, enum: EXTRACURRICULAR_KEYS },
+          bullet: { type: Type.STRING, description: 'Single most-impactful bullet, no trailing period' },
+        },
+      },
+    },
+    reserveExtracurricular: {
+      type: Type.ARRAY,
+      description: '1 extracurricular entry NOT already selected (ai-build-lab, mentor, or gdg), with its bullet. Code promotes it only if page 2 renders short.',
       items: {
         type: Type.OBJECT,
         required: ['key', 'bullet'],
@@ -161,18 +187,26 @@ Then write the "resume" object using the rules below. The master resume is a lib
 ==========================
 PROJECT SELECTION (exactly 3, by archetype default)
 ==========================
-SWE_FULLSTACK: zonalyze, aegisgrid, meditwin
-AI_ML: zonalyze, ethos, aegisgrid
+SWE_FULLSTACK: zonalyze, careerops, aegisgrid
+AI_ML: zonalyze, ethos, careerops
 DA_BA: zonalyze, dropout-analysis, ethos
 DATA_ENGINEER: zonalyze, ethos, dropout-analysis
 BACKEND_JAVA_SYSTEMS: medinet, telemetry, zonalyze
 SYSTEMS_CPP: telemetry, medinet, zonalyze
 CSHARP_DOTNET: medinet, dineease, zonalyze
-HELPDESK_IT: zonalyze, ethos, meditwin
-GENERAL: zonalyze, ethos, aegisgrid
+HELPDESK_IT: zonalyze, careerops, meditwin
+GENERAL: zonalyze, careerops, ethos
+careerops (CareerOps - AI Job Application Platform) is a flagship full-stack AI project: Next.js/React/TypeScript/Node.js web app, a Gemini-powered document-generation pipeline with deterministic verification guardrails, Playwright PDF automation, an ATS-API job scanner, and scheduled batch automation. STRONGLY prefer it for software developer, full-stack, AI/ML application, applied-AI, automation, developer-tooling, and platform/SaaS roles. It is truthful to describe it as extended from an open-source base — never claim sole authorship of the entire upstream; the web app, AI pipeline, verification layer, automation, and Canadian job sourcing are the candidate's own work.
 Swap one default out only when a different project clearly matches the JD better (e.g. analytics roles prefer data projects over web-only projects). For each project: stack line front-loads JD-relevant tech; then 2-3 content bullets, metric-bearing first, each 15-30 words, reconstructed from master-CV facts. Never merge two separate facts into one mega-bullet.
 
 BULLET BUDGET (calibrated so the PDF fills exactly 2 pages): 3 projects x (1 stack + 2 content bullets) = 9 items standard. You may give ONE project (the most JD-relevant) 3 content bullets when you keep only 2 extracurricular entries. Code trims overflow, but hitting the budget preserves your best content.
+
+RESERVE CONTENT (required — this is how page 2 gets FILLED to the bottom): code renders your content into the locked template, measures each page, and promotes reserve content to eliminate blank space. Page 2 (Projects onward) is filled hardest, so give generous, high-quality project reserves. Provide:
+- reserveBullets on EACH project: 3 additional truthful bullets ranked next-best (your 3rd, 4th, 5th choice for that project). Each must state a DIFFERENT master-CV fact and carry JD must-have keywords wherever the master CV genuinely supports them, so the promoted bullets keep the resume keyword-dense. These fill page 2 — do not hold back; a strong project can support 5 total bullets.
+- reserveBullets on BOTH experience entries (oer AND olive-branch): 1 additional bullet each from the master CV (skip only if the master CV truly has nothing more relevant).
+- reserveExtracurricular: the ONE best entry you did not select (ai-build-lab, mentor, or gdg) with its bullet.
+- reserveProfileSentence: one extra profile sentence adding a real capability not already stated.
+Reserve bullets must be full-quality standalone bullets, 15-30 words, metric-bearing where the sources support it, with varied leading verbs. Never pad, split, or rephrase an existing bullet — each reserve bullet states a DIFFERENT master-CV fact. Never fabricate to fill space: if a project genuinely has no more truthful facts, give fewer reserves rather than inventing.
 
 ==========================
 PROFILE (3-4 sentences, impersonal resume voice)
@@ -225,7 +259,7 @@ If a JD-required tool is genuinely in the sources but missing from your rows, ad
 ==========================
 EXPERIENCE (bullets only; headers are fixed by code)
 ==========================
-oer — 2 bullets default (3rd only if short and strongly JD-relevant). olive-branch — exactly 2 bullets, most JD-relevant first.
+oer — 2 bullets default (3rd only if short and strongly JD-relevant). olive-branch — 2 bullets, most JD-relevant first (a 3rd may be promoted from reserve by code when page 1 renders short).
 RECONSTRUCT, don't synonym-swap: read the JD requirement you target, find the master-CV fact that proves it, then write a NEW bullet presenting that fact in the JD's framing. Test: without the JD, the bullet should still sound natural; if it reads like a JD echo with names swapped, rewrite it.
 Example — master fact "Developed and maintained accessible HTML and CSS templates for Pressbooks...":
 - for a DA/BA JD: "Maintained structured content templates and document management workflows in SharePoint and Pressbooks, supporting cross-departmental data organisation for 1,000+ users"

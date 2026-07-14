@@ -122,8 +122,35 @@ export default {
     const jobs = [];
     const now = new Date();
 
+    // Eluta throttles rapid clients into a "User Verification" CAPTCHA page
+    // (HTTP 200, zero results). Pace requests, and if the wall appears wait
+    // once and retry; if it persists, stop hitting Eluta for this run —
+    // every further request would burn quota against the same wall.
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const isVerificationWall = html =>
+      /<title>[^<]*user verification[^<]*<\/title>/i.test(html)
+      || (/captcha/i.test(html) && !/organic-job/i.test(html));
+
+    let first = true;
     for (const url of urls) {
-      const html = await ctx.fetchText(url);
+      if (!first) await sleep(2000 + Math.floor(Math.random() * 1000));
+      first = false;
+      let html;
+      try {
+        html = await ctx.fetchText(url);
+        if (isVerificationWall(html)) {
+          await sleep(20000);
+          html = await ctx.fetchText(url);
+          if (isVerificationWall(html)) {
+            console.error(`[eluta] verification wall persists at ${url} — skipping remaining Eluta URLs this run`);
+            break;
+          }
+        }
+      } catch (err) {
+        // A single bad URL (404 employer page, timeout) must not abort the rest.
+        console.error(`[eluta] ${url}: ${err.message}`);
+        continue;
+      }
       for (const job of parseElutaJobs(html, url, now)) {
         const key = job.url.toLowerCase();
         if (seen.has(key)) continue;

@@ -168,6 +168,54 @@ async function generatePDF() {
     // Wait for fonts to load
     await page.evaluate(() => document.fonts.ready);
 
+    // Measure page fill so callers can expand/trim content to fit.
+    // The resume template's screen CSS mirrors its @page margins exactly
+    // (same width + padding, border-box), so screen-media heights match the
+    // print layout. `.page-two` is the template's forced page break.
+    try {
+      const fill = await page.evaluate((pageHeightIn) => {
+        const PX_PER_IN = 96;
+        const toPx = (value) => {
+          const n = parseFloat(value) || 0;
+          if (/in\s*$/.test(value)) return n * PX_PER_IN;
+          if (/cm\s*$/.test(value)) return n * PX_PER_IN / 2.54;
+          if (/mm\s*$/.test(value)) return n * PX_PER_IN / 25.4;
+          if (/pt\s*$/.test(value)) return n * PX_PER_IN / 72;
+          return n; // px or unitless
+        };
+        let marginTop = 0, marginBottom = 0;
+        for (const sheet of document.styleSheets) {
+          try {
+            for (const rule of sheet.cssRules) {
+              if (rule instanceof CSSPageRule) {
+                if (rule.style.marginTop) marginTop = toPx(rule.style.marginTop);
+                if (rule.style.marginBottom) marginBottom = toPx(rule.style.marginBottom);
+              }
+            }
+          } catch { /* cross-origin sheet — skip */ }
+        }
+        const usable = pageHeightIn * PX_PER_IN - marginTop - marginBottom;
+        if (!(usable > 0)) return null;
+        const body = document.body;
+        const style = getComputedStyle(body);
+        const padTop = parseFloat(style.paddingTop) || 0;
+        const padBottom = parseFloat(style.paddingBottom) || 0;
+        const round = (n) => Math.round(n * 1000) / 1000;
+        const pageTwo = document.querySelector('.page-two');
+        if (pageTwo) {
+          const bodyTop = body.getBoundingClientRect().top;
+          const page1Px = pageTwo.getBoundingClientRect().top - bodyTop - padTop;
+          const page2Px = pageTwo.scrollHeight;
+          return { page1: round(page1Px / usable), page2: round(page2Px / usable) };
+        }
+        const contentPx = body.scrollHeight - padTop - padBottom;
+        return { content: round(contentPx / usable) };
+      }, format === 'letter' ? 11 : 11.69);
+      if (fill) console.log(`📐 Fill: ${JSON.stringify(fill)}`);
+    } catch (fillErr) {
+      console.log(`📐 Fill: unavailable (${fillErr.message})`);
+    }
+
     // Generate PDF
     const pdfBuffer = await page.pdf({
       format: format,
@@ -181,9 +229,27 @@ async function generatePDF() {
       preferCSSPageSize: true,
     });
 
-    // Write PDF
+    // Write PDF. On Windows the destination is often transiently locked by
+    // OneDrive sync or held open by a PDF viewer (Acrobat/Edge), which throws
+    // EBUSY/EPERM/EACCES. Retry with backoff so a sync collision self-heals;
+    // a viewer holding the file persistently still fails, with a clear hint.
     const { writeFile } = await import('fs/promises');
-    await writeFile(outputPath, pdfBuffer);
+    const lockCodes = new Set(['EBUSY', 'EPERM', 'EACCES']);
+    const attempts = 6;
+    for (let i = 0; ; i++) {
+      try {
+        await writeFile(outputPath, pdfBuffer);
+        break;
+      } catch (err) {
+        if (!lockCodes.has(err.code) || i >= attempts - 1) {
+          if (lockCodes.has(err.code)) {
+            err.message += ` — the file is locked. Close "${outputPath}" in any PDF viewer (e.g. Adobe Acrobat) and let OneDrive finish syncing, then try again.`;
+          }
+          throw err;
+        }
+        await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+      }
+    }
 
     // Count pages (approximate from PDF structure)
     const pdfString = pdfBuffer.toString('latin1');

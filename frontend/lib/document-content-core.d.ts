@@ -20,6 +20,13 @@ export interface ExtracurricularCatalogEntry {
   required: boolean;
 }
 
+export interface ResumeReserve {
+  experience: Record<string, string[]>;
+  projects: Record<string, string[]>;
+  extracurricular: Array<{ key: string; bullet: string }>;
+  profileSentence?: string;
+}
+
 export interface ResumeContent {
   profileSentences: string[];
   highlights: string[];
@@ -28,7 +35,10 @@ export interface ResumeContent {
   projects: Array<{ key: string; stack: string; bullets: string[] }>;
   educationCoursework: string[];
   extracurricular: Array<{ key: string; bullet: string }>;
+  reserve?: ResumeReserve;
 }
+
+export type ResumePage = 'page1' | 'page2';
 
 export interface ResumeAnalysis {
   archetype?: string;
@@ -86,6 +96,8 @@ export declare function verifyResumeContent(
   analysis?: ResumeAnalysis,
 ): { issues: ContentIssue[]; keywordCoverage: KeywordCoverageEntry[] };
 export declare function trimResumeForOverflow(content: ResumeContent): { content: ResumeContent; action: string | null };
+export declare function expandResumeForUnderfill(content: ResumeContent, page: ResumePage): { content: ResumeContent; action: string | null };
+export declare const RESUME_FILL_TARGETS: { page1Min: number; page2Min: number };
 export declare function varyLeadingVerbs(content: ResumeContent): { content: ResumeContent; changes: string[] };
 export declare function buildCoverLetterChecks(
   letterText: string,

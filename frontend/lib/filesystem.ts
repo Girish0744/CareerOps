@@ -114,7 +114,9 @@ export interface GenerationReport {
     remainingIssues: Array<{ code: string; severity: string; section?: string; message: string }>;
     repairApplied?: boolean;
     trimsApplied?: string[];
+    expansionsApplied?: string[];
     pageCount?: number | null;
+    pageFills?: { page1?: number; page2?: number; content?: number } | null;
   };
   coverLetter?: {
     generatedAt: string;
@@ -122,6 +124,7 @@ export interface GenerationReport {
     wordCount?: number;
     remainingIssues: Array<{ code: string; severity: string; message: string }>;
     repairApplied?: boolean;
+    pageFill?: number | null;
   };
 }
 

@@ -10,11 +10,13 @@ import {
   buildResumeMarkdown,
   verifyResumeContent,
   trimResumeForOverflow,
+  expandResumeForUnderfill,
   varyLeadingVerbs,
   buildCoverLetterChecks,
   countProjectBulletItems,
   PROJECT_CATALOG,
   EXPERIENCE_CATALOG,
+  RESUME_FILL_TARGETS,
 } from './frontend/lib/document-content-core.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -127,6 +129,113 @@ const step3 = trimResumeForOverflow(step2.content);
 check('trim step 3 drops the 3rd OER bullet', /OER/.test(step3.action ?? ''), step3.action ?? 'null');
 check('project bullet accounting matches builder output',
   countProjectBulletItems(step2.content) === countProjectBulletItems(step1.content) - 1);
+
+// ── 3.5 Under-fill expansion (reserve promotion) ─────────────────────────────
+
+const RESERVE_OER = 'Automated content publishing workflows with Power Automate reducing manual steps for 1,000+ students across three programs';
+const RESERVE_PROJECT_1 = 'Implemented role-based access control across the API layer covering three user tiers with integration tests';
+const RESERVE_PROJECT_2 = 'Containerised the full stack with Docker Compose enabling one-command local setup for reviewers';
+const RESERVE_DIRTY = 'I am passionate about building innovative solutions with Kubernetes';
+
+const RESERVE_PROFILE = 'Comfortable working across accessibility standards and iterative delivery workflows in cross-functional academic teams';
+
+const reserveContent = normalizeResumeContent({
+  ...good.resume,
+  educationCoursework: good.resume.educationCoursework.slice(0, 4),
+  reserveProfileSentence: RESERVE_PROFILE,
+  experience: good.resume.experience.map(entry => entry.key === 'oer'
+    ? { ...entry, reserveBullets: [RESERVE_OER] }
+    : entry),
+  projects: good.resume.projects.map((project, index) => index === 0
+    ? { ...project, reserveBullets: [RESERVE_DIRTY, RESERVE_PROJECT_1, RESERVE_PROJECT_2] }
+    : project),
+  reserveExtracurricular: [
+    { key: 'gdg', bullet: 'Co-organized two community study sessions on web performance for 40+ local developers' },
+    { key: 'it-club', bullet: 'Duplicate of a selected entry that must be dropped' },
+  ],
+});
+
+check('normalization captures reserves and drops duplicates/overflow',
+  reserveContent.reserve.experience.oer?.length === 1
+  && reserveContent.reserve.projects[good.resume.projects[0].key]?.length === 2
+  && reserveContent.reserve.extracurricular.length === 1
+  && reserveContent.reserve.extracurricular[0].key === 'gdg',
+  JSON.stringify(reserveContent.reserve));
+
+check('builder markdown is identical with and without reserves (reserve is never rendered)',
+  buildResumeMarkdown(reserveContent, { name: 'Girish Bhuteja' })
+    === buildResumeMarkdown(normalizeResumeContent({ ...good.resume, educationCoursework: good.resume.educationCoursework.slice(0, 4) }), { name: 'Girish Bhuteja' }));
+
+const p1Step = expandResumeForUnderfill(reserveContent, 'page1');
+check('page1 expansion promotes the reserve OER bullet',
+  /experience "oer"/.test(p1Step.action ?? '')
+  && p1Step.content.experience.find(entry => entry.key === 'oer').bullets.includes(RESERVE_OER),
+  p1Step.action ?? 'null');
+const p1Step2 = expandResumeForUnderfill(p1Step.content, 'page1');
+check('page1 expansion then promotes the reserve 4th profile sentence',
+  /profile sentence/.test(p1Step2.action ?? '')
+  && p1Step2.content.profileSentences.length === 4
+  && p1Step2.content.profileSentences[3].startsWith('Comfortable working'),
+  p1Step2.action ?? 'null');
+check('page1 expansion with an exhausted reserve returns null',
+  expandResumeForUnderfill(p1Step2.content, 'page1').action === null);
+check('a 4-sentence profile still verifies clean',
+  !verifyResumeContent(p1Step2.content, good.analysis).issues.some(issue => issue.code === 'profile-sentence-count'));
+
+const p2Step1 = expandResumeForUnderfill(reserveContent, 'page2');
+check('page2 expansion step 1 skips the dirty reserve bullet and promotes the clean one',
+  /project/.test(p2Step1.action ?? '')
+  && p2Step1.content.projects[0].bullets.includes(RESERVE_PROJECT_1)
+  && !p2Step1.content.projects[0].bullets.includes(RESERVE_DIRTY),
+  p2Step1.action ?? 'null');
+
+const p2Step2 = expandResumeForUnderfill(p2Step1.content, 'page2');
+check('page2 expansion step 2 adds the reserve extracurricular entry',
+  /extracurricular entry "gdg"/.test(p2Step2.action ?? '')
+  && p2Step2.content.extracurricular.length === 3,
+  p2Step2.action ?? 'null');
+
+const p2Step3 = expandResumeForUnderfill(p2Step2.content, 'page2');
+check('page2 expansion step 3 adds a 5th coursework subject from the fixed catalog',
+  /coursework/.test(p2Step3.action ?? '')
+  && p2Step3.content.educationCoursework.length === 5,
+  p2Step3.action ?? 'null');
+
+const p2Step4 = expandResumeForUnderfill(p2Step3.content, 'page2');
+check('page2 expansion step 4 deep-fills another project bullet',
+  /project "zonalyze"/.test(p2Step4.action ?? '')
+  && p2Step4.content.projects[0].bullets.includes(RESERVE_PROJECT_2)
+  && p2Step4.content.projects[0].bullets.length === 4,
+  p2Step4.action ?? 'null');
+check('page2 expansion with everything exhausted returns null',
+  expandResumeForUnderfill(p2Step4.content, 'page2').action === null);
+
+const allPromoted = [
+  ...p2Step4.content.projects.flatMap(project => project.bullets),
+  ...p1Step.content.experience.flatMap(entry => entry.bullets),
+];
+check('expansion only ever promotes reserve or catalog content (no invented text)',
+  allPromoted.every(bullet =>
+    good.resume.projects.some(project => project.bullets.includes(bullet))
+    || good.resume.experience.some(entry => entry.bullets.includes(bullet))
+    || [RESERVE_OER, RESERVE_PROJECT_1, RESERVE_PROJECT_2].includes(bullet)));
+
+check('expansion does not mutate its input content',
+  reserveContent.projects[0].bullets.length === 2
+  && reserveContent.extracurricular.length === 2
+  && reserveContent.reserve.projects[good.resume.projects[0].key].length === 2);
+
+check('content without reserves expands only via coursework then returns null', (() => {
+  const bare = normalizeResumeContent({ ...good.resume, educationCoursework: good.resume.educationCoursework.slice(0, 4) });
+  const step = expandResumeForUnderfill(bare, 'page2');
+  if (!/coursework/.test(step.action ?? '')) return false;
+  return expandResumeForUnderfill(step.content, 'page2').action === null
+    && expandResumeForUnderfill(bare, 'page1').action === null;
+})());
+
+check('fill targets are sane fractions',
+  RESUME_FILL_TARGETS.page1Min > 0.5 && RESUME_FILL_TARGETS.page1Min < 1
+  && RESUME_FILL_TARGETS.page2Min > 0.5 && RESUME_FILL_TARGETS.page2Min < 1);
 
 // ── 4. Leading-verb variety pass ─────────────────────────────────────────────
 

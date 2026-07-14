@@ -1,0 +1,19 @@
+# Referral companies — people you know who can refer you.
+# Copy this file to config/referrals.yml and fill in your own contacts.
+#
+# The autopilot processes matching jobs FIRST (before everything else in the
+# queue) and lists the contact names in the WhatsApp briefing so you can
+# reach out. `match` values are matched as whole words against the scanned
+# company name, case-insensitive.
+
+# Referral-company cards qualify at a lower quick score than the general
+# queue (a referral makes a borderline posting worth the evaluation).
+referral_quick_score_min: 70
+
+companies:
+  - name: Example Corp
+    contacts: [Jane Smith]
+    match: [example corp, examplecorp]
+  - name: Another Company
+    contacts: [John Doe, Alex Lee]
+    match: [another company]

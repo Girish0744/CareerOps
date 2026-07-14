@@ -9,7 +9,9 @@ import { generateGeminiContent } from '@/lib/ai-config';
 import { apiErrorMessage } from '@/lib/errors';
 import { getScoredQueue, saveScoredQueue, type ScoredJob } from '@/lib/filesystem';
 
-export const maxDuration = 180;
+// Eluta requests are paced ~2-3s apart (anti-throttling), and the referral
+// employer pages add ~18 URLs, so a full scan can take 3-4 minutes.
+export const maxDuration = 300;
 
 const execFileAsync = promisify(execFile);
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
@@ -266,7 +268,7 @@ function localQuickScore(offer: ScanOffer): QuickScore {
 async function runScanner(): Promise<ScanJson> {
   const { stdout, stderr } = await execFileAsync(process.execPath, ['scan.mjs', '--dry-run', '--json'], {
     cwd: ROOT,
-    timeout: 120000,
+    timeout: 270000, // paced Eluta requests + referral employer pages
     maxBuffer: 1024 * 1024 * 4,
   });
   const output = `${stdout}\n${stderr}`;

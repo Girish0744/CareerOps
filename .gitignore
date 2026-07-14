@@ -21,6 +21,8 @@ jds/*
 !jds/.gitkeep
 applications/*
 !applications/.gitkeep
+data/autopilot-runs/*
+!data/autopilot-runs/.gitkeep
 
 # Writing samples (user's personal files — never committed)
 writing-samples/*
@@ -32,6 +34,8 @@ private-docs/*
 
 # User config and customization (never auto-updated)
 config/profile.yml
+config/autopilot.yml
+config/referrals.yml
 portals.yml
 modes/_profile.md
 .update-dismissed

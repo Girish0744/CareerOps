@@ -13,11 +13,18 @@ const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
 type DocumentType = 'resume' | 'cover-letter';
 type BlockClass = 'entry' | 'project';
 
+export interface PageFills {
+  page1?: number;
+  page2?: number;
+  content?: number;
+}
+
 interface RenderResult {
   refreshed: boolean;
   htmlPath: string;
   pdfPath: string;
   pageCount: number | null;
+  pageFills: PageFills | null;
 }
 
 const SECTION_ALIASES: Record<string, string> = {
@@ -103,8 +110,11 @@ function autolinkBareUrls(value: string): string {
 
 function inlineMarkdown(value: string): string {
   const links: string[] = [];
+  // Token must contain no underscores or asterisks: with two links on one
+  // line, `_` in the tokens would pair up and get consumed by the emphasis
+  // regexes below, leaving literal token fragments in the rendered PDF.
   const withLinkTokens = value.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, label: string, href: string) => {
-    const token = `@@LINK_${links.length}@@`;
+    const token = `@@LINKTOKEN${links.length}@@`;
     links.push(linkHtml(label, href));
     return token;
   });
@@ -118,7 +128,7 @@ function inlineMarkdown(value: string): string {
     .replace(/_(.*?)_/g, '<em>$1</em>');
 
   links.forEach((link, index) => {
-    text = text.replace(`@@LINK_${index}@@`, link);
+    text = text.replace(`@@LINKTOKEN${index}@@`, link);
   });
 
   return text;
@@ -507,7 +517,7 @@ function coverLetterHtmlFromMarkdown(markdown: string, app: NonNullable<ReturnTy
   });
 }
 
-async function generatePdf(htmlPath: string, pdfPath: string): Promise<number | null> {
+async function generatePdf(htmlPath: string, pdfPath: string): Promise<{ pageCount: number | null; pageFills: PageFills | null }> {
   const script = path.join(/*turbopackIgnore: true*/ ROOT, 'generate-pdf.mjs');
   const { stdout, stderr } = await execFileAsync(process.execPath, [script, htmlPath, pdfPath, '--format=letter'], {
     cwd: ROOT,
@@ -515,7 +525,44 @@ async function generatePdf(htmlPath: string, pdfPath: string): Promise<number | 
   });
   const output = `${stdout}\n${stderr}`;
   const pageCount = Number(output.match(/Pages:\s*(\d+)/i)?.[1] ?? NaN);
-  return Number.isFinite(pageCount) ? pageCount : null;
+  let pageFills: PageFills | null = null;
+  const fillMatch = output.match(/Fill:\s*(\{.*?\})/);
+  if (fillMatch) {
+    try {
+      pageFills = JSON.parse(fillMatch[1]) as PageFills;
+    } catch {
+      pageFills = null;
+    }
+  }
+  return { pageCount: Number.isFinite(pageCount) ? pageCount : null, pageFills };
+}
+
+/**
+ * User-facing PDF filename derived from the candidate's profile name, e.g.
+ * "Girish_Bhuteja_Resume.pdf" / "Girish_Bhuteja_Cover_Letter.pdf". This is the
+ * name of the copy saved for the user to attach and the name used for in-app
+ * downloads; the app's internal working files stay resume.pdf/cover-letter.pdf.
+ */
+export function prettyPdfFilename(type: DocumentType): string {
+  const { name } = contactPlaceholders(readRoot('config/profile.yml'));
+  const safe = (name || 'Candidate').trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'Candidate';
+  return type === 'resume' ? `${safe}_Resume.pdf` : `${safe}_Cover_Letter.pdf`;
+}
+
+/** Copy a file, tolerating the transient Windows locks (OneDrive sync / open
+ *  viewer) that throw EBUSY/EPERM/EACCES. */
+async function copyFileWithRetry(src: string, dest: string, attempts = 4): Promise<void> {
+  const lockCodes = new Set(['EBUSY', 'EPERM', 'EACCES']);
+  for (let i = 0; ; i++) {
+    try {
+      fs.copyFileSync(src, dest);
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (!code || !lockCodes.has(code) || i >= attempts - 1) throw err;
+      await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+    }
+  }
 }
 
 export async function refreshDocumentPdfIfStale(id: string, type: DocumentType): Promise<RenderResult> {
@@ -542,7 +589,16 @@ export async function refreshDocumentPdfIfStale(id: string, type: DocumentType):
     : coverLetterHtmlFromMarkdown(markdown, app);
 
   fs.writeFileSync(htmlPath, html);
-  const pageCount = await generatePdf(htmlPath, pdfPath);
+  const { pageCount, pageFills } = await generatePdf(htmlPath, pdfPath);
+
+  // Save a nicely-named copy (Girish_Bhuteja_Resume.pdf) alongside the internal
+  // working file. Best-effort: the internal resume.pdf/cover-letter.pdf are what
+  // the app depends on, so a locked named copy must never fail generation.
+  try {
+    await copyFileWithRetry(pdfPath, path.join(folderPath, prettyPdfFilename(type)));
+  } catch (err) {
+    console.warn(`[document-renderer] could not write named ${type} copy: ${err instanceof Error ? err.message : err}`);
+  }
 
   if (shouldUpdateMetadata) {
     const now = new Date().toISOString();
@@ -562,5 +618,5 @@ export async function refreshDocumentPdfIfStale(id: string, type: DocumentType):
     }
   }
 
-  return { refreshed: true, htmlPath, pdfPath, pageCount };
+  return { refreshed: true, htmlPath, pdfPath, pageCount, pageFills };
 }

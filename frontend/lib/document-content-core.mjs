@@ -26,6 +26,11 @@ export const PROJECT_CATALOG = {
     links: [{ label: 'github.com/Girish0744/Zonalyze', url: 'https://github.com/Girish0744/Zonalyze' }],
     dateRange: 'Jan 2026 - Present',
   },
+  careerops: {
+    name: 'CareerOps - AI Job Application Platform',
+    links: [{ label: 'github.com/Girish0744/CareerOps', url: 'https://github.com/Girish0744/CareerOps' }],
+    dateRange: 'Apr 2026 - Present',
+  },
   ethos: {
     name: 'ETHOS - Autonomous Exoplanet Discovery Pipeline',
     links: [
@@ -84,7 +89,7 @@ export const EXPERIENCE_CATALOG = {
     dateRange: 'May 2025 - Present',
     note: '',
     minBullets: 2,
-    maxBullets: 2,
+    maxBullets: 3, // 3rd bullet is promoted from reserve only when page 1 renders short
   },
 };
 
@@ -164,6 +169,19 @@ export const BANNED_PROFILE_PHRASES = ['expertise in', 'deep technical experienc
 
 export const FABRICATION_TRIPWIRES = ['Golang', 'Spring Boot', 'Kubernetes', 'Kafka'];
 
+// Rendered page-fill targets for the locked template's fixed page split
+// (page 1 = profile..experience, .page-two = projects..certifications).
+// Fractions of the usable page height; the generate-docs route expands
+// reserve content until each page meets its minimum or reserve runs out.
+// Calibrated against Girish's hand-tuned resumes. page2Min is deliberately high
+// so page 2 keeps adding JD-relevant project bullets until it is genuinely full;
+// the generate-docs loop reverts the last add if it would spill onto page 3, so
+// a high target just means "fill until one bullet short of overflow."
+export const RESUME_FILL_TARGETS = { page1Min: 0.93, page2Min: 0.97 };
+
+// Most bullets a single project may hold after deep page-2 fill.
+export const MAX_PROJECT_BULLETS = 5;
+
 export const BANNED_COVER_LETTER_PHRASES = [
   'I am writing to apply', 'I am passionate about', 'I would love the opportunity',
   'I believe I would be a great fit', 'I am eager', 'eager to contribute', 'excited to apply',
@@ -235,11 +253,17 @@ function textIncludesKeyword(preparedText, keyword) {
 
 // ── Content normalization ────────────────────────────────────────────────────
 
+const MAX_RESERVE_BULLETS_PER_ENTRY = 3;
+
 /**
  * Coerce the model's JSON into a clean, deterministic content object.
  * Unknown catalog keys are dropped (they get reported by verifyResumeContent
  * via structural checks). All text is sanitized: em dashes and trailing
  * bullet periods removed here so those rules never depend on the model.
+ *
+ * `reserve` holds the model's ranked spare content (extra experience/project
+ * bullets, an extra extracurricular entry). It is never rendered directly —
+ * expandResumeForUnderfill promotes from it when the rendered page is short.
  */
 export function normalizeResumeContent(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
@@ -254,12 +278,28 @@ export function normalizeResumeContent(raw) {
     }))
     .filter(row => row.category && row.items.length > 0);
 
+  const reserve = { experience: {}, projects: {}, extracurricular: [], profileSentence: '' };
+  const reserveBulletsOf = entry => asArray(entry?.reserveBullets)
+    .map(sanitizeBullet)
+    .filter(isPromotableBullet)
+    .slice(0, MAX_RESERVE_BULLETS_PER_ENTRY);
+
+  const spareProfileSentence = sanitizeSentence(source.reserveProfileSentence ?? '');
+  if (spareProfileSentence && isPromotableBullet(spareProfileSentence)) {
+    reserve.profileSentence = spareProfileSentence;
+  }
+
   const experience = asArray(source.experience)
     .map(entry => ({
       key: String(entry?.key ?? '').trim(),
       bullets: asArray(entry?.bullets).map(sanitizeBullet).filter(Boolean),
     }))
     .filter(entry => EXPERIENCE_CATALOG[entry.key]);
+  for (const entry of asArray(source.experience)) {
+    const key = String(entry?.key ?? '').trim();
+    const spare = reserveBulletsOf(entry);
+    if (EXPERIENCE_CATALOG[key] && spare.length > 0) reserve.experience[key] = spare;
+  }
 
   const projects = asArray(source.projects)
     .map(project => ({
@@ -268,6 +308,11 @@ export function normalizeResumeContent(raw) {
       bullets: asArray(project?.bullets).map(sanitizeBullet).filter(Boolean),
     }))
     .filter(project => PROJECT_CATALOG[project.key]);
+  for (const project of asArray(source.projects)) {
+    const key = String(project?.key ?? '').trim();
+    const spare = reserveBulletsOf(project);
+    if (PROJECT_CATALOG[key] && spare.length > 0) reserve.projects[key] = spare;
+  }
 
   const educationCoursework = asArray(source.educationCoursework).map(sanitizeInline).filter(Boolean);
 
@@ -278,7 +323,16 @@ export function normalizeResumeContent(raw) {
     }))
     .filter(entry => EXTRACURRICULAR_CATALOG[entry.key] && entry.bullet);
 
-  return { profileSentences, highlights, skills, experience, projects, educationCoursework, extracurricular };
+  const selectedExtracurricular = new Set(extracurricular.map(entry => entry.key));
+  reserve.extracurricular = asArray(source.reserveExtracurricular)
+    .map(entry => ({
+      key: String(entry?.key ?? '').trim(),
+      bullet: sanitizeBullet(entry?.bullet ?? ''),
+    }))
+    .filter(entry => EXTRACURRICULAR_CATALOG[entry.key] && isPromotableBullet(entry.bullet) && !selectedExtracurricular.has(entry.key))
+    .slice(0, MAX_RESERVE_BULLETS_PER_ENTRY);
+
+  return { profileSentences, highlights, skills, experience, projects, educationCoursework, extracurricular, reserve };
 }
 
 // ── Markdown builder (the compatibility contract with document-renderer.ts) ──
@@ -696,6 +750,12 @@ export function trimResumeForOverflow(content) {
     return { content: next, action: 'dropped the 3rd OER experience bullet' };
   }
 
+  const oliveBranch = next.experience.find(entry => entry.key === 'olive-branch');
+  if (oliveBranch && oliveBranch.bullets.length > 2) {
+    oliveBranch.bullets.pop();
+    return { content: next, action: 'dropped the 3rd Olive Branch experience bullet' };
+  }
+
   const lastResort = next.projects
     .map((project, index) => ({ project, index }))
     .filter(entry => entry.project.bullets.length > 1)
@@ -705,6 +765,127 @@ export function trimResumeForOverflow(content) {
     project.bullets.pop();
     return { content: next, action: `trimmed project "${project.key}" to 1 content bullet (last resort)` };
   }
+
+  return { content: next, action: null };
+}
+
+// ── Under-fill expansion (deterministic, no LLM) ─────────────────────────────
+
+/**
+ * A reserve bullet is only promotable when it passes the same language rules
+ * the verifier enforces on rendered content, so expansion can never introduce
+ * a violation (or a fabricated tech claim) that the repair pass already ran.
+ */
+function isPromotableBullet(text) {
+  if (!text) return false;
+  if (/\b(?:I|me|my|mine|we|our|ours|us|he|his|him|she|her)\b/.test(text)) return false;
+  if (BANNED_POWER_VERBS.some(verb => new RegExp(`\\b${verb}\\b`, 'i').test(text))) return false;
+  if (findPhrase(text, BANNED_RESUME_PHRASES)) return false;
+  if (FABRICATION_TRIPWIRES.some(term => new RegExp(`\\b${term}\\b`, 'i').test(text))) return false;
+  return true;
+}
+
+function takePromotableBullet(list) {
+  while (list.length > 0) {
+    const bullet = list.shift();
+    if (isPromotableBullet(bullet)) return bullet;
+  }
+  return null;
+}
+
+/**
+ * Apply exactly one expansion step for the given under-filled page, the
+ * mirror image of trimResumeForOverflow. Content comes ONLY from the model's
+ * reserve (already sanitized) or the fixed coursework catalog — never invented.
+ * Returns { content, action } where action is null when nothing can expand.
+ *
+ * page: 'page1' (profile..experience) | 'page2' (.page-two: projects..certs)
+ */
+export function expandResumeForUnderfill(content, page) {
+  const reserve = content.reserve ?? { experience: {}, projects: {}, extracurricular: [], profileSentence: '' };
+  const next = {
+    ...content,
+    profileSentences: [...content.profileSentences],
+    experience: content.experience.map(entry => ({ ...entry, bullets: [...entry.bullets] })),
+    projects: content.projects.map(project => ({ ...project, bullets: [...project.bullets] })),
+    educationCoursework: [...content.educationCoursework],
+    extracurricular: [...content.extracurricular],
+    reserve: {
+      experience: Object.fromEntries(Object.entries(reserve.experience ?? {}).map(([key, list]) => [key, [...list]])),
+      projects: Object.fromEntries(Object.entries(reserve.projects ?? {}).map(([key, list]) => [key, [...list]])),
+      extracurricular: [...(reserve.extracurricular ?? [])],
+      profileSentence: reserve.profileSentence ?? '',
+    },
+  };
+
+  if (page === 'page1') {
+    // Page 1's flexible blocks: experience bullets (oer/olive-branch up to
+    // their catalog max), then a 4th profile sentence. Highlights and skills
+    // have exact counts.
+    for (const entry of next.experience) {
+      const bounds = EXPERIENCE_CATALOG[entry.key];
+      const spare = next.reserve.experience[entry.key];
+      if (!bounds || !spare || entry.bullets.length >= bounds.maxBullets) continue;
+      const bullet = takePromotableBullet(spare);
+      if (!bullet) continue;
+      entry.bullets.push(bullet);
+      return { content: next, action: `added a reserve bullet to experience "${entry.key}"` };
+    }
+    if (next.reserve.profileSentence && next.profileSentences.length < 4) {
+      next.profileSentences.push(next.reserve.profileSentence);
+      next.reserve.profileSentence = '';
+      return { content: next, action: 'added the reserve 4th profile sentence' };
+    }
+    return { content: next, action: null };
+  }
+
+  // page2 — fill projects first and hardest: the user wants page 2 packed with
+  // JD-relevant project bullets, not left half-empty. Grow projects round-robin
+  // (always feed the project with the fewest bullets) so all three deepen
+  // evenly, then add a 3rd extracurricular and a 5th coursework subject, then
+  // keep deepening projects up to MAX_PROJECT_BULLETS. The generate-docs loop
+  // reverts the last add if it overflows to page 3, so this fills right up to
+  // the edge. Every promoted bullet is a truthful, JD-tailored reserve bullet
+  // the model wrote from the master CV — never fabricated.
+  const growProjectsTo = (cap) => {
+    const ordered = [...next.projects]
+      .filter(p => (next.reserve.projects[p.key]?.length ?? 0) > 0 && p.bullets.length < cap)
+      .sort((a, b) => a.bullets.length - b.bullets.length);
+    for (const project of ordered) {
+      const bullet = takePromotableBullet(next.reserve.projects[project.key]);
+      if (!bullet) continue;
+      project.bullets.push(bullet);
+      return `added a JD-relevant bullet to project "${project.key}" (now ${project.bullets.length})`;
+    }
+    return null;
+  };
+
+  // 1) bring every project up to 3 content bullets
+  let action = growProjectsTo(3);
+  if (action) return { content: next, action };
+
+  // 2) a 3rd extracurricular entry
+  if (next.extracurricular.length < 3 && next.reserve.extracurricular.length > 0) {
+    const entry = next.reserve.extracurricular.shift();
+    if (isPromotableBullet(entry.bullet)) {
+      next.extracurricular.push(entry);
+      return { content: next, action: `added reserve extracurricular entry "${entry.key}"` };
+    }
+  }
+
+  // 3) a 5th coursework subject
+  if (next.educationCoursework.length < 5) {
+    const selected = new Set(next.educationCoursework.map(item => item.toLowerCase()));
+    const addition = ALLOWED_COURSEWORK.find(subject => !selected.has(subject.toLowerCase()));
+    if (addition) {
+      next.educationCoursework.push(addition);
+      return { content: next, action: `added coursework subject "${addition}"` };
+    }
+  }
+
+  // 4) keep deepening projects up to MAX_PROJECT_BULLETS each
+  action = growProjectsTo(MAX_PROJECT_BULLETS);
+  if (action) return { content: next, action };
 
   return { content: next, action: null };
 }

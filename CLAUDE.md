@@ -543,6 +543,16 @@ All previously documented issues have been resolved:
 
 **Current state (2026-06-17):** 22 tracked applications, 21 application folders, pipeline clean. Next phase is 18 (portal expansion: Workday/Teamtailor/BambooHR providers).
 
+**Update (2026-07-13):** `data/applications.json` + per-folder `applications/{id}/metadata.json` are the source of truth for applications (85+ entries). `data/applications.md` is a legacy markdown mirror that only the CLI flow updates (22 rows) — do not treat it as complete, and do not bulk-backfill it; the frontend and autopilot read/write JSON only.
+
+**Career Autopilot (added 2026-07-13):** `autopilot.mjs` + `config/autopilot.yml` run a capped morning batch (scheduled task `career-autopilot`, daily 8:00): refresh scan → evaluate top new queue cards → generate resume/cover-letter packages for full scores ≥ 80 (borderline 75–79 listed only) → save a run summary to `data/autopilot-runs/` → send a WhatsApp briefing via Postbox when `postbox.url` is configured. It never applies or submits. The package cap counts packages produced (quick scores are optimistic; full evaluation demotes many), with an evaluation budget of 3× the cap.
+
+**Referral priority (added 2026-07-13):** `config/referrals.yml` lists companies where Girish knows someone (with contact names). The autopilot processes matching queue cards FIRST at a lower quick-score threshold (70), and the briefing shows the contact to message ("→ ask Raghav"). `portals.yml` includes employer-scoped Eluta pages for these companies ("Referral Companies via Eluta"). The Eluta provider paces requests ~2-3s apart, skips bad URLs per-URL, and backs off (never bypasses) Eluta's "User Verification" wall.
+
+**Named PDF copies (added 2026-07-14):** every PDF render (`refreshDocumentPdfIfStale` in `frontend/lib/document-renderer.ts`) also writes a user-facing copy named from the profile — `Girish_Bhuteja_Resume.pdf` / `Girish_Bhuteja_Cover_Letter.pdf` (see `prettyPdfFilename`) — alongside the internal `resume.pdf` / `cover-letter.pdf`. The internal names are load-bearing (apply-upload guard, metadata `resumePath`, download route all depend on them) and must NOT be renamed; the named copy is the file Girish attaches. In-app downloads (`/api/applications/[id]/pdf`) also serve the pretty name. The copy is best-effort (lock-tolerant, never fails generation).
+
+**Page-fill (calibrated 2026-07-14):** `generate-pdf.mjs` emits a `Fill:` metric per page; the generate-docs route auto-expands model-provided reserve content until page 1 ≥ 93% and **page 2 ≥ 97%** full, reverting any expansion that overflows to page 3 (so it fills to one bullet short of overflow), and auto-trims true overflow as before. Page 2 is filled hardest and project-first: the model supplies up to 3 reserve bullets per project (`reserveBullets`), and `expandResumeForUnderfill` grows all three projects round-robin up to `MAX_PROJECT_BULLETS` (5) with JD-relevant, keyword-rich, truthful bullets before touching the smaller levers (3rd extracurricular, 5th coursework). Targets and caps live in `RESUME_FILL_TARGETS` / `MAX_PROJECT_BULLETS` in `frontend/lib/document-content-core.mjs`; `MAX_UNDERFILL_EXPANSIONS` (12) is in the generate-docs route.
+
 ### Skill Mode Routing
 
 | If the user... | Mode |

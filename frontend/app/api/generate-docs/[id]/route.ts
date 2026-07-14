@@ -18,10 +18,13 @@ import {
   buildResumeMarkdown,
   verifyResumeContent,
   trimResumeForOverflow,
+  expandResumeForUnderfill,
   varyLeadingVerbs,
   buildCoverLetterChecks,
+  RESUME_FILL_TARGETS,
 } from '@/lib/document-content-core.mjs';
-import type { ResumeContent, ResumeAnalysis, ContentIssue, KeywordCoverageEntry } from '@/lib/document-content-core';
+import type { ResumeContent, ResumeAnalysis, ContentIssue, KeywordCoverageEntry, ResumePage } from '@/lib/document-content-core';
+import type { PageFills } from '@/lib/document-renderer';
 import {
   buildResumeSystemPrompt,
   buildResumeUserPrompt,
@@ -32,11 +35,15 @@ import {
   resumeRepairResponseSchema,
 } from '@/lib/document-prompts';
 
-export const maxDuration = 120;
+// Aggressive page-2 fill can re-render several times per document, so allow headroom.
+export const maxDuration = 180;
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
 const MAX_OVERFLOW_TRIMS = 3;
+// Page 2 can absorb many project bullets before it is full, so allow enough
+// expansion passes to deepen all three projects plus the smaller levers.
+const MAX_UNDERFILL_EXPANSIONS = 12;
 
 function readRoot(rel: string): string {
   const p = path.join(/*turbopackIgnore: true*/ ROOT, rel);
@@ -206,7 +213,20 @@ interface ResumeReport {
   remainingIssues: ContentIssue[];
   repairApplied: boolean;
   trimsApplied: string[];
+  expansionsApplied: string[];
+  reserveProvided: { experience: number; projects: number; extracurricular: number };
   pageCount: number | null;
+  pageFills: PageFills | null;
+}
+
+function countReserve(content: ResumeContent): { experience: number; projects: number; extracurricular: number } {
+  const reserve = content.reserve;
+  const sum = (lists: Record<string, string[]>) => Object.values(lists).reduce((total, list) => total + list.length, 0);
+  return {
+    experience: reserve ? sum(reserve.experience) : 0,
+    projects: reserve ? sum(reserve.projects) : 0,
+    extracurricular: reserve ? reserve.extracurricular.length : 0,
+  };
 }
 
 interface CoverLetterReport {
@@ -215,6 +235,7 @@ interface CoverLetterReport {
   wordCount: number;
   remainingIssues: Array<{ code: string; severity: string; message: string }>;
   repairApplied: boolean;
+  pageFill: number | null;
 }
 
 function mergeGenerationReport(
@@ -330,7 +351,17 @@ export async function POST(
       });
       const repairedPayload = parseJsonObject(repairResult.text ?? '');
       if (repairedPayload) {
-        const repairedContent = normalizeResumeContent(repairedPayload.resume ?? repairedPayload);
+        const repairedContent: ResumeContent = normalizeResumeContent(repairedPayload.resume ?? repairedPayload);
+        // The repair model often omits reserve fields — keep the original
+        // reserve so under-fill expansion still has content to promote.
+        const repairedReserve = repairedContent.reserve;
+        const repairedHasReserve = repairedReserve
+          && (Object.keys(repairedReserve.experience).length > 0
+            || Object.keys(repairedReserve.projects).length > 0
+            || repairedReserve.extracurricular.length > 0);
+        if (!repairedHasReserve && resumeContent.reserve) {
+          repairedContent.reserve = resumeContent.reserve;
+        }
         const reverified = verifyResumeContent(repairedContent, analysis);
         const remainingFixes = reverified.issues.filter(issue => issue.severity === 'fix').length;
         // Accept the repair only if it did not make things worse.
@@ -361,6 +392,9 @@ export async function POST(
   // Never block generation on residual issues — surface them instead.
   warnings.push(...issueWarnings('Resume', issues));
 
+  const reserveProvided = countReserve(resumeContent);
+  debugLog('[generate-docs] reserve provided:', JSON.stringify(reserveProvided));
+
   const resumeMd = normalizeGeneratedPunctuation(buildResumeMarkdown(resumeContent, { name: contact.name }));
 
   snapshotDocumentVersion(id, 'resume', 'regenerate');
@@ -368,10 +402,15 @@ export async function POST(
 
   resumePdfGenerated = false;
   const trimsApplied: string[] = [];
+  const expansionsApplied: string[] = [];
   let finalPageCount: number | null = null;
+  let finalPageFills: PageFills | null = null;
+  const writeResumeMarkdown = () => fs.writeFileSync(
+    path.join(folderPath, 'resume.md'),
+    normalizeGeneratedPunctuation(buildResumeMarkdown(resumeContent, { name: contact.name })),
+  );
   try {
     let renderResult = await refreshDocumentPdfIfStale(id, 'resume');
-    finalPageCount = renderResult.pageCount;
 
     // Deterministic overflow handling: trim content in priority order and
     // re-render until the locked template fits 2 pages. No extra LLM calls.
@@ -381,19 +420,76 @@ export async function POST(
       resumeContent = trimmedContent;
       trimsApplied.push(action);
       debugLog('[generate-docs] overflow trim:', action);
-      fs.writeFileSync(
-        path.join(folderPath, 'resume.md'),
-        normalizeGeneratedPunctuation(buildResumeMarkdown(resumeContent, { name: contact.name })),
-      );
+      writeResumeMarkdown();
       renderResult = await refreshDocumentPdfIfStale(id, 'resume');
-      finalPageCount = renderResult.pageCount;
     }
+
+    // Deterministic under-fill handling: the locked template forces Projects+
+    // onward to page 2, so each page's fill depends only on its own sections.
+    // Promote reserve content (model-provided spares + fixed coursework) for
+    // whichever page renders short, until targets are met or reserve runs out.
+    while (
+      renderResult.pageCount !== null && renderResult.pageCount <= 2
+      && renderResult.pageFills
+      && expansionsApplied.length < MAX_UNDERFILL_EXPANSIONS
+    ) {
+      const fills = renderResult.pageFills;
+      const underfilledPages: ResumePage[] = [];
+      if ((fills.page1 ?? 1) < RESUME_FILL_TARGETS.page1Min) underfilledPages.push('page1');
+      if ((fills.page2 ?? 1) < RESUME_FILL_TARGETS.page2Min) underfilledPages.push('page2');
+      if (underfilledPages.length === 0) break;
+
+      let action: string | null = null;
+      let expandedContent: ResumeContent | null = null;
+      let expandedPage: ResumePage | null = null;
+      for (const page of underfilledPages) {
+        const attempt = expandResumeForUnderfill(resumeContent, page);
+        if (attempt.action) {
+          action = attempt.action;
+          expandedContent = attempt.content;
+          expandedPage = page;
+          break;
+        }
+      }
+      if (!action || !expandedContent) break;
+
+      const contentBeforeExpansion = resumeContent;
+      resumeContent = expandedContent;
+      writeResumeMarkdown();
+      renderResult = await refreshDocumentPdfIfStale(id, 'resume');
+
+      if (renderResult.pageCount && renderResult.pageCount > 2) {
+        // The expansion pushed content onto page 3 — revert it and stop.
+        resumeContent = contentBeforeExpansion;
+        writeResumeMarkdown();
+        renderResult = await refreshDocumentPdfIfStale(id, 'resume');
+        debugLog('[generate-docs] under-fill expansion reverted (overflowed):', action);
+        break;
+      }
+      expansionsApplied.push(`${expandedPage}: ${action}`);
+      debugLog('[generate-docs] under-fill expansion:', action);
+    }
+
+    finalPageCount = renderResult.pageCount;
+    finalPageFills = renderResult.pageFills;
 
     if (renderResult.pageCount && renderResult.pageCount > 2) {
       warnings.push(`Resume still renders to ${renderResult.pageCount} pages after trimming. Reduce content in resume.md manually.`);
     }
     if (trimsApplied.length > 0) {
       warnings.push(`Resume was auto-trimmed to fit 2 pages: ${trimsApplied.join('; ')}.`);
+    }
+    if (expansionsApplied.length > 0) {
+      warnings.push(`Resume was auto-expanded to fill both pages: ${expansionsApplied.join('; ')}.`);
+    }
+    const fills = renderResult.pageFills;
+    if (fills) {
+      const shortPages: string[] = [];
+      if ((fills.page1 ?? 1) < RESUME_FILL_TARGETS.page1Min) shortPages.push(`page 1 at ${Math.round((fills.page1 ?? 0) * 100)}%`);
+      if ((fills.page2 ?? 1) < RESUME_FILL_TARGETS.page2Min) shortPages.push(`page 2 at ${Math.round((fills.page2 ?? 0) * 100)}%`);
+      if (shortPages.length > 0) {
+        warnings.push(`Resume renders under the fill target (${shortPages.join(', ')}) and reserve content is exhausted. Add bullets manually if desired.`);
+      }
     }
     resumePdfGenerated = fs.existsSync(path.join(folderPath, 'resume.pdf'));
   } catch (e) {
@@ -412,7 +508,10 @@ export async function POST(
     remainingIssues: issues,
     repairApplied,
     trimsApplied,
+    expansionsApplied,
+    reserveProvided,
     pageCount: finalPageCount,
+    pageFills: finalPageFills,
   };
   mergeGenerationReport(folderPath, { resume: resumeReport });
   }
@@ -489,8 +588,10 @@ export async function POST(
   fs.writeFileSync(path.join(folderPath, 'cover-letter.md'), clMdFull);
 
   clPdfGenerated = false;
+  let clPageFill: number | null = null;
   try {
-    await refreshDocumentPdfIfStale(id, 'cover-letter');
+    const clRender = await refreshDocumentPdfIfStale(id, 'cover-letter');
+    clPageFill = clRender.pageFills?.content ?? null;
     clPdfGenerated = fs.existsSync(path.join(folderPath, 'cover-letter.pdf'));
   } catch (e) {
     coverLetterGenerationError = e instanceof Error ? e.message : String(e);
@@ -503,6 +604,7 @@ export async function POST(
     wordCount: clBody.split(/\s+/).filter(Boolean).length,
     remainingIssues: clIssues,
     repairApplied: clRepairApplied,
+    pageFill: clPageFill,
   };
   mergeGenerationReport(folderPath, { coverLetter: coverLetterReport });
   }

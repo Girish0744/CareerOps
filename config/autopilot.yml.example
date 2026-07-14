@@ -1,0 +1,25 @@
+# Career Autopilot — morning batch configuration (user layer, edit freely).
+# Copy this file to config/autopilot.yml and fill in your own values.
+# Runner: node autopilot.mjs [--dry-run] [--limit=N] [--no-briefing] [--no-scan]
+
+enabled: true
+
+# Queue selection
+quick_score_min: 80      # scan-queue cards considered (quick score)
+full_score_min: 80       # docs generated at/above this full A-G score
+borderline_min: 75       # 75-79 → listed in the briefing as "evaluate manually?"
+max_packages_per_run: 4  # hard cap on document packages per run
+delay_between_jobs_seconds: 45   # pause between jobs (free Gemini tier)
+
+# Whether each run refreshes discovery first (POST /api/scan/run)
+refresh_scan: true
+
+# Career-ops frontend (started automatically if not running)
+frontend_url: http://localhost:3000
+
+# Postbox (WhatsApp briefing). Leave url empty to skip sending —
+# the briefing text is always saved to data/autopilot-runs/ either way.
+# url example: http://<tailscale-hostname>:8080
+postbox:
+  url: ""
+  phone: ""

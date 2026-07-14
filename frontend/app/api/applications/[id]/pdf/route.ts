@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getApplication } from '@/lib/filesystem';
-import { refreshDocumentPdfIfStale } from '@/lib/document-renderer';
+import { refreshDocumentPdfIfStale, prettyPdfFilename } from '@/lib/document-renderer';
 import fs from 'fs';
 import path from 'path';
 
@@ -41,10 +41,7 @@ export async function GET(
   }
 
   const buffer = fs.readFileSync(pdfPath);
-  const company = app.company.replace(/[^a-z0-9]/gi, '-').toLowerCase();
-  const role    = app.jobTitle.replace(/[^a-z0-9]/gi, '-').toLowerCase();
-  const label   = type === 'resume' ? 'resume' : 'cover-letter';
-  const downloadName = `${company}-${role}-${label}.pdf`;
+  const downloadName = prettyPdfFilename(type);
 
   return new NextResponse(buffer, {
     headers: {

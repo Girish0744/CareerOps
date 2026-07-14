@@ -1091,6 +1091,9 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
               Generation report — ATS keywords {app.generationReport.resume.keywordCoverage.filter(k => k.present).length}/{app.generationReport.resume.keywordCoverage.length} covered
               {app.generationReport.resume.archetype ? ` · ${app.generationReport.resume.archetype}` : ''}
               {app.generationReport.resume.pageCount ? ` · ${app.generationReport.resume.pageCount} pages` : ''}
+              {app.generationReport.resume.pageFills?.page1 != null && app.generationReport.resume.pageFills?.page2 != null
+                ? ` · fill ${Math.round(app.generationReport.resume.pageFills.page1 * 100)}% / ${Math.round(app.generationReport.resume.pageFills.page2 * 100)}%`
+                : ''}
             </summary>
             <div className="mt-3 space-y-2">
               {app.generationReport.resume.projectRationale && (
@@ -1109,6 +1112,9 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
               </div>
               {(app.generationReport.resume.trimsApplied?.length ?? 0) > 0 && (
                 <p className="text-slate-600"><span className="font-medium text-slate-800">Auto-trimmed to fit 2 pages:</span> {app.generationReport.resume.trimsApplied!.join('; ')}</p>
+              )}
+              {(app.generationReport.resume.expansionsApplied?.length ?? 0) > 0 && (
+                <p className="text-slate-600"><span className="font-medium text-slate-800">Auto-expanded to fill pages:</span> {app.generationReport.resume.expansionsApplied!.join('; ')}</p>
               )}
               {app.generationReport.resume.remainingIssues.length > 0 && (
                 <ul className="list-disc pl-5 text-amber-800">

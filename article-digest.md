@@ -20,6 +20,19 @@ This proof-point library was refreshed from `Girish-Bhuteja-Master-Resume.docx` 
 - Containerized the multi-service stack with Docker Compose.
 - Delivered investor-ready PDF export, scenario history, multi-scenario comparison, geospatial market context mapping, and token-based authentication.
 
+### CareerOps -- AI Job Application Platform
+
+- Full-stack AI job-application platform (Next.js, React, TypeScript, Node.js) with 19 REST API routes.
+- Scored and ranked 300+ live job postings and drove 90+ tracked applications end to end.
+- 5-stage document-generation pipeline on the Google Gemini API (structured generation, in-code verification, targeted repair, locked-template render, 2-page fit control); tailored ATS resume in under a minute.
+- In-code verification layer enforcing a 100-point, 7-category scoring rubric plus keyword-coverage, anti-fabrication, and voice checks; guarded by 5 automated QA suites.
+- Playwright PDF rendering from a locked template with programmatic page-fill measurement holding output to exactly 2 pages.
+- Zero-cost job-discovery scanner across 3 ATS provider APIs (Greenhouse, Ashby, Lever) plus a Canadian aggregator into a scored, deduplicated queue.
+- Scheduled batch automation: up to 4 complete application packages per run, prioritizing 20 referral companies, with a WhatsApp briefing via a self-hosted Node.js service.
+- Human-in-the-loop Playwright apply assistant that fills ATS fields from a profile truth table and stops before final submission.
+- Available metrics to draw from: 19 API routes, 300+ postings scored, 90+ applications tracked, 5-stage pipeline, 100-point/7-category rubric, 5 QA suites, 3 ATS APIs, 20 referral companies, 2-page output.
+- Note: personal engineering project extended from an open-source starting point; the platform, AI document pipeline, automation, and Canadian job sourcing above are Girish's own work.
+
 ### ETHOS -- Autonomous Exoplanet Discovery Pipeline
 
 - Classified 9,500+ Kepler Space Telescope candidates as confirmed exoplanets or false positives using NASA Exoplanet Archive data.
