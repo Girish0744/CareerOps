@@ -17,6 +17,7 @@ import {
   PROJECT_CATALOG,
   EXPERIENCE_CATALOG,
   RESUME_FILL_TARGETS,
+  dateRangeSortKey,
 } from './frontend/lib/document-content-core.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -317,6 +318,36 @@ for (const expectedCode of letters.badExpectedCodes) {
   check(`cover letter violation detected: ${expectedCode}`, badLetterCodes.has(expectedCode),
     `got: ${[...badLetterCodes].join(', ')}`);
 }
+
+// ── Reverse-chronological ordering ───────────────────────────────────────────
+// Selection stays relevance-driven; the ORDER must always be newest-first.
+
+const scrambled = normalizeResumeContent({
+  ...good.resume,
+  projects: [
+    { key: 'dineease', stack: 'C#', bullets: ['Built the ordering flow for the restaurant system.'] },
+    { key: 'careerops', stack: 'Next.js', bullets: ['Built the document generation pipeline end to end.'] },
+    { key: 'meditwin', stack: 'Python', bullets: ['Built the health companion assistant interface.'] },
+  ],
+});
+const projectOrder = scrambled.projects.map(project => project.key);
+check('projects render newest-first regardless of relevance order',
+  JSON.stringify(projectOrder) === JSON.stringify(['careerops', 'meditwin', 'dineease']),
+  `got: ${projectOrder.join(', ')}`);
+
+const projectDates = scrambled.projects.map(project => PROJECT_CATALOG[project.key].dateRange);
+check('project date ranges descend',
+  JSON.stringify(projectDates) === JSON.stringify(['Apr 2026 - Present', 'May 2025 - Aug 2025', 'Sept 2024 - Dec 2024']),
+  `got: ${projectDates.join(' | ')}`);
+
+check('ongoing entries sort above finished ones',
+  dateRangeSortKey('Jan 2026 - Present').end > dateRangeSortKey('Apr 2026').end);
+check('two ongoing entries order by later start date',
+  dateRangeSortKey('Apr 2026 - Present').start > dateRangeSortKey('Jan 2026 - Present').start);
+check('single-month range parses (Apr 2026)',
+  dateRangeSortKey('Apr 2026').start === dateRangeSortKey('Apr 2026').end);
+check('"Sept" abbreviation parses as September',
+  dateRangeSortKey('Sept 2024 - Dec 2024').end > dateRangeSortKey('Sept 2024 - Dec 2024').start);
 
 // ── Result ───────────────────────────────────────────────────────────────────
 

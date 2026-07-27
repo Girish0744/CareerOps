@@ -108,6 +108,44 @@ export const EDUCATION_ENTRY = {
   gpaBullet: 'GPA: 3.74/4.00; expected graduation August 2026',
 };
 
+// ── Reverse-chronological ordering ───────────────────────────────────────────
+// The model picks WHICH projects/experience/activities to include (relevance),
+// but never the order they appear in. Dates are fixed facts in the catalogs
+// above, so ordering is decided here in code: newest first, always.
+
+const MONTH_INDEX = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+const ONGOING = Number.MAX_SAFE_INTEGER;
+
+function monthYearValue(token, fallbackMonth) {
+  const match = String(token).match(/([A-Za-z]+)?\s*((?:19|20)\d{2})/);
+  if (!match) return null;
+  const month = match[1] ? MONTH_INDEX[match[1].slice(0, 3).toLowerCase()] : undefined;
+  return Number(match[2]) * 12 + (month ?? fallbackMonth);
+}
+
+/**
+ * Sort key for a catalog dateRange: "Jan 2026 - Present", "Apr 2026",
+ * "Sept 2024 - Dec 2024". Resume convention is newest END date first, then
+ * newest START date; anything ongoing outranks everything finished.
+ */
+export function dateRangeSortKey(dateRange) {
+  const text = String(dateRange ?? '');
+  const parts = text.split(/\s*[-–—]\s*/).map(part => part.trim()).filter(Boolean);
+  const start = monthYearValue(parts[0] ?? '', 0);
+  const end = /present|current/i.test(text)
+    ? ONGOING
+    : monthYearValue(parts[parts.length - 1] ?? '', 11);
+  return { start: start ?? -1, end: end ?? start ?? -1 };
+}
+
+/** Stable: entries with identical dates keep the model's relevance order. */
+export function sortChronologically(entries, dateRangeOf) {
+  return entries
+    .map((entry, index) => ({ entry, index, key: dateRangeSortKey(dateRangeOf(entry)) }))
+    .sort((a, b) => (b.key.end - a.key.end) || (b.key.start - a.key.start) || (a.index - b.index))
+    .map(item => item.entry);
+}
+
 export const ALLOWED_COURSEWORK = [
   'Software Engineering',
   'OOP',
@@ -292,25 +330,31 @@ export function normalizeResumeContent(raw) {
     reserve.profileSentence = spareProfileSentence;
   }
 
-  const experience = asArray(source.experience)
-    .map(entry => ({
-      key: String(entry?.key ?? '').trim(),
-      bullets: asArray(entry?.bullets).map(sanitizeBullet).filter(Boolean),
-    }))
-    .filter(entry => EXPERIENCE_CATALOG[entry.key]);
+  const experience = sortChronologically(
+    asArray(source.experience)
+      .map(entry => ({
+        key: String(entry?.key ?? '').trim(),
+        bullets: asArray(entry?.bullets).map(sanitizeBullet).filter(Boolean),
+      }))
+      .filter(entry => EXPERIENCE_CATALOG[entry.key]),
+    entry => EXPERIENCE_CATALOG[entry.key].dateRange,
+  );
   for (const entry of asArray(source.experience)) {
     const key = String(entry?.key ?? '').trim();
     const spare = reserveBulletsOf(entry);
     if (EXPERIENCE_CATALOG[key] && spare.length > 0) reserve.experience[key] = spare;
   }
 
-  const projects = asArray(source.projects)
-    .map(project => ({
-      key: String(project?.key ?? '').trim(),
-      stack: sanitizeBullet(project?.stack ?? '').replace(/^Stack:\s*/i, ''),
-      bullets: asArray(project?.bullets).map(sanitizeBullet).filter(Boolean),
-    }))
-    .filter(project => PROJECT_CATALOG[project.key]);
+  const projects = sortChronologically(
+    asArray(source.projects)
+      .map(project => ({
+        key: String(project?.key ?? '').trim(),
+        stack: sanitizeBullet(project?.stack ?? '').replace(/^Stack:\s*/i, ''),
+        bullets: asArray(project?.bullets).map(sanitizeBullet).filter(Boolean),
+      }))
+      .filter(project => PROJECT_CATALOG[project.key]),
+    project => PROJECT_CATALOG[project.key].dateRange,
+  );
   for (const project of asArray(source.projects)) {
     const key = String(project?.key ?? '').trim();
     const spare = reserveBulletsOf(project);
@@ -319,12 +363,15 @@ export function normalizeResumeContent(raw) {
 
   const educationCoursework = asArray(source.educationCoursework).map(sanitizeInline).filter(Boolean);
 
-  const extracurricular = asArray(source.extracurricular)
-    .map(entry => ({
-      key: String(entry?.key ?? '').trim(),
-      bullet: sanitizeBullet(entry?.bullet ?? ''),
-    }))
-    .filter(entry => EXTRACURRICULAR_CATALOG[entry.key] && entry.bullet);
+  const extracurricular = sortChronologically(
+    asArray(source.extracurricular)
+      .map(entry => ({
+        key: String(entry?.key ?? '').trim(),
+        bullet: sanitizeBullet(entry?.bullet ?? ''),
+      }))
+      .filter(entry => EXTRACURRICULAR_CATALOG[entry.key] && entry.bullet),
+    entry => EXTRACURRICULAR_CATALOG[entry.key].dateRange,
+  );
 
   const selectedExtracurricular = new Set(extracurricular.map(entry => entry.key));
   reserve.extracurricular = asArray(source.reserveExtracurricular)
@@ -890,6 +937,11 @@ export function expandResumeForUnderfill(content, page) {
     const entry = next.reserve.extracurricular.shift();
     if (isPromotableBullet(entry.bullet)) {
       next.extracurricular.push(entry);
+      // Re-sort: a promoted entry must slot into date order, not land last.
+      next.extracurricular = sortChronologically(
+        next.extracurricular,
+        item => EXTRACURRICULAR_CATALOG[item.key].dateRange,
+      );
       return { content: next, action: `added reserve extracurricular entry "${entry.key}"` };
     }
   }
