@@ -401,7 +401,10 @@ export default function JobDiscoveryPage() {
   const [fitFilter, setFitFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [companyFilter, setCompanyFilter] = useState('all');
-  const [recencyFilter, setRecencyFilter] = useState('24h');
+  // 'all' by default: a scan often ingests postings older than 24h (employer
+  // pages list by relevance, not date), and a hard 24h default made the whole
+  // queue look empty right after a successful scan.
+  const [recencyFilter, setRecencyFilter] = useState('all');
   const [roleFilter, setRoleFilter] = useState('all');
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>('new');
   const [importText, setImportText] = useState('');
@@ -953,11 +956,11 @@ export default function JobDiscoveryPage() {
               </select>
               <select value={recencyFilter} onChange={e => setRecencyFilter(e.target.value)}
                 className="px-3 py-2 text-sm border border-slate-200 rounded-xl bg-white text-slate-700">
-                <option value="24h">Last 24h first</option>
-                <option value="72h">Last 72h</option>
-                <option value="7d">Last 7 days</option>
+                <option value="all">Any recency (newest first)</option>
+                <option value="24h">Posted in last 24h</option>
+                <option value="72h">Posted in last 72h</option>
+                <option value="7d">Posted in last 7 days</option>
                 <option value="new">New since last scan</option>
-                <option value="all">Any recency</option>
               </select>
             </div>
             {sourceSummary.length > 0 && (

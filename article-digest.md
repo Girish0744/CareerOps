@@ -128,7 +128,7 @@ This proof-point library was refreshed from `Girish-Bhuteja-Master-Resume.docx` 
 
 - Narhari Sharma Memorial Award, Conestoga College, Apr 2026: academic excellence, leadership, and sustained commitment to helping others succeed.
 - Helena Webb Mentorship Program, selected mentee, Jan-Apr 2026.
-- Java SE, Oracle, 2024.
-- OOP Using C++, Infosys Springboard, 2024.
-- JMeter: Performance and Load Testing, LinkedIn Learning, 2024.
-- CIPS Ontario Membership, 2025.
+- AI Agents: Intensive Vibe Coding, Google & Kaggle.
+- Java SE, Oracle.
+- OOP Using C++, Infosys.
+- CIPS Ontario Member.

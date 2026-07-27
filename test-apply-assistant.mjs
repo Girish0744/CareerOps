@@ -151,6 +151,18 @@ assert(automation.validateUploadPath(fixtureRoot, app.id, profile.transcriptPath
 assert(!automation.validateUploadPath(fixtureRoot, app.id, 'output/resume.pdf', 'resume_upload').ok, 'rejects generic resume upload path');
 assert(!automation.validateUploadPath(fixtureRoot, 'other-app', app.resumePath, 'resume_upload').ok, 'rejects resume from a different application folder');
 
+// candidate.resume_location is a document-header line ("Toronto, ON - Open to
+// relocation"). It must never reach a real application form, where the address
+// has to stay literally accurate.
+assert(profile.resumeLocation === 'Toronto, ON - Open to relocation', 'reads candidate.resume_location for document headers');
+assert(profile.city === 'Cambridge', 'apply city stays the literal city, not the resume header line');
+assert(profile.province === 'ON', 'apply province stays literal');
+const relocationLeak = fields.filter(field => /open to relocation/i.test(String(field.value ?? '')));
+assert(relocationLeak.length === 0,
+  `resume header location must not leak into apply form fields (leaked into: ${relocationLeak.map(f => f.key).join(', ') || 'none'})`);
+const naturalCityLeak = naturalLabelPlan.items.some(item => /open to relocation/i.test(String(item.resolution.value ?? '')));
+assert(!naturalCityLeak, 'assisted fill never types the resume header location into a form field');
+
 if (failures > 0) {
   console.error(`\n${failures} apply assistant fixture(s) failed.`);
   process.exit(1);

@@ -72,7 +72,7 @@ check('markdown includes fixed project name, URL link, and date from catalog',
 check('markdown includes fixed education, awards, and certifications facts',
   markdown.includes('GPA: 3.74/4.00; expected graduation August 2026')
   && markdown.includes('**Narhari Sharma Memorial Award** | Conestoga College')
-  && markdown.includes('Java SE, Oracle, 2024'));
+  && markdown.includes('AI Agents: Intensive Vibe Coding, Google & Kaggle'));
 
 const bulletLines = markdown.split('\n').filter(line => line.startsWith('- '));
 check('no bullet ends with a period and no em dashes anywhere',
@@ -107,6 +107,25 @@ for (const expectedCode of bad.expectedIssueCodes) {
 }
 check('unknown project/experience keys are dropped by normalization',
   badContent.projects.length === 1 && badContent.experience.length === 1);
+
+// Skills density: a visibly sparse row is a hard failure; a 5-item
+// non-Databases row is a warning; the 5-item Databases row is exempt.
+const sparseSkills = normalizeResumeContent({
+  ...good.resume,
+  skills: good.resume.skills.map((row, index) => index === 4
+    ? { ...row, items: row.items.slice(0, 3) }
+    : row),
+});
+const sparseIssues = verifyResumeContent(sparseSkills, good.analysis).issues
+  .filter(issue => issue.code === 'skills-row-sparse');
+check('a 3-item skills row is a fix-severity density violation',
+  sparseIssues.some(issue => issue.severity === 'fix'),
+  JSON.stringify(sparseIssues));
+const goodDensityIssues = verifyResumeContent(goodContent, good.analysis).issues
+  .filter(issue => issue.code === 'skills-row-sparse');
+check('the 5-item Databases row never triggers a density issue',
+  !goodDensityIssues.some(issue => /database/i.test(issue.message)),
+  JSON.stringify(goodDensityIssues));
 
 // ── 3. Overflow trim priority order ──────────────────────────────────────────
 

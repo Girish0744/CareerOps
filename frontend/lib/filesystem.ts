@@ -7,6 +7,7 @@
 import fs from 'fs';
 import path from 'path';
 import { isValidStatus } from './status';
+import { pdfFilename, resolvePdfPath } from './pdf-filename';
 
 // Career-ops root is one level up from the frontend directory
 const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
@@ -31,6 +32,12 @@ export interface ApplicationEntry {
   company: string;
   jobTitle: string;
   location: string | null;
+  /**
+   * Optional header location for this application's resume and cover letter
+   * (e.g. "Toronto, ON - Open to relocation"). Null uses the profile default.
+   * Never used for application-form address fields.
+   */
+  resumeLocation: string | null;
   jobUrl: string | null;
   status: string;
   score: number | null;
@@ -247,6 +254,7 @@ function normalizeApplicationEntry(entry: Partial<ApplicationEntry> & { id: stri
     company: entry.company ?? 'Unknown Company',
     jobTitle: entry.jobTitle ?? 'Unknown Role',
     location: entry.location ?? null,
+    resumeLocation: entry.resumeLocation ?? null,
     jobUrl: entry.jobUrl ?? null,
     status: entry.status ?? 'Saved',
     score: entry.score ?? null,
@@ -322,12 +330,14 @@ export function getApplication(id: string): ApplicationDetail | null {
   if (!entry) return null;
 
   const folderPath = rootPath(entry.applicationFolder);
-  const resumePath = fs.existsSync(path.join(folderPath, 'resume.pdf'))
-    ? `${entry.applicationFolder}/resume.pdf`
-    : entry.resumePath;
-  const coverLetterPath = fs.existsSync(path.join(folderPath, 'cover-letter.pdf'))
-    ? `${entry.applicationFolder}/cover-letter.pdf`
-    : entry.coverLetterPath;
+  // resolvePdfPath prefers the named PDF and falls back to a not-yet-migrated
+  // legacy resume.pdf, so older folders keep resolving until they re-render.
+  const onDiskPdf = (type: 'resume' | 'cover-letter'): string | null => {
+    const abs = resolvePdfPath(folderPath, type);
+    return fs.existsSync(abs) ? `${entry.applicationFolder}/${path.basename(abs)}` : null;
+  };
+  const resumePath = onDiskPdf('resume') ?? entry.resumePath;
+  const coverLetterPath = onDiskPdf('cover-letter') ?? entry.coverLetterPath;
 
   const readFile = (filename: string): string | null => {
     const p = path.join(folderPath, filename);
@@ -440,8 +450,8 @@ export function saveInterviewPrep(id: string, content: string): string {
 }
 function documentFiles(type: DocumentKind) {
   return type === 'resume'
-    ? { markdown: 'resume.md', html: 'resume.html', pdf: 'resume.pdf' }
-    : { markdown: 'cover-letter.md', html: 'cover-letter.html', pdf: 'cover-letter.pdf' };
+    ? { markdown: 'resume.md', html: 'resume.html', pdf: pdfFilename('resume') }
+    : { markdown: 'cover-letter.md', html: 'cover-letter.html', pdf: pdfFilename('cover-letter') };
 }
 
 function versionIdFor(type: DocumentKind, createdAt: string): string {
@@ -786,6 +796,7 @@ export function createApplication(
   if (apps.some(a => a.id === actualId)) return actualId; // already present
   apps.push({
     id: actualId, company, jobTitle, location, jobUrl,
+    resumeLocation: null, // falls back to the profile default until overridden
     status: 'Saved',
     score: null, fitLevel: null,
     applicationFolder,

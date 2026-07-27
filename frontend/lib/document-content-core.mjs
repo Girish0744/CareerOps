@@ -136,7 +136,7 @@ export const AWARDS = [
   },
 ];
 
-export const CERTIFICATIONS_LINE = 'Java SE, Oracle, 2024 · OOP Using C++, Infosys Springboard, 2024 · CIPS Ontario Member, 2025';
+export const CERTIFICATIONS_LINE = 'AI Agents: Intensive Vibe Coding, Google & Kaggle · Java SE, Oracle · OOP Using C++, Infosys · CIPS Ontario Member';
 
 export const RESUME_ARCHETYPES = [
   'SWE_FULLSTACK', 'AI_ML', 'DA_BA', 'DATA_ENGINEER', 'BACKEND_JAVA_SYSTEMS',
@@ -153,6 +153,7 @@ export const KNOWN_TECH_VOCABULARY = [
   'AWS', 'Azure', 'Docker', 'Vercel', 'Git', 'GitHub', 'Postman', 'Selenium',
   'Power BI', 'Power Automate', 'SharePoint', 'MSTest', 'Winsock', 'SimpleTCP',
   'Matplotlib', 'Seaborn', 'Gemini', 'OpenFDA', 'H5P', 'Pressbooks',
+  'Express', 'Playwright', 'JMeter', 'REST APIs', 'CI/CD', 'Excel',
 ];
 
 // ── Language rules (enforced in code, mirrored in the prompt) ────────────────
@@ -189,6 +190,8 @@ export const BANNED_COVER_LETTER_PHRASES = [
   'extensive experience', 'technical rigors', 'enterprise-scale', 'dynamic environment',
   'cutting-edge', 'drive innovation', 'hit the ground running', 'synergy',
   'proven track record', 'adept at', 'perfect fit', 'uniquely qualified',
+  'resonates', 'aligns perfectly', 'deeply committed', 'keen interest', 'esteemed',
+  'I am confident that my', 'contribute effectively to',
 ];
 
 // ── Text helpers ─────────────────────────────────────────────────────────────
@@ -474,6 +477,24 @@ export function verifyResumeContent(content, analysis = {}) {
   }
   if (content.skills.length !== 5) {
     push('skills-rows', 'fix', 'skills', `skills table has ${content.skills.length} rows; needs exactly 5`);
+  }
+  // Density: sparse rows leave the line visibly half-empty and read as a thin
+  // profile. Rows blend JD-relevant skills first with adjacent true skills
+  // from the sources to reach 6-9 items. The Databases row is exempt from the
+  // 6-item target because the sources genuinely list exactly 5 databases —
+  // never demand items the candidate does not have.
+  for (const row of content.skills) {
+    const isDatabasesRow = /database/i.test(row.category);
+    if (row.items.length < 5) {
+      push('skills-row-sparse', 'fix', 'skills',
+        `skills row "${row.category}" lists only ${row.items.length} item(s); fill to 6-9 by adding adjacent skills from the sources (JD-relevant first), never skills the candidate lacks`);
+    } else if (row.items.length < 6 && !isDatabasesRow) {
+      push('skills-row-sparse', 'warn', 'skills',
+        `skills row "${row.category}" lists ${row.items.length} items; target 6-9 by adding adjacent skills from the sources`);
+    } else if (row.items.length > 10) {
+      push('skills-row-overfull', 'warn', 'skills',
+        `skills row "${row.category}" lists ${row.items.length} items; cap at 9-10 so the row stays readable`);
+    }
   }
   if (content.projects.length !== 3) {
     push('project-count', 'fix', 'projects', `resume selects ${content.projects.length} projects; needs exactly 3`);
@@ -929,6 +950,27 @@ export function buildCoverLetterChecks(letterText, options = {}) {
 
   if (text.includes('—')) {
     push('em-dash', 'warn', 'letter contains em dashes; use commas or parentheses');
+  }
+
+  // Human-voice checks: letters with zero contractions and uniformly long
+  // sentences read as machine-written to recruiters.
+  const contractionMatches = text.match(/\b(?:I've|I'm|I'd|I'll|that's|it's|there's|what's|isn't|wasn't|don't|didn't|doesn't|can't|couldn't|wouldn't|won't|haven't|hasn't)\b/gi) ?? [];
+  if (contractionMatches.length < 2) {
+    push('no-contractions', 'fix',
+      `letter uses ${contractionMatches.length} contraction(s); use at least 2 natural contractions (I've, I'm, that's, it's) so it reads as human writing`);
+  }
+  const sentences = text.split(/(?<=[.!?])\s+/).map(sentence => sentence.trim()).filter(Boolean);
+  const hasShortSentence = sentences.some(sentence => sentence.split(/\s+/).length <= 8);
+  if (!hasShortSentence) {
+    push('uniform-sentences', 'warn',
+      'every sentence is long; include at least one short sentence (under 8 words) to vary the rhythm');
+  }
+  // Duration claims ("three years of building...") must come from the sources;
+  // the model cannot verify them, so keep them out entirely.
+  const durationClaim = text.match(/\b(?:over|last|past|nearly|more than)?\s*(?:two|three|four|five|\d+)\+?\s+years?\b(?:\s+of)?\s+(?:experience|building|developing|working|writing|professional)/i);
+  if (durationClaim) {
+    push('duration-claim', 'fix',
+      `letter states a years-of-experience figure ("${durationClaim[0].trim()}"); remove it — describe the work itself, never a duration the sources do not state`);
   }
 
   if (/^dear\b/i.test(text) || /\b(?:sincerely|best regards|kind regards|yours truly)\b/i.test(text)) {

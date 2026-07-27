@@ -124,12 +124,15 @@ export async function POST(req: Request) {
 
     if (extractionMode !== 'scan-metadata-fallback') {
       assertUsableJobDescription(jdText);
-    }
-
-    if (extractionMode !== 'scan-metadata-fallback' && jdText.length < 500) {
-      return NextResponse.json({
-        error: 'The job description looks too short after cleanup. Paste the full posting text or use a direct ATS job URL.',
-      }, { status: 400 });
+      // Pasted text is deliberate user input (e.g. a short LinkedIn hiring post
+      // with an email to apply), so it gets a low floor. Extracted HTML under
+      // 500 chars usually means a nav bar / blocked page, so keep that strict.
+      const minChars = extractionMode === 'pasted-text' ? 100 : 500;
+      if (jdText.length < minChars) {
+        return NextResponse.json({
+          error: 'The job description looks too short. Include the company, role, and a few key requirements, or use a direct ATS job URL.',
+        }, { status: 400 });
+      }
     }
 
     const cv = readFile('cv.md');

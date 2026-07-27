@@ -28,7 +28,7 @@
     "skills": [
       { "category": "Languages", "items": ["Python", "JavaScript", "TypeScript", "SQL", "C", "C++", "C#", "HTML", "CSS"] },
       { "category": "Frameworks & Libraries", "items": ["React", "Next.js", "FastAPI", "Flask", "Node.js", "REST APIs", "WebSocket"] },
-      { "category": "AI/ML & Data", "items": ["scikit-learn", "MLflow", "Random Forest", "Pandas", "NumPy"] },
+      { "category": "AI/ML & Data", "items": ["scikit-learn", "MLflow", "Random Forest", "GridSearchCV", "DBSCAN", "Pandas", "NumPy"] },
       { "category": "Databases", "items": ["PostgreSQL", "SQL Server", "MongoDB", "MySQL", "SQLite"] },
       { "category": "Tools & Infrastructure", "items": ["AWS", "Azure", "Docker", "Vercel", "Git", "GitHub", "CI/CD", "Postman"] }
     ],

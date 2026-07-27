@@ -58,6 +58,22 @@ interface ApplyAnswer {
   needsReview: boolean;
 }
 
+interface ApplyEmailDraft {
+  isEmailApplication: boolean;
+  recipient: string;
+  ccRecipients: string[];
+  subject: string;
+  subjectSource: 'posting' | 'generated' | 'none';
+  requestedSubject: string;
+  referenceNumber: string;
+  closingDate: string;
+  contactName: string;
+  body: string;
+  issues: Array<{ code: string; severity: string; message: string }>;
+  generatedAt: string | null;
+  attachments: string[];
+}
+
 interface ApplySession {
   applicationId: string;
   applyUrl: string | null;
@@ -197,6 +213,12 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const [applyDocsLoading, setApplyDocsLoading] = useState(false);
   const [applyAutomationLoading, setApplyAutomationLoading] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
+  const [resumeLocationDraft, setResumeLocationDraft] = useState('');
+  const [resumeLocationSaving, setResumeLocationSaving] = useState(false);
+  const [resumeLocationNotice, setResumeLocationNotice] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const [applyEmail, setApplyEmail] = useState<ApplyEmailDraft | null>(null);
+  const [applyEmailLoading, setApplyEmailLoading] = useState(false);
+  const [applyEmailError, setApplyEmailError] = useState<string | null>(null);
   const [jobDescriptionLoading, setJobDescriptionLoading] = useState(false);
   const [jobDescriptionError, setJobDescriptionError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -230,6 +252,17 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       .then(r => r.json())
       .then((data: ApplySession) => setApplySession(data))
       .catch(() => setApplySession(null));
+  }, [id, refreshTick]);
+
+  useEffect(() => {
+    setResumeLocationDraft(app?.resumeLocation ?? '');
+  }, [app?.resumeLocation]);
+
+  useEffect(() => {
+    fetch(`/api/applications/${id}/apply/email`)
+      .then(r => r.json())
+      .then((data: ApplyEmailDraft) => setApplyEmail(data.isEmailApplication ? data : null))
+      .catch(() => setApplyEmail(null));
   }, [id, refreshTick]);
 
   useEffect(() => {
@@ -528,6 +561,54 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
     }
   }
 
+  async function saveResumeLocation() {
+    setResumeLocationSaving(true);
+    setResumeLocationNotice(null);
+    try {
+      const res = await fetch(`/api/applications/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeLocation: resumeLocationDraft }),
+      });
+      const data = await res.json().catch(() => ({})) as ApplicationDetail & { error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Could not save the header location.');
+      setApp(data);
+      setResumeLocationNotice({
+        kind: 'success',
+        message: data.resumeLocation
+          ? `Header location set to "${data.resumeLocation}". Documents re-rendered.`
+          : 'Header location reset to your profile default. Documents re-rendered.',
+      });
+    } catch (err) {
+      setResumeLocationNotice({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Could not save the header location.',
+      });
+    } finally {
+      setResumeLocationSaving(false);
+    }
+  }
+
+  async function generateApplyEmail() {
+    if (!app) return;
+    setApplyEmailLoading(true);
+    setApplyEmailError(null);
+    try {
+      // The email is the application here, so the resume must exist to attach.
+      await generateMissingDocsIfNeeded(app);
+      const res = await fetch(`/api/applications/${id}/apply/email`, { method: 'POST' });
+      const data = await res.json().catch(() => ({})) as ApplyEmailDraft & { error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Could not draft the application email.');
+      setApplyEmail(data);
+      setActiveTab('apply');
+    } catch (err) {
+      setApplyEmailError(err instanceof Error ? err.message : 'Could not draft the application email.');
+    } finally {
+      setApplyEmailLoading(false);
+      setApplyDocsLoading(false);
+    }
+  }
+
   async function copyText(idToCopy: string, value: string) {
     await navigator.clipboard.writeText(value);
     setCopiedId(idToCopy);
@@ -677,8 +758,138 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
 
   const applyDocuments = applySession?.documents ?? { resumePath: null, coverLetterPath: null, transcriptPath: null };
 
+  const applyEmailPanel = applyEmail && (
+    <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-sm font-semibold text-indigo-900">
+            <Mail className="w-4 h-4" /> Apply by email
+          </p>
+          <p className="mt-0.5 text-xs text-indigo-700">
+            This posting has no application form. Send the email yourself, nothing is sent automatically.
+          </p>
+        </div>
+        <button
+          onClick={() => void generateApplyEmail()}
+          disabled={applyEmailLoading || applyDocsLoading}
+          className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {applyEmailLoading || applyDocsLoading
+            ? <><Loader2 className="w-4 h-4 animate-spin" />{applyDocsLoading ? 'Generating docs...' : 'Drafting...'}</>
+            : <><Sparkles className="w-4 h-4" />{applyEmail.body ? 'Redraft email' : 'Draft email'}</>}
+        </button>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <div className="rounded-lg border border-indigo-100 bg-white p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase text-slate-500">To</p>
+              <p className="mt-1 break-all text-sm text-slate-800">{applyEmail.recipient}</p>
+              {applyEmail.contactName && (
+                <p className="mt-0.5 text-xs text-slate-400">{applyEmail.contactName}</p>
+              )}
+            </div>
+            <button
+              onClick={() => void copyText('apply-email-to', applyEmail.recipient)}
+              className="shrink-0 rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50"
+              title="Copy address"
+            >
+              {copiedId === 'apply-email-to' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-indigo-100 bg-white p-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase text-slate-500">Subject</p>
+              <p className="mt-1 break-words text-sm font-medium text-slate-800">{applyEmail.subject}</p>
+              <p className={`mt-1 text-xs ${applyEmail.subjectSource === 'posting' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                {applyEmail.subjectSource === 'posting'
+                  ? 'Exact subject required by the posting, copied verbatim.'
+                  : 'No subject specified in the posting, this is the conventional format.'}
+              </p>
+            </div>
+            <button
+              onClick={() => void copyText('apply-email-subject', applyEmail.subject)}
+              className="shrink-0 rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-50"
+              title="Copy subject"
+            >
+              {copiedId === 'apply-email-subject' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        </div>
+
+        {(applyEmail.referenceNumber || applyEmail.closingDate) && (
+          <div className="flex flex-wrap gap-2">
+            {applyEmail.referenceNumber && (
+              <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                Ref {applyEmail.referenceNumber}
+              </span>
+            )}
+            {applyEmail.closingDate && (
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800">
+                Closes {applyEmail.closingDate}
+              </span>
+            )}
+          </div>
+        )}
+
+        {applyEmail.body ? (
+          <div className="rounded-lg border border-indigo-100 bg-white p-3">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-xs font-semibold uppercase text-slate-500">Body</p>
+              <button
+                onClick={() => void copyText('apply-email-body', applyEmail.body)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
+              >
+                {copiedId === 'apply-email-body' ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                Copy
+              </button>
+            </div>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{applyEmail.body}</p>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-indigo-200 bg-white py-8 text-center text-sm text-slate-400">
+            Click Draft email to write the message.
+          </div>
+        )}
+
+        {applyEmail.issues.length > 0 && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            {applyEmail.issues.map((issue, index) => (
+              <div key={index}>{issue.severity === 'fix' ? 'Fix' : 'Check'}: {issue.message}</div>
+            ))}
+          </div>
+        )}
+
+        {applyEmail.body && (
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={`mailto:${encodeURIComponent(applyEmail.recipient)}?subject=${encodeURIComponent(applyEmail.subject)}&body=${encodeURIComponent(applyEmail.body)}`}
+              className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-slate-700"
+            >
+              <Mail className="w-4 h-4" /> Open in mail client
+            </a>
+            <span className="text-xs text-slate-500">
+              Attach the resume PDF{app.coverLetterPath ? ' and cover letter PDF' : ''} yourself before sending.
+            </span>
+          </div>
+        )}
+
+        {applyEmailError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {applyEmailError}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   const applyPanel = (
     <div className="p-5 space-y-5">
+      {applyEmailPanel}
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
         Assisted fill opens a visible browser, fills only high-confidence fields, and always stops before final Submit/Apply.
       </div>
@@ -937,6 +1148,42 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
             ))}
           </div>
         )}
+
+        {/* Resume/cover-letter header location for this application only */}
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <label htmlFor="resume-location" className="flex shrink-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <MapPin className="w-3.5 h-3.5 text-slate-400" /> Document header location
+            </label>
+            <input
+              id="resume-location"
+              type="text"
+              maxLength={60}
+              value={resumeLocationDraft}
+              onChange={e => { setResumeLocationDraft(e.target.value); setResumeLocationNotice(null); }}
+              placeholder="Profile default — e.g. Toronto, ON · Open to relocation"
+              className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900"
+            />
+            <button
+              onClick={() => void saveResumeLocation()}
+              disabled={resumeLocationSaving || resumeLocationDraft === (app.resumeLocation ?? '')}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {resumeLocationSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+              Save
+            </button>
+          </div>
+          <p className="mt-1.5 text-xs text-slate-400">
+            Shown on this application&apos;s resume and cover letter only. Application-form address fields still use your real address, so keep this truthful, state relocation rather than a city you do not live in.
+          </p>
+          {resumeLocationNotice && (
+            <div className={`mt-2 rounded-lg border px-3 py-2 text-xs ${resumeLocationNotice.kind === 'error'
+              ? 'border-red-200 bg-red-50 text-red-700'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-800'}`}>
+              {resumeLocationNotice.message}
+            </div>
+          )}
+        </div>
 
         {/* Actions row: PDF downloads + Interview Guide */}
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">

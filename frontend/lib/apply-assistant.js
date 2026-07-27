@@ -59,6 +59,9 @@ export function extractApplicantProfile(profileYml) {
     addressLine2: fieldFromBlock(apply, 'address_line2'),
     city: applyCity || cityPart,
     province: fieldFromBlock(apply, 'province') || provincePart,
+    // Resume/cover-letter header line only. Deliberately separate from `city`,
+    // which fills real application-form address fields and must stay literal.
+    resumeLocation: fieldFromBlock(candidate, 'resume_location'),
     country: fieldFromBlock(apply, 'country') || fieldFromBlock(location, 'country'),
     postalCode: fieldFromBlock(apply, 'postal_code'),
     linkedin: fieldFromBlock(candidate, 'linkedin'),

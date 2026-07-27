@@ -136,7 +136,11 @@ function parseJsonBlock(output: string): ScanJson {
   if (idx === -1) {
     throw new Error('Scanner did not return JSON output.');
   }
-  return JSON.parse(output.slice(idx + SCAN_JSON_MARKER.length).trim()) as ScanJson;
+  // The marker JSON is a single stdout line, but `output` has stderr appended
+  // after stdout — provider diagnostics (e.g. "[eluta] ...: HTTP 404") would
+  // otherwise trail the JSON and break JSON.parse. Parse only the marker line.
+  const markerLine = output.slice(idx + SCAN_JSON_MARKER.length).split(/\r?\n/, 1)[0].trim();
+  return JSON.parse(markerLine) as ScanJson;
 }
 
 function extractJsonArray(text: string): QuickScore[] {

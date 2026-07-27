@@ -449,6 +449,26 @@ This project has been customized into a personal job application command center 
 
 Applications store `evaluatedAt`, `resumeGeneratedAt`, `coverLetterGeneratedAt`, `lastDocumentGeneratedAt`, `appliedAt`, and `lastActivityAt`. The Applications page sorts by latest activity and Application Detail shows the same timeline.
 
+### Apply-by-Email (postings with no application link)
+
+Some postings (LinkedIn hiring posts, recruiter posts) have no URL and no form — you apply by emailing a resume, often with a **mandatory subject line** ("mention the RQ Number and Closing Date in the subject"). Pasting that post into the evaluator works: the pasted-JD floor is 100 chars (URL-extracted JDs stay at 500, where a short result means a nav bar or blocked page).
+
+`frontend/lib/apply-email.js` parses the saved JD **deterministically** — recipient, requested subject, reference/RQ number, closing date, recruiter name. Parsing is never delegated to the model: recruiters filter on the exact subject string, so a stated subject is copied verbatim (en dashes, casing, closing date included) and only falls back to `{ref} - {title} - {name}` when the post specifies none. The candidate's own address is excluded from recipient detection, no-reply addresses are dropped, and with multiple addresses the one on a "send your resume to" line wins.
+
+Only the email **body** is model-written, via `POST /api/applications/{id}/apply/email` (one Gemini call + at most ONE repair pass, then a deterministic fallback body if the model fails). `verifyApplyEmailBody` enforces humanized output: it reuses `BANNED_COVER_LETTER_PHRASES` plus email-specific filler ("I hope this email finds you well", "kindly find attached", "esteemed organization"), and catches em dashes, leaked subject lines, unfilled placeholders, missing sign-off/contact, missing attachment mention, and 90–160 word budget.
+
+The draft is saved to `applications/{id}/apply-email.json` and surfaced in the Application Detail **Apply** tab with copy buttons and a mailto link. **Nothing is ever sent automatically** — Girish attaches the PDFs and clicks send.
+
+QA: `npm run email:qa` (`test-apply-email.mjs`, 21 checks, no Gemini calls).
+
+### Resume Header Location (per application)
+
+The resume/cover-letter header location is **not** in `resume.md`; it is injected at render time by `contactPlaceholders` in `document-renderer.ts`. Precedence: per-application `resumeLocation` → `candidate.resume_location` in `config/profile.yml` → literal `city, province`.
+
+**Critical:** `candidate.resume_location` is header-only and deliberately separate from `apply.city`/`apply.province`, which fill real application-form address fields and must stay literally accurate. Relocation wording must never reach a form field; `npm run apply:qa` guards this and fails if it leaks.
+
+Set per application via `PUT /api/applications/{id}` with `{ "resumeLocation": "Toronto, ON · Open to relocation" }` (single line, ≤60 chars; empty string resets to the profile default). Saving re-renders both existing documents. The UI field is "Document header location" on the Application Detail page. Keep values truthful — state relocation, never a city the candidate does not live in.
+
 ### Interview Prep — Exact Behaviour (IMPORTANT)
 
 **Block F in evaluation report** = STAR stories table inside the report. Always generated with A-G evaluation. Planning notes only, NOT the full interview prep.
@@ -530,6 +550,7 @@ npm run scan:qa        # scanner ranking + Eluta parsing
 npm run contacts:qa    # contact extraction policy
 npm run apply:qa       # apply form safety
 npm run docs:qa        # resume/cover-letter content layer (builder, verifier, trimmer, CL checks)
+npm run email:qa       # apply-by-email parsing (subject/recipient/RQ) + humanization checks
 cd frontend && npm run build  # frontend compiles cleanly
 ```
 
@@ -549,11 +570,20 @@ All previously documented issues have been resolved:
 
 **Referral priority (added 2026-07-13):** `config/referrals.yml` lists companies where Girish knows someone (with contact names). The autopilot processes matching queue cards FIRST at a lower quick-score threshold (70), and the briefing shows the contact to message ("→ ask Raghav"). `portals.yml` includes employer-scoped Eluta pages for these companies ("Referral Companies via Eluta"). The Eluta provider paces requests ~2-3s apart, skips bad URLs per-URL, and backs off (never bypasses) Eluta's "User Verification" wall.
 
-**Named PDF copies (added 2026-07-14):** every PDF render (`refreshDocumentPdfIfStale` in `frontend/lib/document-renderer.ts`) also writes a user-facing copy named from the profile — `Girish_Bhuteja_Resume.pdf` / `Girish_Bhuteja_Cover_Letter.pdf` (see `prettyPdfFilename`) — alongside the internal `resume.pdf` / `cover-letter.pdf`. The internal names are load-bearing (apply-upload guard, metadata `resumePath`, download route all depend on them) and must NOT be renamed; the named copy is the file Girish attaches. In-app downloads (`/api/applications/[id]/pdf`) also serve the pretty name. The copy is best-effort (lock-tolerant, never fails generation).
+**Single named PDF per document (changed 2026-07-26, supersedes the 2026-07-14 copy scheme):** each application folder holds exactly ONE resume PDF and ONE cover-letter PDF, named from the profile — `Girish_Bhuteja_Resume.pdf` / `Girish_Bhuteja_Cover_Letter.pdf`. `frontend/lib/pdf-filename.ts` is the single source of truth (`pdfFilename`, `resolvePdfPath`, `LEGACY_PDF_NAMES`); it is a standalone module because both `filesystem.ts` and `document-renderer.ts` need it and the latter already imports the former.
+
+Previously the renderer wrote internal `resume.pdf` / `cover-letter.pdf` and then *copied* to the named file. That copy was best-effort, so a PDF viewer holding a Windows lock left the named file silently stale — edits appeared to not apply. `refreshDocumentPdfIfStale` now renders straight to the named file and deletes any leftover legacy PDF, so there is no second file and no copy step to fail.
+
+`resolvePdfPath` still falls back to a legacy `resume.pdf` when the named file is absent, so un-migrated folders keep working until their next render. Never reintroduce hardcoded `'resume.pdf'` / `'cover-letter.pdf'`; use `pdfFilename(type)` / `resolvePdfPath(folder, type)`. The apply-upload guard validates the folder prefix (not the filename), so it is unaffected.
+
+One-time cleanup for existing folders: `node migrate-pdf-names.mjs --dry-run` then without the flag. It renames a lone legacy PDF, and where both exist keeps the NEWER content under the named filename before deleting the legacy one. `applications/{id}/versions/**` snapshots keep their historical `resume.pdf` names and are deliberately untouched.
 
 **Page-fill (calibrated 2026-07-14):** `generate-pdf.mjs` emits a `Fill:` metric per page; the generate-docs route auto-expands model-provided reserve content until page 1 ≥ 93% and **page 2 ≥ 97%** full, reverting any expansion that overflows to page 3 (so it fills to one bullet short of overflow), and auto-trims true overflow as before. Page 2 is filled hardest and project-first: the model supplies up to 3 reserve bullets per project (`reserveBullets`), and `expandResumeForUnderfill` grows all three projects round-robin up to `MAX_PROJECT_BULLETS` (5) with JD-relevant, keyword-rich, truthful bullets before touching the smaller levers (3rd extracurricular, 5th coursework). Targets and caps live in `RESUME_FILL_TARGETS` / `MAX_PROJECT_BULLETS` in `frontend/lib/document-content-core.mjs`; `MAX_UNDERFILL_EXPANSIONS` (12) is in the generate-docs route.
 
-### Skill Mode Routing
+**Quality pipeline (added 2026-07-19):**
+- **Skills density:** the verifier rejects skills rows under 5 items (`skills-row-sparse`, fix) and warns under 6 (Databases row exempt — the sources genuinely list exactly 5 databases). The prompt builds each row JD-relevant-first, then fills to 6-9 with adjacent true skills from the sources, so rows read as breadth, not JD copy-paste.
+- **Company research:** `getCompanyResearch` in the generate-docs route runs one Gemini call with Google Search grounding per application, cached in `applications/{id}/company-research.md` (regenerations and the autopilot never re-pay). The research feeds the resume user prompt (industry framing) and the cover-letter system prompt (paragraph 1/3 specificity). Fail-soft: any error → JD-only generation plus a warning.
+- **Cover-letter human-voice checks** (in `buildCoverLetterChecks`): `no-contractions` (fix, needs ≥2), `uniform-sentences` (warn, wants one sentence ≤8 words), `duration-claim` (fix — no years-of-experience figures; the sources state none), plus expanded banned phrases (`resonates`, `aligns perfectly`, `I am confident that my`, `contribute effectively to`, ...). The prompt also bans rule-of-three flourishes and "not just X, but Y" constructions and requires one concrete human detail from the narrative.
 
 | If the user... | Mode |
 |----------------|------|

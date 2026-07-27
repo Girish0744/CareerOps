@@ -185,8 +185,8 @@ DROP: Orientation Volunteer, Leadership Workshop Facilitator, Volunteering Panel
 
 ### Certifications (Step 13) — single line
 
-Standard: "Java SE, Oracle, 2024 · OOP Using C++, Infosys Springboard, 2024 · CIPS Ontario Member, 2025"
-Drop JMeter if space is tight. Never drop CIPS Ontario.
+Standard: "AI Agents: Intensive Vibe Coding, Google & Kaggle · Java SE, Oracle · OOP Using C++, Infosys · CIPS Ontario Member"
+Never drop CIPS Ontario.
 
 ## Writing Quality Rules (non-negotiable)
 
@@ -207,7 +207,6 @@ Drop JMeter if space is tight. Never drop CIPS Ontario.
 2. Drop the optional 3rd extracurricular entry
 3. Reduce OER role from 3 bullets to 2 (drop least-relevant)
 4. Reduce each project from 3 content bullets to 2 (keep the metric-bearing bullet)
-5. Drop JMeter from certifications line
 
 **Never trim**: below 3 projects, Education, Highlights of Qualifications, Awards and Recognition, Skills table
 

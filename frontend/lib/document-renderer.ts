@@ -6,6 +6,7 @@ import { extractApplicantProfile } from './apply-assistant';
 import { getApplication, updateApplicationFields } from './filesystem';
 import { formatCoverLetterDate } from './date-format';
 import { formatJobReferenceForSubject, formatJobReferenceValue } from './job-reference';
+import { LEGACY_PDF_NAMES, pdfFilename } from './pdf-filename';
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
@@ -192,11 +193,22 @@ function markdownToHtml(markdown: string): string {
   return html.join('\n');
 }
 
-function contactPlaceholders(profileYml: string) {
+/**
+ * `locationOverride` is the per-application header location (e.g.
+ * "Toronto, ON - Open to relocation"). Precedence: per-application override,
+ * then the profile-wide candidate.resume_location, then the literal city.
+ * This only affects the document header; application-form address fields keep
+ * using profile.city/province.
+ */
+function contactPlaceholders(profileYml: string, locationOverride?: string | null) {
   const profile = extractApplicantProfile(profileYml);
   return {
     name: profile.fullName || profile.legalName || 'Candidate',
-    location: [profile.city, profile.province].filter(Boolean).join(', ') || profile.country || '',
+    location: locationOverride?.trim()
+      || profile.resumeLocation
+      || [profile.city, profile.province].filter(Boolean).join(', ')
+      || profile.country
+      || '',
     email: profile.email || '',
     phone: profile.phone || '',
     linkedinUrl: displayFromUrl(profile.linkedin || ''),
@@ -319,10 +331,23 @@ function skillsTable(markdown: string): string {
   return rows.join('\n');
 }
 
+const MONTH_NAME = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\b/i;
+const DATE_TOKEN = /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\b|\b(?:19|20)\d{2}\b|\bpresent\b|\bcurrent\b|\bto\b/gi;
+
+/**
+ * True only when the WHOLE line is a date, e.g. "Jan 2023 - Present" or "2024".
+ *
+ * Requiring every token to be a date matters: a bare /\d{4}/ also matches a
+ * store number, so "The Home Depot, Brampton (Store - 7301), ON" was read as
+ * the date and swapped places with the real one in the rendered entry.
+ */
 function isDateLine(value: string): boolean {
-  return /(?:\b(?:jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\b|\d{4}|present|current)/i.test(value)
-    && !/^[-*]\s+/.test(value)
-    && value.length <= 60;
+  if (/^[-*]\s+/.test(value) || value.length > 60) return false;
+  const hasDateSignal = MONTH_NAME.test(value) || /\b(?:19|20)\d{2}\b|\bpresent\b|\bcurrent\b/i.test(value);
+  if (!hasDateSignal) return false;
+  // Whatever is left after removing date words must be punctuation/separators only.
+  const leftover = value.replace(DATE_TOKEN, ' ').replace(/[\s,\-–—/|().]+/g, '');
+  return leftover.length === 0;
 }
 
 function splitEntries(markdown: string): string[] {
@@ -427,10 +452,10 @@ function certificationsLine(markdown: string): string {
   );
 }
 
-function resumeHtmlFromMarkdown(markdown: string): string {
+function resumeHtmlFromMarkdown(markdown: string, locationOverride?: string | null): string {
   const template = readRoot('templates/cv-template.html');
   const profileYml = readRoot('config/profile.yml');
-  const contact = contactPlaceholders(profileYml);
+  const contact = contactPlaceholders(profileYml, locationOverride);
   const cleanedMarkdown = stripGeneratedIntro(markdown);
   const sections = splitResumeSections(cleanedMarkdown);
   const certifications = section(sections, 'Certifications & Memberships', 'Certifications and Memberships', 'Certifications', 'Memberships');
@@ -488,7 +513,8 @@ function manualCoverLetterJobReference(markdown: string): string {
 function coverLetterHtmlFromMarkdown(markdown: string, app: NonNullable<ReturnType<typeof getApplication>>): string {
   const template = readRoot('templates/cover-letter-template.html');
   const profileYml = readRoot('config/profile.yml');
-  const contact = contactPlaceholders(profileYml);
+  // Keep the letterhead consistent with the resume for the same application.
+  const contact = contactPlaceholders(profileYml, app.resumeLocation);
   const body = markdownToHtml(stripCoverLetterMetadata(markdown));
   const today = formatCoverLetterDate();
 
@@ -538,32 +564,10 @@ async function generatePdf(htmlPath: string, pdfPath: string): Promise<{ pageCou
 }
 
 /**
- * User-facing PDF filename derived from the candidate's profile name, e.g.
- * "Girish_Bhuteja_Resume.pdf" / "Girish_Bhuteja_Cover_Letter.pdf". This is the
- * name of the copy saved for the user to attach and the name used for in-app
- * downloads; the app's internal working files stay resume.pdf/cover-letter.pdf.
+ * The single PDF filename for a document, e.g. "Girish_Bhuteja_Resume.pdf".
+ * Re-exported from pdf-filename.ts, which is the source of truth.
  */
-export function prettyPdfFilename(type: DocumentType): string {
-  const { name } = contactPlaceholders(readRoot('config/profile.yml'));
-  const safe = (name || 'Candidate').trim().replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'Candidate';
-  return type === 'resume' ? `${safe}_Resume.pdf` : `${safe}_Cover_Letter.pdf`;
-}
-
-/** Copy a file, tolerating the transient Windows locks (OneDrive sync / open
- *  viewer) that throw EBUSY/EPERM/EACCES. */
-async function copyFileWithRetry(src: string, dest: string, attempts = 4): Promise<void> {
-  const lockCodes = new Set(['EBUSY', 'EPERM', 'EACCES']);
-  for (let i = 0; ; i++) {
-    try {
-      fs.copyFileSync(src, dest);
-      return;
-    } catch (err) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (!code || !lockCodes.has(code) || i >= attempts - 1) throw err;
-      await new Promise((r) => setTimeout(r, 300 * (i + 1)));
-    }
-  }
-}
+export { pdfFilename as prettyPdfFilename } from './pdf-filename';
 
 export async function refreshDocumentPdfIfStale(id: string, type: DocumentType): Promise<RenderResult> {
   const app = getApplication(id);
@@ -572,10 +576,14 @@ export async function refreshDocumentPdfIfStale(id: string, type: DocumentType):
   const folderPath = path.join(/*turbopackIgnore: true*/ ROOT, app.applicationFolder);
   const sourceName = type === 'resume' ? 'resume.md' : 'cover-letter.md';
   const htmlName = type === 'resume' ? 'resume.html' : 'cover-letter.html';
-  const pdfName = type === 'resume' ? 'resume.pdf' : 'cover-letter.pdf';
+  // One PDF per document, named from the profile. Any legacy resume.pdf in the
+  // folder is migrated away rather than written to, so edits can never land in
+  // a second file the user does not attach.
+  const pdfName = pdfFilename(type);
   const sourcePath = path.join(folderPath, sourceName);
   const htmlPath = path.join(folderPath, htmlName);
   const pdfPath = path.join(folderPath, pdfName);
+  const legacyPdfPath = path.join(folderPath, LEGACY_PDF_NAMES[type]);
 
   if (!fs.existsSync(sourcePath)) {
     throw new Error(`${sourceName} not found - generate documents first`);
@@ -585,19 +593,20 @@ export async function refreshDocumentPdfIfStale(id: string, type: DocumentType):
   const shouldUpdateMetadata = !pdfExists || fs.statSync(sourcePath).mtimeMs > fs.statSync(pdfPath).mtimeMs;
   const markdown = fs.readFileSync(sourcePath, 'utf-8');
   const html = type === 'resume'
-    ? resumeHtmlFromMarkdown(markdown)
+    ? resumeHtmlFromMarkdown(markdown, app.resumeLocation)
     : coverLetterHtmlFromMarkdown(markdown, app);
 
   fs.writeFileSync(htmlPath, html);
   const { pageCount, pageFills } = await generatePdf(htmlPath, pdfPath);
 
-  // Save a nicely-named copy (Girish_Bhuteja_Resume.pdf) alongside the internal
-  // working file. Best-effort: the internal resume.pdf/cover-letter.pdf are what
-  // the app depends on, so a locked named copy must never fail generation.
-  try {
-    await copyFileWithRetry(pdfPath, path.join(folderPath, prettyPdfFilename(type)));
-  } catch (err) {
-    console.warn(`[document-renderer] could not write named ${type} copy: ${err instanceof Error ? err.message : err}`);
+  // Drop the superseded internal copy so the folder keeps exactly one PDF per
+  // document. Best-effort: a locked leftover must never fail generation.
+  if (legacyPdfPath !== pdfPath && fs.existsSync(legacyPdfPath)) {
+    try {
+      fs.unlinkSync(legacyPdfPath);
+    } catch (err) {
+      console.warn(`[document-renderer] could not remove legacy ${type} PDF: ${err instanceof Error ? err.message : err}`);
+    }
   }
 
   if (shouldUpdateMetadata) {
