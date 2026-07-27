@@ -249,17 +249,24 @@ Leadership appears in bullet 5 — do NOT repeat it in the profile or extracurri
 ==========================
 SKILLS (exactly 5 rows; reorder rows after Languages so the most JD-relevant category comes first; only skills present in the sources)
 ==========================
-DENSITY RULE (code rejects sparse rows): every row must list 6-9 items so the line renders full. Build each row in this order:
-1. JD-relevant skills the candidate genuinely has (these come first in the row)
-2. ADJACENT skills from the sources in the same category (same ecosystem, natural neighbours) to fill the row to 6-9
-The blend is the point: a row that only echoes the JD's exact keywords reads as copy-paste to a hiring manager, and a row that ignores the JD fails ATS. First items match the JD; the rest prove breadth. Never pad with a skill that is not in the sources.
-Row menus (everything listed here IS in the sources — draw freely):
-Languages (always first): Python, JavaScript, TypeScript, C, C++, C#, SQL, HTML, CSS — reorder to put JD-relevant first; add "Java (Java SE)" only for Java roles (certification, not professional employment).
-Frameworks & Libraries: React, Next.js, FastAPI, Flask, Node.js, Express, Streamlit, WordPress, REST APIs, WebSocket (pick/order for the archetype; add Pandas/NumPy/scikit-learn here for data roles).
-AI/ML & Data: scikit-learn, TensorFlow, Keras, MLflow, Random Forest, GridSearchCV, DBSCAN, Clustering, Pandas, NumPy, Google Gemini API (+ Power BI, Power Automate for DA/BA/IT roles).
-Databases (always): PostgreSQL, SQL Server, MongoDB, MySQL, SQLite (this row may stay at 5 — that is the full truthful set; never invent a 6th database)
-Tools & Infrastructure: AWS, Azure, Docker, Vercel, Git, GitHub, CI/CD, Postman, Playwright (+ SharePoint, Power BI, Excel for DA/BA; + Selenium, JMeter where testing matters).
-If a JD-required tool is genuinely in the sources but missing from your rows, add it to the right row. Never add a skill the candidate does not have. Never list Go/Golang.
+SELECTION RULE — 5-7 items per row (code rejects fewer than 4 and more than 8). Fewer, stronger, JD-relevant skills beat a long list. A 40-skill resume reads as implausible ("nobody is expert in all of this") and buries the skills the JD actually asked for. Build each row:
+1. Every JD-required skill the candidate genuinely has, FIRST in the row
+2. Then only the strongest adjacent skills a hiring manager for THIS role expects to see
+3. Stop at 7. Do NOT pad a row to make the line look full — page length is handled elsewhere.
+Drop skills that are true but irrelevant to this JD: Pandas/scikit-learn on a pure backend role, or Power BI on an ML role, is noise that dilutes the signal.
+
+State CAPABILITIES, not implementation trivia. A row must read like someone who understands the field:
+- WRITE the concept: Transformers, CNN, RNN, Autoencoders, GANs, MLP, Clustering, Random Forest, Feature Engineering, Model Evaluation, LLM Integration.
+- NEVER write a library's internal function or a vendor API name as a skill (code rejects these): GridSearchCV, "Google Gemini API", train-test split, cross-validation, Jupyter, VS Code, MS Office. They are welcome inside a project Stack line, where they are concrete evidence rather than a claim of expertise.
+- NEVER list an algorithm beside its own category (code rejects): "DBSCAN, Clustering" or "K-Means, Clustering" — keep one. The same skill in two different rows is also rejected.
+
+Row menus (everything listed here IS in the sources — draw only from these):
+Languages (always first): Python, JavaScript, TypeScript, C, C++, C#, Java, HTML, CSS — reorder to put JD-relevant first. Add SQL here ONLY when the JD names SQL as a core language; otherwise the Databases row already carries it.
+Frameworks & Libraries: React, Next.js, FastAPI, Flask, Node.js, Express, Streamlit, WordPress, REST APIs, WebSocket (add Pandas, NumPy, scikit-learn here ONLY for data/ML roles).
+AI/ML & Data: Transformers, CNN, RNN, Autoencoders, GANs, MLP, TensorFlow, Keras, scikit-learn, MLflow, Random Forest, Clustering, Feature Engineering, Model Evaluation, LLM Integration, Pandas, NumPy (+ Power BI, Power Automate for DA/BA/IT roles). For AI/ML roles LEAD with the architectures the candidate has genuinely worked with — Transformers, CNN, RNN, Autoencoders, GANs — because those signal depth; a row of frameworks alone reads as coursework. The candidate has NOT done RAG, vector databases, or NLP as a specialism: never list them.
+Databases (always): PostgreSQL, SQL Server, MongoDB, MySQL, SQLite (this row stays at 5 — that is the full truthful set; never invent a 6th database).
+Tools & Infrastructure: AWS, Azure, Docker, Vercel, Git, GitHub, CI/CD, Postman, Playwright, Selenium (+ SharePoint, Power BI, Excel for DA/BA). Playwright and Selenium belong here only when the role involves testing, automation, or scraping — drop them otherwise.
+If a JD-required skill is genuinely in the sources but missing from your rows, add it to the right row. Never add a skill the candidate does not have. Never list Go/Golang.
 
 ==========================
 EXPERIENCE (bullets only; headers are fixed by code)

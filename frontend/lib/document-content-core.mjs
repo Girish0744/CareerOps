@@ -108,6 +108,40 @@ export const EDUCATION_ENTRY = {
   gpaBullet: 'GPA: 3.74/4.00; expected graduation August 2026',
 };
 
+/**
+ * Entries that are TRUE but read as junior in a headline skills row: a library's
+ * internal function name, or a vendor API name presented as a competency. These
+ * stay welcome in a project stack line, where they are concrete evidence rather
+ * than a claim of expertise.
+ */
+export const BANNED_SKILL_ITEMS = [
+  'gridsearchcv',
+  'google gemini api',
+  'gemini api',
+  'openai api',
+  'train-test split',
+  'cross-validation',
+  'k-fold cross-validation',
+  'jupyter',
+  'jupyter notebook',
+  'vs code',
+  'visual studio code',
+  'ms office',
+  'microsoft office',
+  'windows',
+  'macos',
+  'internet',
+];
+
+/** [specific, general] — listing both is padding, since one contains the other. */
+export const REDUNDANT_SKILL_PAIRS = [
+  ['dbscan', 'clustering'],
+  ['k-means', 'clustering'],
+  ['random forest', 'ensemble methods'],
+  ['cnn', 'deep learning'],
+  ['rnn', 'deep learning'],
+];
+
 // ── Reverse-chronological ordering ───────────────────────────────────────────
 // The model picks WHICH projects/experience/activities to include (relevance),
 // but never the order they appear in. Dates are fixed facts in the catalogs
@@ -525,22 +559,46 @@ export function verifyResumeContent(content, analysis = {}) {
   if (content.skills.length !== 5) {
     push('skills-rows', 'fix', 'skills', `skills table has ${content.skills.length} rows; needs exactly 5`);
   }
-  // Density: sparse rows leave the line visibly half-empty and read as a thin
-  // profile. Rows blend JD-relevant skills first with adjacent true skills
-  // from the sources to reach 6-9 items. The Databases row is exempt from the
-  // 6-item target because the sources genuinely list exactly 5 databases —
-  // never demand items the candidate does not have.
+  // Row size: target 5-7. Rows were previously padded to 6-9 purely so the line
+  // rendered full, which produced 30-45 skills and read as an implausible
+  // "knows everything" list. Underfilled pages are the page-fill expander's job,
+  // not the skills row's. The Databases row stays at its true 5.
   for (const row of content.skills) {
-    const isDatabasesRow = /database/i.test(row.category);
-    if (row.items.length < 5) {
+    if (row.items.length < 4) {
       push('skills-row-sparse', 'fix', 'skills',
-        `skills row "${row.category}" lists only ${row.items.length} item(s); fill to 6-9 by adding adjacent skills from the sources (JD-relevant first), never skills the candidate lacks`);
-    } else if (row.items.length < 6 && !isDatabasesRow) {
-      push('skills-row-sparse', 'warn', 'skills',
-        `skills row "${row.category}" lists ${row.items.length} items; target 6-9 by adding adjacent skills from the sources`);
-    } else if (row.items.length > 10) {
-      push('skills-row-overfull', 'warn', 'skills',
-        `skills row "${row.category}" lists ${row.items.length} items; cap at 9-10 so the row stays readable`);
+        `skills row "${row.category}" lists only ${row.items.length} item(s); target 5-7 JD-relevant skills the candidate genuinely has`);
+    } else if (row.items.length > 8) {
+      push('skills-row-overfull', 'fix', 'skills',
+        `skills row "${row.category}" lists ${row.items.length} items; cap at 7 — an over-long row reads as padding and dilutes the JD-relevant skills`);
+    }
+  }
+
+  // Credibility checks: the three ways a truthful skills row still reads junior.
+  const skillItems = content.skills.flatMap(row =>
+    row.items.map(item => ({ row: row.category, item, key: item.trim().toLowerCase() })));
+
+  for (const { row, item, key } of skillItems) {
+    if (BANNED_SKILL_ITEMS.some(banned => key === banned || key.startsWith(`${banned} `))) {
+      push('skills-too-granular', 'fix', 'skills',
+        `skills row "${row}" lists "${item}"; a library function or vendor API name belongs in a project stack line, not a headline skill`);
+    }
+  }
+
+  const firstRowFor = new Map();
+  for (const { row, item, key } of skillItems) {
+    if (firstRowFor.has(key) && firstRowFor.get(key) !== row) {
+      push('skills-duplicate', 'fix', 'skills',
+        `"${item}" appears in both "${firstRowFor.get(key)}" and "${row}"; list each skill once`);
+    } else if (!firstRowFor.has(key)) {
+      firstRowFor.set(key, row);
+    }
+  }
+
+  const skillKeys = new Set(skillItems.map(entry => entry.key));
+  for (const [specific, general] of REDUNDANT_SKILL_PAIRS) {
+    if (skillKeys.has(specific) && skillKeys.has(general)) {
+      push('skills-redundant', 'fix', 'skills',
+        `"${specific}" is a kind of "${general}" — listing both is padding; keep one`);
     }
   }
   if (content.projects.length !== 3) {

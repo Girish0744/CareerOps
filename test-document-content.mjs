@@ -319,6 +319,48 @@ for (const expectedCode of letters.badExpectedCodes) {
     `got: ${[...badLetterCodes].join(', ')}`);
 }
 
+// ── Skills credibility ───────────────────────────────────────────────────────
+// Each check maps to a real complaint: junior-sounding rows caused by padding,
+// vendor API names as skills, and an algorithm listed beside its own category.
+
+const skillIssues = rows => verifyResumeContent(
+  normalizeResumeContent({ ...good.resume, skills: rows }), {},
+).remainingIssues ?? [];
+const skillCodes = rows => new Set(
+  verifyResumeContent(normalizeResumeContent({ ...good.resume, skills: rows }), {})
+    .issues.map(issue => issue.code));
+
+const baseRows = extra => ([
+  { category: 'Languages', items: ['Python', 'TypeScript', 'C++', 'C#', 'Java'] },
+  { category: 'Frameworks & Libraries', items: ['React', 'Next.js', 'FastAPI', 'Flask', 'Node.js'] },
+  { category: 'AI/ML & Data', items: extra },
+  { category: 'Databases', items: ['PostgreSQL', 'SQL Server', 'MongoDB', 'MySQL', 'SQLite'] },
+  { category: 'Tools & Infrastructure', items: ['AWS', 'Docker', 'Git', 'CI/CD', 'Postman'] },
+]);
+
+check('vendor API name is rejected as a skill (Google Gemini API)',
+  skillCodes(baseRows(['Transformers', 'CNN', 'TensorFlow', 'Keras', 'Google Gemini API'])).has('skills-too-granular'));
+check('library function name is rejected as a skill (GridSearchCV)',
+  skillCodes(baseRows(['Transformers', 'CNN', 'TensorFlow', 'Keras', 'GridSearchCV'])).has('skills-too-granular'));
+check('algorithm beside its own category is rejected (DBSCAN + Clustering)',
+  skillCodes(baseRows(['DBSCAN', 'Clustering', 'TensorFlow', 'Keras', 'Transformers'])).has('skills-redundant'));
+check('same skill in two rows is rejected',
+  skillCodes([
+    { category: 'Languages', items: ['Python', 'TypeScript', 'C++', 'C#', 'Docker'] },
+    { category: 'Frameworks & Libraries', items: ['React', 'Next.js', 'FastAPI', 'Flask', 'Node.js'] },
+    { category: 'AI/ML & Data', items: ['Transformers', 'CNN', 'TensorFlow', 'Keras', 'MLflow'] },
+    { category: 'Databases', items: ['PostgreSQL', 'SQL Server', 'MongoDB', 'MySQL', 'SQLite'] },
+    { category: 'Tools & Infrastructure', items: ['AWS', 'Docker', 'Git', 'CI/CD', 'Postman'] },
+  ]).has('skills-duplicate'));
+check('over-long row is rejected as padding',
+  skillCodes(baseRows(['Transformers', 'CNN', 'RNN', 'Autoencoders', 'GANs', 'MLP', 'TensorFlow', 'Keras', 'MLflow'])).has('skills-row-overfull'));
+check('a clean capability-led AI/ML row passes',
+  skillIssues(baseRows(['Transformers', 'CNN', 'RNN', 'Autoencoders', 'TensorFlow', 'Keras']))
+    .filter(issue => issue.field === 'skills').length === 0);
+check('5-item rows are accepted (no longer forced to 6-9)',
+  skillIssues(baseRows(['Transformers', 'CNN', 'TensorFlow', 'Keras', 'MLflow']))
+    .filter(issue => issue.field === 'skills').length === 0);
+
 // ── Reverse-chronological ordering ───────────────────────────────────────────
 // Selection stays relevance-driven; the ORDER must always be newest-first.
 

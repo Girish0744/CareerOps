@@ -8,8 +8,20 @@
       "Design REST APIs and integrate PostgreSQL data models",
       "Ship containerized services with CI/CD"
     ],
-    "mustHaveKeywords": ["React", "TypeScript", "Python", "REST APIs", "PostgreSQL", "Docker", "CI/CD", "Node.js"],
-    "niceToHaveKeywords": ["WebSocket", "AWS"],
+    "mustHaveKeywords": [
+      "React",
+      "TypeScript",
+      "Python",
+      "REST APIs",
+      "PostgreSQL",
+      "Docker",
+      "CI/CD",
+      "Node.js"
+    ],
+    "niceToHaveKeywords": [
+      "WebSocket",
+      "AWS"
+    ],
     "projectRationale": "Zonalyze, AegisGrid, and MediTwin show end-to-end React plus API delivery matching the JD stack."
   },
   "resume": {
@@ -26,11 +38,64 @@
       "Narhari Sharma Memorial Award recipient (April 2026); IT Club President coordinating workshops, hackathons, and mentorship programs for 100+ students"
     ],
     "skills": [
-      { "category": "Languages", "items": ["Python", "JavaScript", "TypeScript", "SQL", "C", "C++", "C#", "HTML", "CSS"] },
-      { "category": "Frameworks & Libraries", "items": ["React", "Next.js", "FastAPI", "Flask", "Node.js", "REST APIs", "WebSocket"] },
-      { "category": "AI/ML & Data", "items": ["scikit-learn", "MLflow", "Random Forest", "GridSearchCV", "DBSCAN", "Pandas", "NumPy"] },
-      { "category": "Databases", "items": ["PostgreSQL", "SQL Server", "MongoDB", "MySQL", "SQLite"] },
-      { "category": "Tools & Infrastructure", "items": ["AWS", "Azure", "Docker", "Vercel", "Git", "GitHub", "CI/CD", "Postman"] }
+      {
+        "category": "Languages",
+        "items": [
+          "Python",
+          "JavaScript",
+          "TypeScript",
+          "C++",
+          "C#",
+          "SQL"
+        ]
+      },
+      {
+        "category": "Frameworks & Libraries",
+        "items": [
+          "React",
+          "Next.js",
+          "FastAPI",
+          "Flask",
+          "Node.js",
+          "REST APIs",
+          "WebSocket"
+        ]
+      },
+      {
+        "category": "AI/ML & Data",
+        "items": [
+          "Transformers",
+          "CNN",
+          "TensorFlow",
+          "Keras",
+          "scikit-learn",
+          "Random Forest",
+          "MLflow"
+        ]
+      },
+      {
+        "category": "Databases",
+        "items": [
+          "PostgreSQL",
+          "SQL Server",
+          "MongoDB",
+          "MySQL",
+          "SQLite"
+        ]
+      },
+      {
+        "category": "Tools & Infrastructure",
+        "items": [
+          "AWS",
+          "Azure",
+          "Docker",
+          "Vercel",
+          "Git",
+          "GitHub",
+          "CI/CD",
+          "Postman"
+        ]
+      }
     ],
     "experience": [
       {
@@ -74,10 +139,22 @@
         ]
       }
     ],
-    "educationCoursework": ["Software Engineering", "Data Structures and Algorithms", "Database Systems", "Cloud Computing", "Computer Networks"],
+    "educationCoursework": [
+      "Software Engineering",
+      "Data Structures and Algorithms",
+      "Database Systems",
+      "Cloud Computing",
+      "Computer Networks"
+    ],
     "extracurricular": [
-      { "key": "it-club", "bullet": "Planned the club's annual roadmap of Build Nights and technical workshops, delivering portfolio-ready project experience to members across disciplines" },
-      { "key": "hackthebrain", "bullet": "Managed end-to-end participant operations for a 250+ attendee AI hackathon, covering onboarding, team assignments, and post-event certification" }
+      {
+        "key": "it-club",
+        "bullet": "Planned the club's annual roadmap of Build Nights and technical workshops, delivering portfolio-ready project experience to members across disciplines"
+      },
+      {
+        "key": "hackthebrain",
+        "bullet": "Managed end-to-end participant operations for a 250+ attendee AI hackathon, covering onboarding, team assignments, and post-event certification"
+      }
     ]
   }
 }
