@@ -89,11 +89,10 @@
           "AWS",
           "Azure",
           "Docker",
-          "Vercel",
+          "Playwright",
           "Git",
           "GitHub",
-          "CI/CD",
-          "Postman"
+          "CI/CD"
         ]
       }
     ],
