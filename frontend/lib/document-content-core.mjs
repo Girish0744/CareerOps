@@ -94,8 +94,11 @@ export const EXPERIENCE_CATALOG = {
 };
 
 export const EXTRACURRICULAR_CATALOG = {
+  // Ongoing since Jul 2026, so the chronological sort puts it first in the
+  // section. Event is November 2026: describe organizing it, never the outcome.
+  'nasa-space-apps': { title: 'Local Lead, NASA International Space Apps Challenge', organization: 'Waterloo, ON', dateRange: 'Jul 2026 - Present', required: true },
   'it-club': { title: 'President, IT Club', organization: 'Conestoga College', dateRange: 'Apr 2025 - Present', required: true },
-  hackthebrain: { title: 'Director, Student Success Team', organization: 'HackTheBrain, Toronto Tech Week', dateRange: 'Mar 2025 - Jul 2025', required: true },
+  hackthebrain: { title: 'Director, Student Success Team', organization: 'HackTheBrain, Toronto Tech Week', dateRange: 'Mar 2025 - Jul 2025', required: false },
   'ai-build-lab': { title: 'Area Leader, AI Build Lab', organization: 'Toronto Tech Week', dateRange: 'May 2026 - Jun 2026', required: false },
   mentor: { title: 'Student Experience Mentor', organization: 'Conestoga College', dateRange: 'Sept 2025 - Dec 2025', required: false },
   gdg: { title: 'Subcommittee Member', organization: 'GDG Waterloo', dateRange: 'Apr 2026 - Present', required: false },

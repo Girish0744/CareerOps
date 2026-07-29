@@ -16,8 +16,10 @@ import {
   countProjectBulletItems,
   PROJECT_CATALOG,
   EXPERIENCE_CATALOG,
+  EXTRACURRICULAR_CATALOG,
   RESUME_FILL_TARGETS,
   dateRangeSortKey,
+  sortChronologically,
 } from './frontend/lib/document-content-core.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -318,6 +320,28 @@ for (const expectedCode of letters.badExpectedCodes) {
   check(`cover letter violation detected: ${expectedCode}`, badLetterCodes.has(expectedCode),
     `got: ${[...badLetterCodes].join(', ')}`);
 }
+
+// ── NASA Space Apps lead ─────────────────────────────────────────────────────
+
+check('nasa-space-apps is a required extracurricular entry',
+  EXTRACURRICULAR_CATALOG['nasa-space-apps']?.required === true);
+check('hackthebrain is no longer required (demoted for the NASA slot)',
+  EXTRACURRICULAR_CATALOG.hackthebrain?.required === false);
+check('NASA entry sorts first in extracurriculars (most recent ongoing role)',
+  sortChronologically(
+    [{ key: 'it-club' }, { key: 'hackthebrain' }, { key: 'nasa-space-apps' }],
+    entry => EXTRACURRICULAR_CATALOG[entry.key].dateRange,
+  )[0].key === 'nasa-space-apps');
+check('NASA title says Local Lead, not employment by NASA',
+  /^Local Lead,/.test(EXTRACURRICULAR_CATALOG['nasa-space-apps'].title));
+check('omitting the required NASA entry is a fix-severity issue',
+  verifyResumeContent(normalizeResumeContent({
+    ...good.resume,
+    extracurricular: [
+      { key: 'it-club', bullet: 'Ran workshops and build nights for club members.' },
+      { key: 'hackthebrain', bullet: 'Managed participant operations for the hackathon.' },
+    ],
+  }), {}).issues.some(issue => issue.code === 'extracurricular-missing'));
 
 // ── Skills credibility ───────────────────────────────────────────────────────
 // Each check maps to a real complaint: junior-sounding rows caused by padding,

@@ -243,7 +243,8 @@ HIGHLIGHTS (exactly 5 bullets)
    SYSTEMS_CPP: "Implemented a 7-type binary packet protocol and 5-state server lifecycle state machine with Stop-and-Wait ACK, achieving 32 passing tests and a byte-exact 1 MB file transfer"
    CSHARP_DOTNET: "Wrote 85+ MSTest methods across unit, integration, and system tiers covering patient workflows, billing calculations, and server connectivity for complex multi-role systems"
    HELPDESK_IT: "Deployed 8+ accessible web platforms and interactive learning objects using HTML, CSS, WordPress, and Power Automate, supporting 1,000+ students across Business and Health Sciences"
-5 (always): "Narhari Sharma Memorial Award recipient (April 2026); IT Club President coordinating workshops, hackathons, and mentorship programs for 100+ students"
+5 (always): "Local Lead for the NASA International Space Apps Challenge 2026, organizing the Waterloo site end to end; Narhari Sharma Memorial Award recipient (April 2026) and IT Club President coordinating workshops, hackathons, and mentorship for 100+ students"
+Bullet 5 leads with NASA deliberately: it is the token a recruiter's eye stops on when skimming page 1. Keep it first in the sentence and never drop it. The event runs in November 2026, so the wording stays "organizing" — never claim attendance numbers, sponsors raised, or any completed outcome for it. Never phrase it as employment by NASA; it is a NASA-sponsored, locally organized event and the title is Local Lead.
 Leadership appears in bullet 5 — do NOT repeat it in the profile or extracurricular bullets.
 
 ==========================
@@ -282,7 +283,7 @@ Each experience bullet 20-30 words with real technical detail. The Home Depot ro
 ==========================
 EXTRACURRICULAR AND COURSEWORK
 ==========================
-extracurricular: it-club and hackthebrain always (1 bullet each stating a DIFFERENT fact than Highlights bullet 5 — what was done, who it served, what was produced). Add a 3rd (ai-build-lab for AI/tech roles, mentor for engagement roles, gdg for community roles) ONLY with the standard 9-item project budget.
+extracurricular: nasa-space-apps and it-club always (1 bullet each stating a DIFFERENT fact than Highlights bullet 5 — what was done, who it served, what was produced). For nasa-space-apps write the operational detail (venue, sponsorship, mentor/judge recruitment, volunteer coordination) since Highlights bullet 5 already carries the selection itself; keep it forward-looking, never a completed outcome. Add a 3rd (hackthebrain for operations/event roles, ai-build-lab for AI/tech roles, mentor for engagement roles, gdg for community roles) ONLY with the standard 9-item project budget.
 educationCoursework: pick 4-5 most JD-relevant from: ${ALLOWED_COURSEWORK.join(', ')}.
 
 ==========================

@@ -148,12 +148,12 @@
     ],
     "extracurricular": [
       {
-        "key": "it-club",
-        "bullet": "Planned the club's annual roadmap of Build Nights and technical workshops, delivering portfolio-ready project experience to members across disciplines"
+        "key": "nasa-space-apps",
+        "bullet": "Coordinating venue selection, sponsorship outreach, mentor recruitment, and volunteer scheduling for the Waterloo site"
       },
       {
-        "key": "hackthebrain",
-        "bullet": "Managed end-to-end participant operations for a 250+ attendee AI hackathon, covering onboarding, team assignments, and post-event certification"
+        "key": "it-club",
+        "bullet": "Ran workshops, Build Nights, and mentorship programs equipping 100+ students with practical technical skills"
       }
     ]
   }
