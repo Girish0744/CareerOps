@@ -212,6 +212,9 @@ Reserve bullets must be full-quality standalone bullets, 15-30 words, metric-bea
 PROFILE (3-4 sentences, impersonal resume voice)
 ==========================
 - Sentence 1: LEAD WITH VALUE, not credentials — role-relevant identity + strongest JD-relevant capabilities + 3-4 tools. Never open with degree, GPA, school, or graduation date (those live in Highlights and Education).
+- THE FIRST TWO WORDS DECIDE WHETHER THE RESUME GETS READ. Open with the professional identity this JD is hiring for, taken from the JD's own job title and language: "Software Developer with...", "IT Support Technician with...", "Computer Systems Technologist with...", "Technical Support Analyst with...". Mirror the posting's title where it is truthful.
+- NEVER label the candidate as a beginner. Banned openers (code rejects them): "early-career", "early career", "aspiring", "entry-level", "recent graduate", "junior", "emerging", "budding", "motivated student". A resume that announces inexperience in its first three words is discarded before the evidence is read, and the evidence here is strong.
+- This is NOT permission to invent seniority. Never state a number of years of experience, and never claim a job title he has not held. State WHAT HE DOES, not how long he has done it: the function is truthful, a fabricated tenure is not.
 - Sentence 2: mirror the JD's top responsibility in the candidate's own words.
 - Sentence 3: one concrete project fact or capability connecting to the JD's domain or the company's industry.
 - Optional sentence 4 only if it adds a real capability.
@@ -272,13 +275,27 @@ If a JD-required skill is genuinely in the sources but missing from your rows, a
 ==========================
 EXPERIENCE (bullets only; headers are fixed by code)
 ==========================
-oer — 2 bullets default (3rd only if short and strongly JD-relevant). olive-branch — 2 bullets, most JD-relevant first (a 3rd may be promoted from reserve by code when page 1 renders short).
-RECONSTRUCT, don't synonym-swap: read the JD requirement you target, find the master-CV fact that proves it, then write a NEW bullet presenting that fact in the JD's framing. Test: without the JD, the bullet should still sound natural; if it reads like a JD echo with names swapped, rewrite it.
-Example — master fact "Developed and maintained accessible HTML and CSS templates for Pressbooks...":
-- for a DA/BA JD: "Maintained structured content templates and document management workflows in SharePoint and Pressbooks, supporting cross-departmental data organisation for 1,000+ users"
-- for a SWE JD: "Built accessible HTML/CSS templates across Pressbooks and H5P Studio, tested against WCAG standards, serving 1,000+ students in three academic programs"
-Archetype emphasis for oer: SWE=templates/GitHub/WCAG; AI_ML/DA_BA=Power Automate automation, data management, 20% engagement metric; DATA_ENGINEER=automation workflows, data tracking; HELPDESK_IT=WCAG testing, SharePoint, supporting 1,000+ users. For olive-branch: SWE=React components + Node.js APIs; data roles=5+ third-party API integration and data synchronisation; HELPDESK_IT=diagnosing frontend/backend issues across browsers and devices.
-Each experience bullet 20-30 words with real technical detail. The Home Depot role is excluded from this resume.
+WHICH ROLES TO INCLUDE — EXACTLY TWO. NEVER THREE.
+Page 1 fits two roles. A third pushes Experience onto page 2 and Projects onto page 3, and the resume is rejected on length before anyone reads it.
+- Slot 1 is always oer (Open Education Technology Project Assistant).
+- Slot 2 is a CHOICE, not an addition. Pick ONE:
+    olive-branch (Web and Tech Integration Specialist) — for software, web, full-stack, data and AI/ML roles where building is the job.
+    home-depot (Freight Associate and Associate Trainer) — for client-facing support, service desk, operations, training, logistics and retail roles, and ALWAYS for a Home Depot posting. It is the candidate's only paid customer-facing role, so for those postings it is his strongest evidence.
+Choosing home-depot means DROPPING olive-branch, and choosing olive-branch means dropping home-depot. Listing both is a hard failure that code will reject.
+Bullets: 2 each by default (a 3rd only when strongly JD-relevant; code may promote a reserve bullet when page 1 renders short).
+
+WRITE EACH BULLET FROM THE JD, NOT FROM A TEMPLATE. Procedure, per bullet:
+  1. Pick ONE requirement from this JD that this role can genuinely prove.
+  2. Find the master-CV fact that proves it (the CV holds far more per role than fits, so different JDs should surface genuinely DIFFERENT facts, not the same fact reworded).
+  3. Write that fact in the language this JD uses, leading with the outcome.
+
+SYNONYM-SWAPPING IS THE FAILURE MODE TO AVOID. Producing the same sentence with one adjective changed per JD is not tailoring:
+  "Automated repetitive administrative workflows using Power Automate..."
+  "Automated repetitive data engineering workflows using Power Automate..."
+  "Automated repetitive operational workflows using Power Automate..."
+Those are the same bullet three times. If the JD changes, the FACT selected should usually change too: the OER role alone covers accessibility and WCAG testing, template and content systems, workflow automation, documentation standards, technical troubleshooting and support for 1,000+ students and faculty, and cross-department coordination. A support JD should surface the troubleshooting and user-support facts; a data JD should surface the automation and data-organisation facts. Do not default to the automation bullet.
+
+Each bullet: 20-30 words, third person with no pronouns, leading with a strong varied verb, and QUANTIFIED wherever the CV supports a number (users served, percentage gained, people trained, systems handled). At least one bullet per role must carry a number.
 
 ==========================
 EXTRACURRICULAR AND COURSEWORK
@@ -365,13 +382,31 @@ export function buildCoverLetterSystemPrompt(sources: {
   email: string;
   phone: string;
   companyResearch?: string;
+  resumeMarkdown?: string;
 }): string {
+  // The recruiter reads the resume and the letter together. Telling a story
+  // about a job the tailored resume leaves out reads as a contradiction, so the
+  // resume — not the full master CV — defines what the letter may talk about.
+  const resumeBlock = sources.resumeMarkdown?.trim()
+    ? `
+========================
+TAILORED RESUME FOR THIS APPLICATION (the recruiter reads this alongside the letter)
+========================
+${sources.resumeMarkdown.trim()}
+
+THE RESUME IS THE BOUNDARY OF THE LETTER'S EVIDENCE. Every employer, project, role and organisation the letter names MUST appear in the resume above. The master CV below is background for understanding the work; it is NOT a menu. Girish deliberately leaves experience off the resume when it is not relevant to the posting, so naming a job the resume omits makes the recruiter wonder where it came from and why it was hidden, and the two documents stop telling one story.
+If the strongest evidence for this JD is missing from the resume, use the next-best evidence that IS on the resume. Never reach past the resume.
+The letter must not restate the resume either: pick ONE thing the resume lists as a line and tell the story behind it, the part a bullet point cannot carry.
+`
+    : '';
   const researchBlock = sources.companyResearch?.trim()
     ? `
 ========================
 COMPANY RESEARCH (gathered from public sources — use it, don't recite it)
 ========================
 ${sources.companyResearch.trim()}
+
+TRUST ORDER: the JD outranks the research. Prefer a fact that appears in BOTH (the JD often names the company's own products and markets, which is the safest possible corroboration). If the research says something the JD contradicts, or you cannot tell whether the research is even about this same employer, drop it and use the JD alone. A confidently stated wrong fact about the company is worse than no fact.
 
 HOW TO USE IT: pick ONE specific, verifiable thing (a product, a stated priority, a real challenge their team plausibly faces) and let it shape paragraph 1 and paragraph 3 — the letter should read like it was written by someone who spent twenty minutes learning about this company, not by someone reciting their About page. Connect the research to Girish's actual experience ("they are doing X; I have genuinely done adjacent-X") instead of complimenting the company. If a research point is uncertain, leave it out; never state a researched claim more confidently than the research supports, and never invent company facts beyond the research and the JD.
 `
@@ -397,16 +432,73 @@ INTERNAL THINKING PROCESS (do not output)
 ========================
 STRUCTURE (exactly 3 paragraphs, 220-300 words total)
 ========================
-PARAGRAPH 1 — do NOT start with "I". Mention the exact role naturally, reference something SPECIFIC about the company (from the company research when provided, otherwise the JD — a product, a real initiative, the actual problem this team owns), explain why this opportunity connects with Girish's actual experience, and briefly introduce the main value he brings. The specificity test: if the company name could be swapped for a competitor's and the sentence still works, it is not specific enough.
+PARAGRAPH 1 — THE HOOK. This paragraph has one job: make the reader want to read paragraph 2. Recruiters skim the first line and decide. Do NOT start with "I".
+
+The FIRST SENTENCE must be a hook. Use ONE of these three moves, whichever the evidence best supports:
+  (a) The problem: name the specific problem this team owns, in plain words, in a way that shows Girish already understands it from the inside.
+  (b) The moment: one concrete moment from his own work that maps onto this role (what he was doing, what broke, what he decided). Written like a person telling a colleague, not like a summary.
+  (c) The observation: a genuine, specific observation about the company's product or approach that only someone who actually looked would make, immediately tied to something he has built.
+Keep the first sentence SHORT and concrete. Under 20 words where possible. No throat-clearing, no "I am writing", no stating the obvious ("Your company builds software").
+
+THE PARAGRAPH MUST BE ONE CONNECTED CHAIN, NOT THREE SEPARATE FACTS. This is the single most common failure: three true sentences that do not follow from each other, which reads as assembled rather than written, and a recruiter stops after line one. Write it in exactly these three linked moves:
+  Sentence 1 — THE HOOK: a specific thing Girish did, saw, or learned. Not a credential. It must carry a POINT, not just a fact.
+  Sentence 2 — THE BRIDGE: take the idea in sentence 1 and apply it to THIS employer, using a real detail from the company research. Sentence 2 must reuse a concrete word or idea from sentence 1 so the join is visible. This is where the reader thinks "ah, that is why he is telling me this."
+  Sentence 3 — THE CLAIM: name the exact role and what he brings. One sentence.
+
+BAD (three disconnected facts, and the research is bolted on at the end):
+  "I built a C# hospital management system that required 85 unit tests to ensure stability during high-traffic periods. It's critical work. I am applying for the Graduate Support Analyst role because I understand that TMX Group's exchanges, such as the Toronto Stock Exchange, rely on that same level of technical precision."
+  Why it fails: sentence 1 states a fact with no point. Sentence 2 is filler that says nothing. Sentence 3 is application boilerplate with a company name dropped in. Nothing follows from anything.
+
+GOOD is this SHAPE (write your own sentences from the real evidence — never copy the wording below, it is a skeleton, not a template):
+  Sentence 1: [a specific thing that happened in Girish's real work] + [the point it taught him].
+  Sentence 2: [name that lesson plainly in everyday words, as a claim about how this KIND of work behaves].
+  Sentence 3: [the employer's real situation, from research AND the JD's duties] + [therefore this role], naming it.
+  The join is what matters: sentence 2 is only earned by sentence 1, and sentence 3 is only interesting because of sentence 2.
+
+Never write application boilerplate: "I am applying for the X role because", "I am writing to express my interest". Say why the work matters to you instead.
+
+ONLY CLAIM INTEREST IN WORK THE JD ACTUALLY DESCRIBES. If you write "that's the problem I want to work on", the problem must be something this job's Responsibilities or Essential requirements actually list. Wanting to solve a problem the role does not involve reads as a candidate who wants a different job, and it is a fast rejection.
+
+Three tests this paragraph must pass:
+  - SPECIFICITY: swap the company name for a competitor's. If the sentence still works, it is not specific enough. Rewrite it.
+  - CONNECTION: delete sentence 1. If sentence 2 still makes sense on its own, they were never connected. Rewrite them.
+  - RECRUITER: you are a recruiter with forty letters to read before lunch. You have read only paragraph 1. Would you read paragraph 2, or move to the next candidate? If you would move on, rewrite it.
+Never open with flattery ("a leader in innovation", "an industry pioneer"). Admiration is not a hook; specificity is.
+
+TECHNICAL DETAIL — HOW MUCH, AND IN WHAT FORM (applies to the whole letter)
+The resume already lists every tool, so repeating them wastes the one document where character can show. Technical specifics still belong here, but only as EVIDENCE inside a story, never as a list of what he knows.
+- Name at most TWO technical specifics in the entire letter, and only ones the JD itself cares about.
+- Every technical mention must arrive in this shape: the CHALLENGE (what was hard or broke), what he DID about it, and what it TAUGHT him. A tool named without a challenge attached is resume material, delete it.
+- Banned shapes: "my experience with SQL and TCP-based systems", "using X, Y and Z", any sentence whose content is a stack.
+- The reader should finish the letter able to describe HOW GIRISH WORKS (how he thinks, what he does when something breaks, how he treats the person who is stuck) rather than what he has used. If the letter would still make sense with every tool name removed, the balance is right.
 
 PARAGRAPH 2 — the evidence story, the most important paragraph. Pick the most relevant experience or project. Do not summarize it or list technologies. Cover naturally: what was the problem or responsibility, what did Girish actually do, what decision/habit/approach does this show, and why does that matter for this role. CRITICAL: mention at most TWO technologies, tools, or technical methods in this paragraph. The goal is to show how the candidate thinks through a problem, not to prove tool knowledge.
 
-PARAGRAPH 3 — connect the story back to the employer's needs: why this role is a natural next step, what Girish can contribute, confident but not arrogant. The final sentence must include: "I can be reached at ${sources.email} or ${sources.phone}". The sentence before the contact sentence must NOT mention discussing, connecting, aligning, opportunity, chance, or fit.
+PARAGRAPH 3 — connect the story back to the employer's needs: why this role is a natural next step, what Girish can contribute, confident but not arrogant.
+
+This paragraph is where letters die in a pile of summary statements. It must contain at least ONE thing the reader did not already know from paragraphs 1 and 2: a second concrete detail, a plain opinion about the work, or a specific thing about this team he wants to learn. "My background prepares me to contribute to your team" tells the reader nothing and is banned thinking. Do not re-summarize the letter; the reader just read it.
+
+Write it the way a person closes an email to someone they respect: direct, warm, no performance.
+
+The final sentence must include: "I can be reached at ${sources.email} or ${sources.phone}". The sentence before the contact sentence must NOT mention discussing, connecting, aligning, opportunity, chance, or fit.
 
 ========================
 VOICE
 ========================
-First person. Thoughtful, grounded, specific, respectful, human, confident, honest, early-career but capable. NOT robotic, inflated, desperate, generic, overly polished, or like marketing copy. Use natural contractions (I've, I'm, that's, it's). Vary sentence lengths — at least one short sentence (under 8 words) somewhere in the letter. Reference something specific from the research or JD — connect to it, never flatter it ("Your company is a leader in innovation" is banned thinking).
+First person. Thoughtful, grounded, specific, respectful, human, confident, honest, early-career but capable. NOT robotic, inflated, desperate, generic, overly polished, or like marketing copy. Use natural contractions (I've, I'm, that's, it's). Reference something specific from the research or JD — connect to it, never flatter it ("Your company is a leader in innovation" is banned thinking).
+
+SENTENCE RHYTHM (code rejects violations — this is the single biggest reason a letter reads as machine-written):
+- Sentences must VARY in length. A run of similar-length sentences is the clearest AI tell there is.
+- At least one sentence under 8 words. Ideally one in each paragraph. A short sentence lands. Use it after a long one.
+- The short sentence must carry MEANING, never be filler bolted on to satisfy this rule. "It's critical work." and "That mattered." are empty and worse than no short sentence at all. A good short sentence states a fact, a decision, or a plain opinion: "The data was the hard part." "I threw that schema away." "Two of them failed."
+- Average sentence length must stay under 20 words. Never write three long sentences in a row.
+- If a sentence has two "and"s or more than one comma-joined clause, split it in two.
+
+PLAIN WORDS. Write the way a smart person talks, not the way a report is written:
+- use (not utilize), help (not facilitate), start (not commence), about (not regarding), so (not therefore), also (not furthermore/moreover), a lot of (not a wide range of)
+- Banned as connectors: Furthermore, Moreover, Additionally, In conclusion, It is worth noting
+- If a shorter everyday word carries the same meaning, the shorter word is always correct here.
+- Read the finished letter aloud in your head. Any sentence you would not actually say out loud to a colleague gets rewritten.
 ANTI-AI-TELL RULES (these patterns instantly read as machine-written):
 - No rule-of-three lists ("X, Y, and Z" as a rhetorical flourish) more than once in the whole letter
 - No "not just X, but Y" / "isn't merely X" constructions
@@ -414,21 +506,28 @@ ANTI-AI-TELL RULES (these patterns instantly read as machine-written):
 - Include exactly one small, concrete, human detail from the narrative or CV that a generic writer would not know (e.g. what specifically frustrated him into building something, a real decision he second-guessed, why a particular problem hooked him) — one sentence, understated, no drama
 - It is fine to state a plain opinion ("I think schema design is where most web apps go wrong") when the evidence backs it; hedged mush ("I feel I could potentially contribute") is banned
 
+${resumeBlock}
 ${researchBlock}
 ========================
 EVIDENCE SELECTION BY ROLE TYPE
 ========================
-Data analyst: Zonalyze, Student Dropout Risk Analysis, ETHOS, Power Automate, SharePoint, SQL, data interpretation, decision support.
+PICK THE ROW FROM THE JD'S OWN WORDS, NOT FROM THE COMPANY'S INDUSTRY. Before choosing, read the JD's "Responsibilities" and "Essential" sections and write down what the person actually does all day. Match evidence to THAT.
+
+This is where letters go wrong most often: a technology company hiring a client-facing support analyst is a SUPPORT role, not an engineering role. If the Essential requirements say "customer support", "client facing", "communication", "prioritise", "multitask" and name no programming language, then service and communication evidence LEADS and technical projects are supporting detail. Leading with a coding project there answers a question nobody asked, and the strongest evidence goes unused.
+
+Girish's non-technical evidence is genuinely strong and often under-used: Home Depot Associate Trainer (customer-facing retail under pressure, mentored 10+ associates, subject matter expert), HackTheBrain participant operations (250+ attendees, onboarding, escalation, coordination), IT Club President (workshops and mentorship for 100+ students), Student Experience Mentor, and Open Education support for 1,000+ students and faculty. IMPORTANT: only use any of these if that experience actually appears in the TAILORED RESUME below.
+
+Data analyst: Zonalyze, Student Dropout Risk Analysis, ETHOS, Power Automate, SQL, data interpretation, decision support.
 Software/full-stack: Zonalyze, AegisGrid, MediTwin, Olive Branch, React, FastAPI, full-stack delivery, deployment.
 AI/ML: ETHOS, Zonalyze, MLflow, scikit-learn, model comparison, data cleaning, deployed ML workflows.
-IT/support: Open Education role, accessibility, SharePoint, workflow automation, troubleshooting, student/staff support.
+Client-facing support / service desk: Home Depot trainer and SME, Open Education support for 1,000+ users, HackTheBrain participant operations, IT Club mentoring, troubleshooting, documentation, escalation, working a queue under time pressure.
 Leadership/program: IT Club, HackTheBrain, AI Build Lab, mentorship, event coordination.
 Business/operations: Home Depot, Open Education, Student Ambassador, process improvement, training, communication.
 
 ========================
 AUTHENTICITY AND ACCURACY
 ========================
-Never invent projects, metrics, technologies, company research, responsibilities, outcomes, awards, or employment history. Every claim traces to the CV, profile, narrative, or job description. You may interpret real facts; you may not invent new ones. Never imply hands-on experience with Golang, Spring Boot, Kubernetes, Kafka, banking platforms, or enterprise Java systems. For Java roles: mention the Java SE certification only if relevant and emphasize adjacent real evidence (C#, C++, SQL, REST APIs, TCP systems, testing). For senior roles: stay conservative; frame Girish as early-career with strong project, co-op, and leadership evidence.
+Never invent projects, metrics, technologies, company research, responsibilities, outcomes, awards, or employment history. Every claim traces to the CV, profile, narrative, or job description. You may interpret real facts; you may not invent new ones. Never imply hands-on experience with Golang, Spring Boot, Kubernetes, Kafka, banking platforms, or enterprise Java systems. For Java roles: mention the Java SE certification only if relevant and emphasize adjacent real evidence (C#, C++, SQL, REST APIs, TCP systems, testing). For senior roles: stay conservative and lead with the depth of the project, co-op, and leadership evidence rather than claiming seniority. Never write that he is early-career, junior, or a student: state what he has built and supported and let the dates speak for themselves.
 
 ========================
 LANGUAGE BANS (code rejects these — never use)

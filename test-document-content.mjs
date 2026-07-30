@@ -13,6 +13,7 @@ import {
   expandResumeForUnderfill,
   varyLeadingVerbs,
   buildCoverLetterChecks,
+  BANNED_COVER_LETTER_PHRASES,
   countProjectBulletItems,
   PROJECT_CATALOG,
   EXPERIENCE_CATALOG,
@@ -320,6 +321,261 @@ for (const expectedCode of letters.badExpectedCodes) {
   check(`cover letter violation detected: ${expectedCode}`, badLetterCodes.has(expectedCode),
     `got: ${[...badLetterCodes].join(', ')}`);
 }
+
+// ── Experience selection + bullet quality ────────────────────────────────────
+
+// A third role pushed Experience to page 2 and Projects to page 3; the overflow
+// trimmer cannot recover from that because it only cuts bullets, never entries.
+const twoBullets = key => [
+  `${key} bullet one serving 1,000+ users across three academic programs each term`,
+  `${key} bullet two improving processing efficiency by 20% across the department`,
+];
+const threeRoles = normalizeResumeContent({
+  ...good.resume,
+  experience: [
+    { key: 'oer', bullets: twoBullets('oer') },
+    { key: 'olive-branch', bullets: twoBullets('ob') },
+    { key: 'home-depot', bullets: twoBullets('hd') },
+  ],
+});
+check('three roles are capped to two',
+  threeRoles.experience.length === 2, threeRoles.experience.map(e => e.key).join(', '));
+
+const supportRanked = normalizeResumeContent({
+  ...good.resume,
+  experience: [
+    { key: 'oer', bullets: twoBullets('oer') },
+    { key: 'home-depot', bullets: twoBullets('hd') },
+    { key: 'olive-branch', bullets: twoBullets('ob') },
+  ],
+});
+check('the JD ranking decides which optional role survives, not the date order',
+  supportRanked.experience.some(e => e.key === 'home-depot')
+  && !supportRanked.experience.some(e => e.key === 'olive-branch'),
+  supportRanked.experience.map(e => e.key).join(', '));
+
+check('a single role is flagged so the repair pass adds the second',
+  verifyResumeContent(normalizeResumeContent({
+    ...good.resume,
+    experience: [{ key: 'oer', bullets: twoBullets('oer') }],
+  }), {}).issues.some(issue => issue.code === 'experience-count'));
+
+check('"Early-career" in the profile is rejected',
+  verifyResumeContent(normalizeResumeContent({
+    ...good.resume,
+    profileSentences: ['Early-career technologist with applied experience in technical support.', ...good.resume.profileSentences.slice(1)],
+  }), {}).issues.some(issue => issue.code === 'ai-filler'));
+
+check('Home Depot is selectable but not forced',
+  EXPERIENCE_CATALOG['home-depot'] && EXPERIENCE_CATALOG['home-depot'].required === false);
+check('omitting an optional role is not a missing-experience error',
+  !verifyResumeContent(normalizeResumeContent(good.resume), {}).issues
+    .some(issue => issue.code === 'experience-missing'));
+
+// oer plus home-depot: the client-facing pairing, olive-branch swapped OUT.
+const withHomeDepot = normalizeResumeContent({
+  ...good.resume,
+  experience: [
+    good.resume.experience.find(entry => entry.key === 'oer'),
+    {
+      key: 'home-depot',
+      bullets: [
+        'Trained 10+ associates on equipment safety protocols while maintaining a 100% safety record across shifts',
+        'Boosted order processing efficiency 20% by optimizing inventory workflows using My Toolbelt and Article Lookup',
+      ],
+    },
+  ],
+});
+
+check('omitting the required oer role is still caught',
+  verifyResumeContent(normalizeResumeContent({
+    ...good.resume,
+    experience: [{ key: 'home-depot', bullets: twoBullets('hd') }],
+  }), {}).issues.some(issue => issue.code === 'experience-missing'));
+check('Home Depot renders when selected for a client-facing role',
+  withHomeDepot.experience.some(entry => entry.key === 'home-depot')
+  && buildResumeMarkdown(withHomeDepot, { name: 'Girish Bhuteja' }).includes('The Home Depot'));
+
+const unquantified = normalizeResumeContent({
+  ...good.resume,
+  experience: good.resume.experience.map(entry => ({
+    ...entry,
+    bullets: [
+      'Supported users with various platform issues and provided guidance on resolution steps',
+      'Maintained documentation and improved internal processes for the team consistently',
+    ],
+  })),
+});
+check('a role with no quantified bullet is rejected',
+  verifyResumeContent(unquantified, {}).issues.some(issue => issue.code === 'experience-unquantified'));
+check('quantified bullets pass',
+  !verifyResumeContent(withHomeDepot, {}).issues.some(issue => issue.code === 'experience-unquantified'));
+
+const firstPersonResume = normalizeResumeContent({
+  ...good.resume,
+  experience: good.resume.experience.map((entry, index) => index === 0
+    ? { ...entry, bullets: ['I automated the publishing workflow for 1,000+ students', ...entry.bullets.slice(1)] }
+    : entry),
+});
+check('first-person wording in a bullet is rejected (resume stays third person)',
+  verifyResumeContent(firstPersonResume, {}).issues.some(issue => issue.code === 'first-person'));
+
+const repeatedVerbs = normalizeResumeContent({
+  ...good.resume,
+  experience: good.resume.experience.map(entry => ({
+    ...entry,
+    bullets: [
+      'Built accessible templates for 1,000+ students across three programs',
+      'Built automated workflows reducing manual processing time by 20% each week',
+    ],
+  })),
+});
+const variedVerbs = varyLeadingVerbs(repeatedVerbs).content;
+const leadVerbs = variedVerbs.experience.flatMap(entry => entry.bullets.map(bullet => bullet.split(' ')[0]));
+check('repeated leading verbs are automatically varied',
+  new Set(leadVerbs).size === leadVerbs.length, leadVerbs.join(', '));
+
+// ── Cover letter human voice ─────────────────────────────────────────────────
+// These are 'fix' severity so the repair pass actually rewrites them; as
+// warnings they were reported on every generation and never acted on.
+
+const longSentenceLetter = [
+  'The role caught my attention because the team owns the data pipeline problem that I have spent the better part of this year working through in my own projects.',
+  'I have built and shipped several systems where the hardest part was never the model itself but the messy work of getting reliable data into it consistently.',
+  'That experience taught me that careful schema design and honest validation matter far more than clever algorithms when the underlying inputs cannot be trusted.',
+  "I've seen this pattern repeat across every project I have taken from an idea through to something that real people actually depend on daily.",
+  'I can be reached at test@example.com or 555-0100.',
+].join(' ');
+
+const longIssues = buildCoverLetterChecks(longSentenceLetter, { email: 'test@example.com', phone: '555-0100' });
+const longCodes = new Set(longIssues.map(issue => issue.code));
+check('all-long-sentence letter is flagged', longCodes.has('uniform-sentences') || longCodes.has('long-sentences'),
+  `got: ${[...longCodes].join(', ')}`);
+check('sentence-rhythm issues are fix severity so repair runs',
+  longIssues.filter(issue => ['uniform-sentences', 'long-sentences'].includes(issue.code))
+    .every(issue => issue.severity === 'fix'));
+
+const variedLetter = [
+  'Your team owns the data pipeline that feeds every downstream report.',
+  'That problem is familiar.',
+  "I've built systems where the model was easy and the inputs were the real work.",
+  'Schema design mattered more than the algorithm.',
+  "I'd bring that same instinct here, and I think it fits what this role needs.",
+  'I can be reached at test@example.com or 555-0100.',
+].join(' ');
+check('varied-rhythm letter passes the sentence checks',
+  !buildCoverLetterChecks(variedLetter, { email: 'test@example.com', phone: '555-0100' })
+    .some(issue => ['uniform-sentences', 'long-sentences'].includes(issue.code)));
+
+for (const filler of ['Furthermore', 'Moreover', 'a testament to', 'seamless', 'a wealth of']) {
+  const letter = `${variedLetter} ${filler} the work continues.`;
+  check(`formal filler rejected: "${filler}"`,
+    buildCoverLetterChecks(letter, { email: 'test@example.com', phone: '555-0100' })
+      .some(issue => issue.code === 'banned-phrase'));
+}
+
+// ── Real generated letter that passed the old checks but read as AI ──────────
+// From a real TMX Group generation: rhythm was fine, content was not.
+
+const tmxLetter = [
+  "Maintaining the stability of mission-critical systems requires technical precision and clear communication under pressure. As a Graduate Support Analyst at TMX Group, I'd bring this mindset to your frontline team. I'm ready to ensure your capital market environments remain resilient.",
+  "My work at Conestoga College taught me to translate complex requirements into accessible solutions for over 1,000 students. Whether I was automating workflows or troubleshooting accessibility issues, I learned that effective support is about more than just fixing a bug. It's about providing proactive guidance to the user.",
+  'I am drawn to TMX Group because of the intersection of global economic impact and the need for reliable infrastructure. I can be reached at test@example.com or 555-0100.',
+].join('\n\n');
+const tmxCodes = new Set(buildCoverLetterChecks(tmxLetter, { email: 'test@example.com', phone: '555-0100' })
+  .filter(issue => issue.severity === 'fix').map(issue => issue.code));
+
+check('generic industry-truism opener is caught', tmxCodes.has('role-description-opener'));
+check('split "more than just X. It is about Y" is caught', tmxCodes.has('not-just-construction'));
+check('filler buzzwords are caught', tmxCodes.has('banned-phrase'));
+check('under-length letter is fix severity so repair expands it', tmxCodes.has('word-count'));
+
+check('every banned phrase is listed, not only the first',
+  buildCoverLetterChecks(tmxLetter, { email: 'test@example.com', phone: '555-0100' })
+    .some(issue => issue.code === 'banned-phrase' && /mission-critical/.test(issue.message) && /under pressure|I am drawn to/.test(issue.message)));
+
+// A concrete hook written in the third person with no proper noun is GOOD;
+// the old generic-opener heuristic flagged it, so it was removed.
+const concreteHookLetter = [
+  'A single configuration error in an open education platform can disrupt learning for an entire department. During my time supporting technology at Conestoga College, I managed accessible templates for over 1,000 students.',
+  "I built a telemetry transfer system on a custom binary protocol and a five-state machine. The protocol was the hard part. I'd learned that defensive handling prevents recurring failures.",
+  'I can be reached at test@example.com or 555-0100.',
+].join('\n\n');
+check('a concrete third-person hook is not flagged as a bad opener',
+  !buildCoverLetterChecks(concreteHookLetter, { email: 'test@example.com', phone: '555-0100' })
+    .some(issue => ['generic-opener', 'role-description-opener'].includes(issue.code)));
+
+// research-unused: enforce that the injected company research is actually used.
+const researchText = [
+  '# Company research: TMX Group', '',
+  '*   Operates the Toronto Stock Exchange and TSX Venture Exchange.',
+  '*   Runs the Montreal Exchange for derivatives trading.',
+  '*   Provides clearing through the Canadian Depository for Securities.',
+].join('\n');
+const researchOpts = { email: 'test@example.com', phone: '555-0100', companyResearch: researchText, company: 'TMX Group' };
+
+check('letter ignoring the company research is flagged',
+  buildCoverLetterChecks(concreteHookLetter, researchOpts).some(issue => issue.code === 'research-unused'));
+check('letter naming a researched fact is not flagged',
+  !buildCoverLetterChecks(
+    concreteHookLetter.replace('an open education platform', 'a system like the Toronto Stock Exchange'),
+    researchOpts,
+  ).some(issue => issue.code === 'research-unused'));
+check('research-unused stays silent when no research was supplied',
+  !buildCoverLetterChecks(concreteHookLetter, { email: 'test@example.com', phone: '555-0100' })
+    .some(issue => issue.code === 'research-unused'));
+// Application-statement phrases are cover-letter-only: an apply-by-email
+// message legitimately says the sender is applying, so the lists must stay split.
+check('cover letters reject application boilerplate',
+  buildCoverLetterChecks(
+    'I am applying for the Graduate Support Analyst role because I understand things. I can be reached at test@example.com or 555-0100.',
+    { email: 'test@example.com', phone: '555-0100' },
+  ).some(issue => issue.code === 'banned-phrase'));
+check('application-statement phrases stay OUT of the shared list (apply-email needs them)',
+  !BANNED_COVER_LETTER_PHRASES.some(phrase => /applying for the|would like to apply|writing to express/i.test(phrase)));
+
+// The recruiter reads resume + letter together: the letter may only build on
+// experience the tailored resume actually shows.
+const resumeWithoutHomeDepot = [
+  '## Professional Experience',
+  '**Open Education Technology Project Assistant**', 'Conestoga College, Waterloo, ON',
+  '## Extracurricular Activities',
+  '**Director, Student Success Team**, HackTheBrain, Toronto Tech Week',
+].join('\n');
+const offResumeLetter = 'My experience at The Home Depot as an Associate Trainer taught me to triage. I can be reached at test@example.com or 555-0100.';
+const onResumeLetter = 'My work with HackTheBrain participant operations taught me to triage. I can be reached at test@example.com or 555-0100.';
+
+check('letter citing an employer missing from the resume is rejected',
+  buildCoverLetterChecks(offResumeLetter, { email: 'test@example.com', phone: '555-0100', resumeMarkdown: resumeWithoutHomeDepot })
+    .some(issue => issue.code === 'evidence-not-on-resume'));
+check('letter citing experience that IS on the resume passes',
+  !buildCoverLetterChecks(onResumeLetter, { email: 'test@example.com', phone: '555-0100', resumeMarkdown: resumeWithoutHomeDepot })
+    .some(issue => issue.code === 'evidence-not-on-resume'));
+check('no resume supplied means no off-resume complaint (cover-letter-only runs)',
+  !buildCoverLetterChecks(offResumeLetter, { email: 'test@example.com', phone: '555-0100' })
+    .some(issue => issue.code === 'evidence-not-on-resume'));
+
+check('empty filler short sentences are rejected',
+  buildCoverLetterChecks(`${concreteHookLetter} It's critical work.`, { email: 'test@example.com', phone: '555-0100' })
+    .some(issue => issue.code === 'banned-phrase'));
+
+// Second real generation: naming the company inside a role-definition opener
+// does not make it a hook, and curly apostrophes are still contractions.
+const tmxLetter2 = [
+  'Managing the high-frequency data flows that power TMX Group’s markets requires a support analyst who treats every technical hiccup as a high-stakes puzzle. I’m ready to bring my background in building reliable systems to your Application Support team.',
+  'While supporting over 1,000 students and faculty, I managed platform requests and automated repetitive workflows. I also built a C# hospital management system on a TCP client-server architecture, which meant rigorous unit testing. It’s critical work.',
+  'Whether I’m troubleshooting API integrations or managing configuration changes, I see each issue through to a fix. I can be reached at test@example.com or 555-0100.',
+].join('\n\n');
+const tmx2 = buildCoverLetterChecks(tmxLetter2, { email: 'test@example.com', phone: '555-0100' });
+const tmx2Codes = new Set(tmx2.map(issue => issue.code));
+
+check('curly-apostrophe contractions are counted (no false no-contractions)',
+  !tmx2Codes.has('no-contractions'),
+  tmx2.filter(issue => issue.code === 'no-contractions').map(issue => issue.message).join(''));
+check('"Managing X requires an analyst who..." opener is caught',
+  tmx2Codes.has('role-description-opener'));
+check('naming the company does not exempt a role-definition opener',
+  tmxLetter2.includes('TMX Group') && tmx2Codes.has('role-description-opener'));
 
 // ── NASA Space Apps lead ─────────────────────────────────────────────────────
 

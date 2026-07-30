@@ -82,6 +82,19 @@ export const EXPERIENCE_CATALOG = {
     note: 'Part-time and co-op role; converted to co-op based on performance; retained after departmental restructuring',
     minBullets: 2,
     maxBullets: 3,
+    required: true,
+  },
+  // Selectable, not automatic: the strongest evidence for client-facing,
+  // service-desk, operations and retail roles, and mandatory for any Home Depot
+  // posting. Left off engineering-heavy resumes to keep page 1 for technical work.
+  'home-depot': {
+    title: 'Freight Associate and Associate Trainer',
+    company: 'The Home Depot, Brampton, ON',
+    dateRange: 'Jan 2023 - Present',
+    note: '',
+    minBullets: 2,
+    maxBullets: 3,
+    required: false,
   },
   'olive-branch': {
     title: 'Web and Tech Integration Specialist (Volunteer)',
@@ -90,8 +103,30 @@ export const EXPERIENCE_CATALOG = {
     note: '',
     minBullets: 2,
     maxBullets: 3, // 3rd bullet is promoted from reserve only when page 1 renders short
+    required: false,
   },
 };
+
+/**
+ * Page 1 fits exactly two roles. A third pushes Professional Experience onto
+ * page 2 and Projects onto page 3, which the overflow trimmer cannot recover
+ * from because it can only cut bullets, never a whole entry. So the second slot
+ * is a CHOICE between olive-branch and home-depot, never both.
+ */
+export const MAX_EXPERIENCE_ENTRIES = 2;
+
+function capExperienceEntries(entries) {
+  const seen = new Set();
+  const unique = entries.filter(entry => {
+    if (seen.has(entry.key)) return false;
+    seen.add(entry.key);
+    return true;
+  });
+  // Required roles first, then the model's own ordering (its relevance ranking).
+  const required = unique.filter(entry => EXPERIENCE_CATALOG[entry.key].required);
+  const optional = unique.filter(entry => !EXPERIENCE_CATALOG[entry.key].required);
+  return [...required, ...optional].slice(0, MAX_EXPERIENCE_ENTRIES);
+}
 
 export const EXTRACURRICULAR_CATALOG = {
   // Ongoing since Jul 2026, so the chronological sort puts it first in the
@@ -134,6 +169,38 @@ export const BANNED_SKILL_ITEMS = [
   'windows',
   'macos',
   'internet',
+];
+
+/**
+ * Banned in COVER LETTERS only. An apply-by-email message legitimately opens by
+ * stating that the sender is applying, often with a required subject line, so
+ * these must not be shared with the apply-email verifier. In a cover letter the
+ * same wording announces the act of applying instead of making a point, and it
+ * reliably breaks the chain of thought in paragraph 1.
+ */
+export const BANNED_COVER_LETTER_ONLY_PHRASES = [
+  'I am applying for the',
+  "I'm applying for the",
+  'I would like to apply',
+  'I am writing to express',
+];
+
+/**
+ * Employers and organisations that may appear in the candidate's documents.
+ * Used to verify a cover letter only tells stories the tailored resume backs
+ * up: experience is deliberately left off the resume when it is not relevant to
+ * a posting, and a letter that names it anyway makes the two documents
+ * contradict each other in front of the recruiter.
+ */
+export const CANDIDATE_ORGANISATIONS = [
+  'The Home Depot',
+  'Home Depot',
+  'Olive Branch',
+  'HackTheBrain',
+  'Toronto Tech Week',
+  'GDG Waterloo',
+  'Space Apps',
+  'Conestoga College',
 ];
 
 /** [specific, general] — listing both is padding, since one contains the other. */
@@ -239,6 +306,11 @@ export const BANNED_RESUME_PHRASES = [
   'passionate about', 'excited to', 'team player', 'detail-oriented', 'results-driven',
   'innovative solutions', 'fast-paced environment', 'cutting-edge', 'leveraging',
   'utilized', 'utilizing', 'proven track record', 'adept at',
+  // Self-labelled inexperience. A resume whose first words announce that the
+  // candidate is a beginner is filtered out before the evidence is read, and
+  // the function performed is truthful without any claim about tenure.
+  'early-career', 'early career', 'aspiring', 'entry-level', 'entry level',
+  'recent graduate', 'emerging professional', 'budding', 'motivated student',
 ];
 
 export const BANNED_PROFILE_PHRASES = ['expertise in', 'deep technical experience', 'possesses', 'utilizes'];
@@ -267,6 +339,25 @@ export const BANNED_COVER_LETTER_PHRASES = [
   'proven track record', 'adept at', 'perfect fit', 'uniquely qualified',
   'resonates', 'aligns perfectly', 'deeply committed', 'keen interest', 'esteemed',
   'I am confident that my', 'contribute effectively to',
+  // Formal connectors and inflated vocabulary: individually harmless, but they
+  // are the register a model reaches for and a person almost never writes.
+  'furthermore', 'moreover', 'in conclusion', 'it is worth noting',
+  'delve', 'underscore', 'testament to', 'myriad', 'plethora', 'endeavor',
+  'seamless', 'pivotal', 'instrumental in', 'a wealth of', 'poised to',
+  'wide range of', 'strong foundation in', 'invaluable',
+  // Filler that asserts a quality instead of showing it.
+  'mission-critical', 'fast-paced', 'I look forward to',
+  'problem-solving skills', 'high standards', 'under pressure',
+  'I am drawn to', 'ready to ensure', 'these experiences prepared me',
+  'I thrive in', 'take full ownership', 'high-quality service',
+  'I am ready to contribute', 'diverse user base', 'actionable solutions',
+  'until a resolution is reached', 'precision and responsiveness',
+  'high-stakes', 'attention to detail', 'I want to apply my',
+  'this blend of', 'prepares me to contribute', 'my background in managing',
+  // Empty short sentences bolted on to satisfy the sentence-rhythm rule. A
+  // short sentence has to carry a fact, not just be short.
+  "It's critical work", 'It is critical work', 'That mattered',
+  "That's important", 'It matters', 'That was important',
 ];
 
 // ── Text helpers ─────────────────────────────────────────────────────────────
@@ -367,13 +458,18 @@ export function normalizeResumeContent(raw) {
     reserve.profileSentence = spareProfileSentence;
   }
 
+  // Cap BEFORE sorting: the cap must respect the model's relevance ranking,
+  // whereas the sort is chronological and would otherwise decide which role
+  // survives by date rather than by fit to the job.
   const experience = sortChronologically(
-    asArray(source.experience)
-      .map(entry => ({
-        key: String(entry?.key ?? '').trim(),
-        bullets: asArray(entry?.bullets).map(sanitizeBullet).filter(Boolean),
-      }))
-      .filter(entry => EXPERIENCE_CATALOG[entry.key]),
+    capExperienceEntries(
+      asArray(source.experience)
+        .map(entry => ({
+          key: String(entry?.key ?? '').trim(),
+          bullets: asArray(entry?.bullets).map(sanitizeBullet).filter(Boolean),
+        }))
+        .filter(entry => EXPERIENCE_CATALOG[entry.key]),
+    ),
     entry => EXPERIENCE_CATALOG[entry.key].dateRange,
   );
   for (const entry of asArray(source.experience)) {
@@ -619,9 +715,15 @@ export function verifyResumeContent(content, analysis = {}) {
     }
   }
   const experienceKeys = content.experience.map(entry => entry.key);
-  for (const requiredKey of Object.keys(EXPERIENCE_CATALOG)) {
-    if (!experienceKeys.includes(requiredKey)) {
-      push('experience-missing', 'fix', `experience:${requiredKey}`, `required experience entry "${requiredKey}" is missing`);
+  if (content.experience.length !== MAX_EXPERIENCE_ENTRIES) {
+    push('experience-count', 'fix', 'experience',
+      `resume shows ${content.experience.length} roles; page 1 fits exactly ${MAX_EXPERIENCE_ENTRIES} (always oer, plus ONE of olive-branch or home-depot chosen for this JD)`);
+  }
+  // Only entries flagged required are mandatory; the rest are selected when the
+  // JD calls for them (Home Depot for client-facing/service/retail roles).
+  for (const [key, fixed] of Object.entries(EXPERIENCE_CATALOG)) {
+    if (fixed.required && !experienceKeys.includes(key)) {
+      push('experience-missing', 'fix', `experience:${key}`, `required experience entry "${key}" is missing`);
     }
   }
   for (const entry of content.experience) {
@@ -629,6 +731,13 @@ export function verifyResumeContent(content, analysis = {}) {
     if (entry.bullets.length < bounds.minBullets || entry.bullets.length > bounds.maxBullets) {
       push('experience-bullets', 'fix', `experience:${entry.key}`,
         `${entry.key} has ${entry.bullets.length} bullets; needs ${bounds.minBullets}-${bounds.maxBullets}`);
+    }
+    // A recruiter skims for numbers. Every role in the sources has at least one
+    // quantifiable fact available, so a role with none means the model chose
+    // vague phrasing over the evidence it was given.
+    if (entry.bullets.length > 0 && !entry.bullets.some(bullet => /\d/.test(bullet))) {
+      push('experience-unquantified', 'fix', `experience:${entry.key}`,
+        `no bullet for "${entry.key}" contains a number; quantify at least one (users served, percent improved, people trained, systems handled) using a figure from the sources`);
     }
   }
   const extracurricularKeys = content.extracurricular.map(entry => entry.key);
@@ -1040,6 +1149,10 @@ function splitParagraphs(text) {
 export function buildCoverLetterChecks(letterText, options = {}) {
   const issues = [];
   const push = (code, severity, message) => issues.push({ code, severity, message });
+  // Models emit curly apostrophes ("I’m"), which are correct typography and are
+  // left alone in the rendered PDF. Analysis normalizes them to straight quotes
+  // so contraction and phrase matching does not silently miss them.
+  letterText = String(letterText ?? '').replace(/[‘’]/g, "'");
   const text = String(letterText ?? '').trim();
   const paragraphs = splitParagraphs(text);
   const email = options.email ?? '';
@@ -1049,14 +1162,24 @@ export function buildCoverLetterChecks(letterText, options = {}) {
     push('paragraph-count', 'fix', `letter has ${paragraphs.length} paragraphs; needs exactly 3`);
   }
 
+  // Under-length is 'fix': a short letter is a thin letter, and the repair pass
+  // can only act on fix-severity issues. As a warning it was reported to the
+  // user on every generation and never actually corrected.
   const wordCount = text ? text.split(/\s+/).length : 0;
-  if (wordCount < 150 || wordCount > 400) {
+  if (wordCount < 210 || wordCount > 330) {
     push('word-count', 'fix', `letter is ${wordCount} words; target 220-300`);
-  } else if (wordCount < 200 || wordCount > 330) {
-    push('word-count', 'warn', `letter is ${wordCount} words; target 220-300`);
   }
 
-  const banned = findPhrase(text, BANNED_COVER_LETTER_PHRASES);
+  // Report EVERY banned phrase, not just the first: the repair pass rewrites
+  // from these messages, so a hidden second phrase survives the repair.
+  const coverLetterBanned = [...BANNED_COVER_LETTER_PHRASES, ...BANNED_COVER_LETTER_ONLY_PHRASES];
+  const allBanned = coverLetterBanned
+    .filter(phrase => text.toLowerCase().includes(phrase.toLowerCase()));
+  if (allBanned.length > 1) {
+    push('banned-phrase', 'fix',
+      `letter contains banned phrases ${allBanned.map(phrase => `"${phrase}"`).join(', ')}; rewrite each of those sentences`);
+  }
+  const banned = allBanned.length > 1 ? null : findPhrase(text, coverLetterBanned);
   if (banned) {
     push('banned-phrase', 'fix', `letter contains banned phrase "${banned}"; rewrite that sentence`);
   }
@@ -1072,11 +1195,92 @@ export function buildCoverLetterChecks(letterText, options = {}) {
     push('no-contractions', 'fix',
       `letter uses ${contractionMatches.length} contraction(s); use at least 2 natural contractions (I've, I'm, that's, it's) so it reads as human writing`);
   }
+  // Sentence rhythm is the single biggest "written by AI" tell: models produce
+  // long, evenly-weighted sentences. These are 'fix' severity on purpose —
+  // the repair pass only runs on fix issues, so as warnings they were reported
+  // to the user on every generation and then never actually repaired.
   const sentences = text.split(/(?<=[.!?])\s+/).map(sentence => sentence.trim()).filter(Boolean);
-  const hasShortSentence = sentences.some(sentence => sentence.split(/\s+/).length <= 8);
-  if (!hasShortSentence) {
-    push('uniform-sentences', 'warn',
-      'every sentence is long; include at least one short sentence (under 8 words) to vary the rhythm');
+  // Exclude the mandatory contact sentence: it is boilerplate and about 8 words,
+  // so counting it would satisfy the "has a short sentence" test on its own while
+  // the actual body stayed uniformly long.
+  const bodySentences = sentences.filter(sentence =>
+    !(options.email && sentence.includes(options.email)) && !(options.phone && sentence.includes(options.phone)));
+  const wordCounts = bodySentences.map(sentence => sentence.split(/\s+/).length);
+  if (!wordCounts.some(count => count <= 8)) {
+    push('uniform-sentences', 'fix',
+      'every sentence is long; rewrite one sentence to under 8 words so the rhythm varies (this is what makes a letter read as human)');
+  }
+  const averageWords = wordCounts.length
+    ? wordCounts.reduce((sum, count) => sum + count, 0) / wordCounts.length
+    : 0;
+  if (averageWords > 24) {
+    push('long-sentences', 'fix',
+      `sentences average ${Math.round(averageWords)} words; split the longest ones so the average is under 20 (long even sentences are the main reason a letter reads as machine-written)`);
+  }
+
+  // The opening sentence is the hook. A sentence with no proper noun, no
+  // first-person reference and no number is a general truism about the
+  // industry, which is the one thing an opener must never be.
+  // The recruiter reads both documents together, so the letter may only tell
+  // stories the tailored resume actually supports.
+  const resumeMarkdown = String(options.resumeMarkdown ?? '');
+  if (resumeMarkdown) {
+    const offResume = CANDIDATE_ORGANISATIONS
+      .filter(org => text.toLowerCase().includes(org.toLowerCase())
+        && !resumeMarkdown.toLowerCase().includes(org.toLowerCase()))
+      // "Home Depot" inside "The Home Depot" is one organisation, not two.
+      .filter((org, _index, list) => !list.some(other => other !== org && other.toLowerCase().includes(org.toLowerCase())));
+    if (offResume.length > 0) {
+      push('evidence-not-on-resume', 'fix',
+        `letter builds on ${offResume.map(org => `"${org}"`).join(', ')}, which the tailored resume for this application does not mention; use evidence that appears on the resume so both documents tell one story`);
+    }
+  }
+
+  // The company research is injected into the prompt with instructions to build
+  // paragraph 1 and 3 around one specific fact, and the model routinely ignored
+  // it and wrote a platitude instead. Require at least one distinctive proper
+  // noun from the research to actually appear in the letter.
+  const research = String(options.companyResearch ?? '');
+  if (research) {
+    const company = String(options.company ?? '').trim();
+    const terms = [...new Set(research.match(/\b[A-Z][A-Za-zÀ-ÿ]+(?:\s+[A-Z][A-Za-zÀ-ÿ]+)+\b|\b[A-Z]{3,}\b/g) ?? [])]
+      .map(term => term.trim())
+      .filter(term => term.length > 3
+        && !(company && (term.includes(company) || company.includes(term)))
+        && !/^(?:The|This|These|Their|Company|Research|Generated|Here)\b/.test(term));
+    // Only enforce when the research genuinely carries specifics.
+    if (terms.length >= 3 && !terms.some(term => text.includes(term))) {
+      push('research-unused', 'fix',
+        `letter uses none of the specific facts from the company research (${terms.slice(0, 5).join(', ')}); paragraph 1 or 3 must engage one of them concretely rather than describing the industry in general`);
+    }
+  }
+
+  // "X is more than just Y. It's about Z" is the same rhetorical move as
+  // "not just X, but Y" and reads as machine-written. It is written across two
+  // sentences often enough that a single-sentence pattern misses it.
+  const notJustPattern = /\b(?:more than just|not just|isn't just|is not just|isn't merely|is not merely|rather than simply)\b/i;
+  if (notJustPattern.test(text)) {
+    push('not-just-construction', 'fix',
+      'letter uses a "more than just X, it is about Y" construction; state the point directly instead');
+  }
+
+  const firstSentence = bodySentences[0] ?? '';
+  if (firstSentence) {
+    // NOTE: there used to be a broader "generic-opener" check here that fired
+    // when the first sentence had no proper noun, first-person reference or
+    // number. It flagged genuinely good concrete hooks ("A single
+    // configuration error in an open education platform can disrupt learning
+    // for an entire department"), and every real failure it caught was already
+    // caught by the sharper pattern below, so it was removed.
+    //
+    // "Managing X requires an analyst who ..." describes the ROLE in the
+    // abstract instead of hooking the reader. Naming the company inside it
+    // does not make it specific.
+    if (/^\W*\w+ing\b[^.!?]*\brequires?\b/i.test(firstSentence)
+      || /\brequires? (?:a|an|the|someone|professionals?|analysts?|engineers?|developers?)\b/i.test(firstSentence)) {
+      push('role-description-opener', 'fix',
+        'the opening sentence describes what the job requires rather than hooking the reader; start with something the candidate did, saw, or built, not a definition of the role');
+    }
   }
   // Duration claims ("three years of building...") must come from the sources;
   // the model cannot verify them, so keep them out entirely.

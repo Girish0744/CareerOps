@@ -3,7 +3,11 @@
   "analysis": {
     "archetype": "SWE_FULLSTACK",
     "companyDomain": "banking",
-    "mustHaveKeywords": ["React", "GraphQL", "Terraform"]
+    "mustHaveKeywords": [
+      "React",
+      "GraphQL",
+      "Terraform"
+    ]
   },
   "expectedIssueCodes": [
     "profile-sentence-count",
@@ -11,7 +15,7 @@
     "highlights-count",
     "skills-rows",
     "project-count",
-    "experience-missing",
+    "experience-count",
     "extracurricular-missing",
     "first-person",
     "power-verb",
@@ -34,20 +38,58 @@
       "Fourth highlight"
     ],
     "skills": [
-      { "category": "Languages", "items": ["Python"] },
-      { "category": "Tools", "items": ["Docker"] }
+      {
+        "category": "Languages",
+        "items": [
+          "Python"
+        ]
+      },
+      {
+        "category": "Tools",
+        "items": [
+          "Docker"
+        ]
+      }
     ],
     "experience": [
-      { "key": "oer", "bullets": ["Did one thing"] },
-      { "key": "not-a-real-role", "bullets": ["Ghost bullet"] }
+      {
+        "key": "oer",
+        "bullets": [
+          "Did one thing"
+        ]
+      },
+      {
+        "key": "not-a-real-role",
+        "bullets": [
+          "Ghost bullet"
+        ]
+      }
     ],
     "projects": [
-      { "key": "zonalyze", "stack": "React", "bullets": ["Only one bullet"] },
-      { "key": "fake-project", "stack": "Vue", "bullets": ["Should be dropped", "By normalization"] }
+      {
+        "key": "zonalyze",
+        "stack": "React",
+        "bullets": [
+          "Only one bullet"
+        ]
+      },
+      {
+        "key": "fake-project",
+        "stack": "Vue",
+        "bullets": [
+          "Should be dropped",
+          "By normalization"
+        ]
+      }
     ],
-    "educationCoursework": ["Software Engineering"],
+    "educationCoursework": [
+      "Software Engineering"
+    ],
     "extracurricular": [
-      { "key": "it-club", "bullet": "Ran the club" }
+      {
+        "key": "it-club",
+        "bullet": "Ran the club"
+      }
     ]
   }
 }
