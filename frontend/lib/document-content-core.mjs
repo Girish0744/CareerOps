@@ -76,7 +76,7 @@ export const PROJECT_CATALOG = {
 
 export const EXPERIENCE_CATALOG = {
   oer: {
-    title: 'Open Education Technology Project Assistant',
+    title: 'Data and Software Engineering Assistant',
     company: 'Conestoga College, Waterloo, ON',
     dateRange: 'Jan 2025 - Present',
     note: 'Part-time and co-op role; converted to co-op based on performance; retained after departmental restructuring',
@@ -88,7 +88,7 @@ export const EXPERIENCE_CATALOG = {
   // service-desk, operations and retail roles, and mandatory for any Home Depot
   // posting. Left off engineering-heavy resumes to keep page 1 for technical work.
   'home-depot': {
-    title: 'Freight Associate and Associate Trainer',
+    title: 'Freight Associate and Trainer',
     company: 'The Home Depot, Brampton, ON',
     dateRange: 'Jan 2023 - Present',
     note: '',
@@ -97,7 +97,7 @@ export const EXPERIENCE_CATALOG = {
     required: false,
   },
   'olive-branch': {
-    title: 'Web and Tech Integration Specialist (Volunteer)',
+    title: 'Web and Tech Integration Specialist',
     company: 'Olive Branch Mentorship Inc., Cambridge, ON',
     dateRange: 'May 2025 - Present',
     note: '',
@@ -114,6 +114,9 @@ export const EXPERIENCE_CATALOG = {
  * is a CHOICE between olive-branch and home-depot, never both.
  */
 export const MAX_EXPERIENCE_ENTRIES = 2;
+
+/** Always rendered first, regardless of dates. See the ordering note below. */
+export const PRIMARY_EXPERIENCE_KEY = 'oer';
 
 function capExperienceEntries(entries) {
   const seen = new Set();
@@ -523,17 +526,24 @@ export function normalizeResumeContent(raw) {
   // Cap BEFORE sorting: the cap must respect the model's relevance ranking,
   // whereas the sort is chronological and would otherwise decide which role
   // survives by date rather than by fit to the job.
-  const experience = sortChronologically(
-    capExperienceEntries(
-      asArray(source.experience)
-        .map(entry => ({
-          key: String(entry?.key ?? '').trim(),
-          bullets: asArray(entry?.bullets).map(sanitizeBullet).filter(Boolean),
-        }))
-        .filter(entry => EXPERIENCE_CATALOG[entry.key]),
-    ),
-    entry => EXPERIENCE_CATALOG[entry.key].dateRange,
+  // oer is pinned to the top rather than sorted. It is the primary technical
+  // role, and the roles overlap in time, so a pure date sort would put the
+  // volunteer role above it purely because it started four months later.
+  const orderedExperience = capExperienceEntries(
+    asArray(source.experience)
+      .map(entry => ({
+        key: String(entry?.key ?? '').trim(),
+        bullets: asArray(entry?.bullets).map(sanitizeBullet).filter(Boolean),
+      }))
+      .filter(entry => EXPERIENCE_CATALOG[entry.key]),
   );
+  const experience = [
+    ...orderedExperience.filter(entry => entry.key === PRIMARY_EXPERIENCE_KEY),
+    ...sortChronologically(
+      orderedExperience.filter(entry => entry.key !== PRIMARY_EXPERIENCE_KEY),
+      entry => EXPERIENCE_CATALOG[entry.key].dateRange,
+    ),
+  ];
   for (const entry of asArray(source.experience)) {
     const key = String(entry?.key ?? '').trim();
     const spare = reserveBulletsOf(entry);

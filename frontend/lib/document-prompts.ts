@@ -283,10 +283,10 @@ EXPERIENCE (bullets only; headers are fixed by code)
 ==========================
 WHICH ROLES TO INCLUDE — EXACTLY TWO. NEVER THREE.
 Page 1 fits two roles. A third pushes Experience onto page 2 and Projects onto page 3, and the resume is rejected on length before anyone reads it.
-- Slot 1 is always oer (Open Education Technology Project Assistant).
+- Slot 1 is always oer (Data and Software Engineering Assistant), and code renders it FIRST regardless of dates: it is the primary technical role.
 - Slot 2 is a CHOICE, not an addition. Pick ONE:
     olive-branch (Web and Tech Integration Specialist) — for software, web, full-stack, data and AI/ML roles where building is the job.
-    home-depot (Freight Associate and Associate Trainer) — for client-facing support, service desk, operations, training, logistics and retail roles, and ALWAYS for a Home Depot posting. It is the candidate's only paid customer-facing role, so for those postings it is his strongest evidence.
+    home-depot (Freight Associate and Trainer) — for client-facing support, service desk, operations, training, logistics and retail roles, and ALWAYS for a Home Depot posting. It is the candidate's only paid customer-facing role, so for those postings it is his strongest evidence.
 Choosing home-depot means DROPPING olive-branch, and choosing olive-branch means dropping home-depot. Listing both is a hard failure that code will reject.
 Bullets: 2 each by default (a 3rd only when strongly JD-relevant; code may promote a reserve bullet when page 1 renders short).
 
@@ -301,10 +301,15 @@ SYNONYM-SWAPPING IS THE FAILURE MODE TO AVOID. Producing the same sentence with 
   "Automated repetitive operational workflows using Power Automate..."
 Those are the same bullet three times. If the JD changes, the FACT selected should usually change too: the OER role alone covers accessibility and WCAG testing, template and content systems, workflow automation, documentation standards, technical troubleshooting and support for 1,000+ students and faculty, and cross-department coordination. A support JD should surface the troubleshooting and user-support facts; a data JD should surface the automation and data-organisation facts. Do not default to the automation bullet.
 
-THE BULLET FORMULA (this decides whether the resume is taken seriously)
-Every bullet is a compressed STAR story. A resume line cannot hold four sentences, so compress it to:
-    STRONG VERB + WHAT WAS BUILT OR CHANGED + THE SCALE OR CONTEXT + THE RESULT IT PRODUCED
-The situation and task live inside the scale and context; the action is the verb; the result is the ending. Every bullet must survive the SO WHAT test: after reading it, a hiring manager knows what changed because Girish did the work. If the bullet only names an activity, it fails.
+THE BULLET FORMULA — STAR, COMPRESSED (this decides whether the resume is taken seriously)
+Every bullet is a STAR story squeezed into one line. All four parts must be recoverable by the reader:
+    SITUATION/TASK -> the scale, system or problem being worked on ("across 5+ open textbooks", "for 1,000+ students", "with duplicate postings from 3 ATS feeds")
+    ACTION         -> the strong opening verb and what was actually built, fixed or automated
+    RESULT         -> what changed because of it, as a number wherever the master CV honestly supplies one
+Written as: STRONG VERB + WHAT WAS BUILT OR CHANGED + THE SITUATION IT ADDRESSED + THE RESULT.
+The situation is NOT optional. A bullet that names only an action and a tool is a task list entry, and it is the single most common reason a resume gets discarded. Make the reader see what the work was up against: the volume handled, the users depending on it, the thing that was broken, slow, manual or unreliable before.
+Every bullet must survive the SO WHAT test: after reading it, a hiring manager knows what changed because Girish did the work. If it only names an activity, rewrite it.
+Pick the situation from THIS job description. The same fact carries a different situation depending on the posting: for a data role the OER work is manual data handling across programs; for a support role it is 1,000+ users needing uninterrupted access; for a developer role it is a shared system other people build on. Selecting the same situation for every JD is the failure mode.
 
   WEAK  "Created accessible HTML/CSS templates for Pressbooks and H5P"
         Activity only. No scale, no result, and it advertises commodity skills.

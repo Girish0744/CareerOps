@@ -783,6 +783,30 @@ check('over-long bullets are left intact rather than truncated mid-sentence',
   applyLengthBudget(withBullet('Engineered a 5-stage AI document-generation pipeline using the Gemini API for automated resume rendering across every application'), 'one-page')
     .experience[0].bullets[0].endsWith('across every application'));
 
+// ── Experience ordering and titles ───────────────────────────────────────────
+// oer is pinned first: the roles overlap in time, so a pure date sort would put
+// the volunteer role above the primary technical one.
+
+const bulletsFor = key => [
+  `${key} bullet one serving 1,000+ users across three programs each term`,
+  `${key} bullet two improving processing throughput by 20% overall`,
+];
+const orderOf = keys => normalizeResumeContent({
+  ...good.resume,
+  experience: keys.map(key => ({ key, bullets: bulletsFor(key) })),
+}).experience.map(entry => entry.key);
+
+check('oer renders first even when the model lists it second',
+  orderOf(['olive-branch', 'oer'])[0] === 'oer', orderOf(['olive-branch', 'oer']).join(','));
+check('oer renders first ahead of home-depot too',
+  orderOf(['home-depot', 'oer'])[0] === 'oer', orderOf(['home-depot', 'oer']).join(','));
+check('oer title is the updated one',
+  EXPERIENCE_CATALOG.oer.title === 'Data and Software Engineering Assistant',
+  EXPERIENCE_CATALOG.oer.title);
+check('the volunteer label is gone from the olive-branch title',
+  !/volunteer/i.test(EXPERIENCE_CATALOG['olive-branch'].title),
+  EXPERIENCE_CATALOG['olive-branch'].title);
+
 // ── Result ───────────────────────────────────────────────────────────────────
 
 console.log(failures === 0 ? '\nAll document-content checks passed.' : `\n${failures} check(s) FAILED.`);
