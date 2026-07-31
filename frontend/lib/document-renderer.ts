@@ -7,6 +7,7 @@ import { getApplication, updateApplicationFields } from './filesystem';
 import { formatCoverLetterDate } from './date-format';
 import { formatJobReferenceForSubject, formatJobReferenceValue } from './job-reference';
 import { LEGACY_PDF_NAMES, pdfFilename } from './pdf-filename';
+import type { ResumeLength } from './resume-length';
 
 const execFileAsync = promisify(execFile);
 const ROOT = path.resolve(/*turbopackIgnore: true*/ process.cwd(), '..');
@@ -452,15 +453,35 @@ function certificationsLine(markdown: string): string {
   );
 }
 
-function resumeHtmlFromMarkdown(markdown: string, locationOverride?: string | null): string {
-  const template = readRoot('templates/cv-template.html');
+/**
+ * Sections marked `data-optional` in a template disappear entirely when their
+ * content came back empty, so a heading and rule can never render above nothing.
+ */
+function stripEmptyOptionalSections(html: string): string {
+  return html.replace(/<section data-optional>([\s\S]*?)<\/section>/g, (block, inner: string) => {
+    const content = inner
+      .replace(/<div class="section-title[^"]*">[\s\S]*?<\/div>/g, '')
+      .replace(/<hr class="section-rule">/g, '')
+      .trim();
+    return content ? block : '';
+  });
+}
+
+function resumeHtmlFromMarkdown(
+  markdown: string,
+  locationOverride?: string | null,
+  length: ResumeLength = 'two-page',
+): string {
+  const template = readRoot(
+    length === 'one-page' ? 'templates/cv-template-onepage.html' : 'templates/cv-template.html',
+  );
   const profileYml = readRoot('config/profile.yml');
   const contact = contactPlaceholders(profileYml, locationOverride);
   const cleanedMarkdown = stripGeneratedIntro(markdown);
   const sections = splitResumeSections(cleanedMarkdown);
   const certifications = section(sections, 'Certifications & Memberships', 'Certifications and Memberships', 'Certifications', 'Memberships');
 
-  return replaceAll(template, {
+  return stripEmptyOptionalSections(replaceAll(template, {
     LANG: 'en',
     NAME: contact.name,
     LOCATION: contact.location,
@@ -481,7 +502,7 @@ function resumeHtmlFromMarkdown(markdown: string, locationOverride?: string | nu
     EXTRACURRICULAR: wrapBlocks(section(sections, 'Extracurricular Activities', 'Leadership and Activities', 'Activities'), 'entry'),
     AWARDS: wrapBlocks(section(sections, 'Awards and Recognition', 'Awards & Recognition', 'Awards'), 'entry'),
     CERTIFICATIONS: certificationsLine(certifications),
-  });
+  }));
 }
 
 const COVER_LETTER_METADATA_LINE = /^\s*(?:\*\*)?\s*(?:Date|Application|Job\s*(?:ID|Number|No\.?|Ref(?:erence)?|Code)|Req(?:uisition)?\s*(?:ID|Number|No\.?|#)?|Reference|Ref)\s*(?:\*\*)?\s*:/i;
@@ -592,8 +613,10 @@ export async function refreshDocumentPdfIfStale(id: string, type: DocumentType):
   const pdfExists = fs.existsSync(pdfPath);
   const shouldUpdateMetadata = !pdfExists || fs.statSync(sourcePath).mtimeMs > fs.statSync(pdfPath).mtimeMs;
   const markdown = fs.readFileSync(sourcePath, 'utf-8');
+  // The length chosen at generation time is stored on the application, so a
+  // re-download or a hand-edited resume.md re-renders through the same template.
   const html = type === 'resume'
-    ? resumeHtmlFromMarkdown(markdown, app.resumeLocation)
+    ? resumeHtmlFromMarkdown(markdown, app.resumeLocation, app.resumeLength ?? 'two-page')
     : coverLetterHtmlFromMarkdown(markdown, app);
 
   fs.writeFileSync(htmlPath, html);

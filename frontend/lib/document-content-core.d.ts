@@ -88,16 +88,26 @@ export declare const FABRICATION_TRIPWIRES: string[];
 export declare const BANNED_COVER_LETTER_PHRASES: string[];
 
 export declare function normalizeResumeContent(raw: unknown): ResumeContent;
-export declare function buildResumeMarkdown(content: ResumeContent, contact?: { name?: string }): string;
+export declare function buildResumeMarkdown(content: ResumeContent, contact?: { name?: string }, length?: ResumeLengthOption): string;
 export declare function buildKeywordCoverage(content: ResumeContent, keywords: string[]): KeywordCoverageEntry[];
 export declare function countProjectBulletItems(content: ResumeContent): number;
 export declare function verifyResumeContent(
   content: ResumeContent,
   analysis?: ResumeAnalysis,
+  length?: ResumeLengthOption,
 ): { issues: ContentIssue[]; keywordCoverage: KeywordCoverageEntry[] };
+export declare const ONE_PAGE_BULLET_MAX_CHARS: number;
 export declare function trimResumeForOverflow(content: ResumeContent): { content: ResumeContent; action: string | null };
 export declare function expandResumeForUnderfill(content: ResumeContent, page: ResumePage): { content: ResumeContent; action: string | null };
 export declare const RESUME_FILL_TARGETS: { page1Min: number; page2Min: number };
+
+export type ResumeLengthOption = 'one-page' | 'two-page';
+/** page2Min is absent for the one-page budget, so it is optional here. */
+export declare const RESUME_BUDGETS: Record<ResumeLengthOption, {
+  maxPages: number;
+  fillTargets: { page1Min: number; page2Min?: number };
+}>;
+export declare function applyLengthBudget(content: ResumeContent, length?: ResumeLengthOption): ResumeContent;
 export declare function varyLeadingVerbs(content: ResumeContent): { content: ResumeContent; changes: string[] };
 export declare function buildCoverLetterChecks(
   letterText: string,

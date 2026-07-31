@@ -83,6 +83,8 @@ interface SourceSummaryItem {
 }
 
 type DocumentGenerationType = 'resume' | 'cover-letter';
+type ResumeLength = 'one-page' | 'two-page';
+interface ResumeLengthSuggestion { length: ResumeLength; reasons: string[] }
 
 type Stage =
   | { kind: 'idle' }
@@ -189,12 +191,15 @@ function reviewStateLabel(job: ScannedJob) {
 // ── Score Card ────────────────────────────────────────────────────────────────
 
 function ScoreCard({
-  result, stage, onGenerate, onReset,
+  result, stage, onGenerate, onReset, resumeLength, onResumeLengthChange, lengthSuggestion,
 }: {
   result: EvalResult;
   stage: Stage;
   onGenerate: (type: DocumentGenerationType) => void;
   onReset: () => void;
+  resumeLength: ResumeLength | null;
+  onResumeLengthChange: (length: ResumeLength) => void;
+  lengthSuggestion: ResumeLengthSuggestion | null;
 }) {
   const [showDetails, setShowDetails] = useState(false);
   const color = fitColor(result.score);
@@ -348,6 +353,30 @@ function ScoreCard({
               {result.score < 70
                 ? <span className={`${c.text} font-medium`}>Score below 70 — you can still generate docs if you want this role.</span>
                 : <span className="text-slate-600">Ready to generate a tailored resume or cover letter.</span>}
+              {/* Resume length: suggested from the JD, always overridable. */}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-slate-500">Resume length</span>
+                <div className="inline-flex overflow-hidden rounded-md border border-slate-300">
+                  {(['one-page', 'two-page'] as const).map(option => (
+                    <button
+                      key={option}
+                      onClick={() => onResumeLengthChange(option)}
+                      className={`px-2.5 py-1 text-xs font-semibold transition-colors ${
+                        resumeLength === option ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {option === 'one-page' ? '1 page' : '2 pages'}
+                    </button>
+                  ))}
+                </div>
+                {lengthSuggestion && (
+                  <span className="text-[11px] leading-tight text-slate-500">
+                    {resumeLength === lengthSuggestion.length
+                      ? `Suggested - ${lengthSuggestion.reasons.join(', ')}`
+                      : `${lengthSuggestion.length === 'one-page' ? '1 page' : '2 pages'} was suggested`}
+                  </span>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <button
@@ -411,6 +440,9 @@ export default function JobDiscoveryPage() {
   const [importLoading, setImportLoading] = useState(false);
   const [jobActionLoading, setJobActionLoading] = useState<string | null>(null);
   const [filterNowMs, setFilterNowMs] = useState(0);
+  // Chosen resume length for the evaluated job, pre-filled from the JD suggestion.
+  const [resumeLength, setResumeLength] = useState<ResumeLength | null>(null);
+  const [lengthSuggestion, setLengthSuggestion] = useState<ResumeLengthSuggestion | null>(null);
 
   async function loadScannedJobs() {
     try {
@@ -430,6 +462,17 @@ export default function JobDiscoveryPage() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
+
+  async function loadResumeLengthSuggestion(applicationId: string) {
+    try {
+      const res = await fetch(`/api/applications/${applicationId}`);
+      const data = await res.json() as { resumeLength?: ResumeLength | null; resumeLengthSuggestion?: ResumeLengthSuggestion };
+      if (data.resumeLengthSuggestion) setLengthSuggestion(data.resumeLengthSuggestion);
+      setResumeLength(data.resumeLength ?? data.resumeLengthSuggestion?.length ?? 'two-page');
+    } catch {
+      setResumeLength('two-page');
+    }
+  }
 
   async function handleEvaluate() {
     const trimmed = input.trim();
@@ -452,6 +495,7 @@ export default function JobDiscoveryPage() {
       if (!res.ok) throw new Error(data.error ?? 'Evaluation failed');
 
       setStage({ kind: 'evaluated', result: data as EvalResult });
+      void loadResumeLengthSuggestion((data as EvalResult).applicationId);
       void loadScannedJobs();
     } catch (err) {
       setStage({ kind: 'error', message: err instanceof Error ? err.message : 'Unknown error' });
@@ -711,7 +755,7 @@ export default function JobDiscoveryPage() {
       const res = await fetch(`/api/generate-docs/${result.applicationId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type }),
+        body: JSON.stringify({ type, ...(type === 'resume' && resumeLength ? { length: resumeLength } : {}) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Generation failed');
@@ -820,6 +864,9 @@ export default function JobDiscoveryPage() {
             stage={stage}
             onGenerate={handleGenerate}
             onReset={handleReset}
+            resumeLength={resumeLength}
+            onResumeLengthChange={setResumeLength}
+            lengthSuggestion={lengthSuggestion}
           />
           {/* Allow evaluating another job */}
           {(stage.kind === 'done') && (

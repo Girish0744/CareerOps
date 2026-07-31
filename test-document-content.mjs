@@ -21,6 +21,7 @@ import {
   RESUME_FILL_TARGETS,
   dateRangeSortKey,
   sortChronologically,
+  applyLengthBudget,
 } from './frontend/lib/document-content-core.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -588,8 +589,11 @@ check('NASA entry sorts first in extracurriculars (most recent ongoing role)',
     [{ key: 'it-club' }, { key: 'hackthebrain' }, { key: 'nasa-space-apps' }],
     entry => EXTRACURRICULAR_CATALOG[entry.key].dateRange,
   )[0].key === 'nasa-space-apps');
-check('NASA title says Local Lead, not employment by NASA',
-  /^Local Lead,/.test(EXTRACURRICULAR_CATALOG['nasa-space-apps'].title));
+// The title is "Lead", so the Waterloo organisation line is what keeps the
+// scope honest: it must never read as employment by NASA itself.
+check('NASA entry is scoped to the Waterloo site, not NASA employment',
+  /^Lead,/.test(EXTRACURRICULAR_CATALOG['nasa-space-apps'].title)
+  && /Waterloo/.test(EXTRACURRICULAR_CATALOG['nasa-space-apps'].organization));
 check('omitting the required NASA entry is a fix-severity issue',
   verifyResumeContent(normalizeResumeContent({
     ...good.resume,
@@ -670,6 +674,90 @@ check('single-month range parses (Apr 2026)',
   dateRangeSortKey('Apr 2026').start === dateRangeSortKey('Apr 2026').end);
 check('"Sept" abbreviation parses as September',
   dateRangeSortKey('Sept 2024 - Dec 2024').end > dateRangeSortKey('Sept 2024 - Dec 2024').start);
+
+// ── One-page resume budget ───────────────────────────────────────────────────
+
+const twoPageMd = buildResumeMarkdown(goodContent, { name: 'Girish Bhuteja' });
+const onePageContent = applyLengthBudget(goodContent, 'one-page');
+const onePageMd = buildResumeMarkdown(onePageContent, { name: 'Girish Bhuteja' }, 'one-page');
+const sectionsOf = md => md.split('\n').filter(line => line.startsWith('## ')).map(line => line.slice(3));
+
+// The regression guard that matters: the approved two-page format is untouched.
+check('two-page output is unchanged when the budget is applied',
+  buildResumeMarkdown(applyLengthBudget(goodContent, 'two-page'), { name: 'Girish Bhuteja' }) === twoPageMd);
+
+check('one-page drops Highlights',
+  !sectionsOf(onePageMd).includes('Highlights of Qualifications'),
+  sectionsOf(onePageMd).join(' | '));
+check('one-page keeps Profile, Skills, Experience, Projects, Education',
+  ['Profile', 'Technical Skills Summary', 'Professional Experience', 'Projects', 'Education']
+    .every(name => sectionsOf(onePageMd).includes(name)));
+check('one-page gives each role 3 bullets and each project 2',
+  onePageContent.experience.every(entry => entry.bullets.length <= 3)
+  && onePageContent.projects.length <= 3
+  && onePageContent.projects.every(project => project.bullets.length <= 2));
+check('one-page leadership is the single NASA entry',
+  applyLengthBudget(normalizeResumeContent({
+    ...good.resume,
+    extracurricular: [
+      { key: 'nasa-space-apps', bullet: 'Led venue selection and volunteer coordination for the Waterloo site' },
+      { key: 'it-club', bullet: 'Ran workshops and mentorship for 100+ students across the year' },
+    ],
+  }), 'one-page').extracurricular.map(e => e.key).join(',') === 'nasa-space-apps')
+
+// A bullet that wraps to a second line silently pushes the resume past one page.
+const longBulletContent = normalizeResumeContent({
+  ...good.resume,
+  experience: good.resume.experience.map(entry => ({
+    ...entry,
+    bullets: ['Provided technical support and troubleshooting across accessible learning platforms for more than one thousand students and faculty every term'],
+  })),
+});
+check('a bullet that wraps to two lines is a fix on one page',
+  verifyResumeContent(longBulletContent, {}, 'one-page').issues
+    .some(issue => issue.code === 'bullet-too-long' && issue.severity === 'fix'));
+check('the same bullet is fine on two pages',
+  !verifyResumeContent(longBulletContent, {}, 'two-page').issues
+    .some(issue => issue.code === 'bullet-too-long'));
+// The ceiling is measured from the rendered PDF: 110 chars fits one line.
+check('a bullet at the measured one-line ceiling is accepted',
+  !verifyResumeContent(normalizeResumeContent({
+    ...good.resume,
+    experience: good.resume.experience.map(entry => ({ ...entry, bullets: ['x'.repeat(110)] })),
+  }), {}, 'one-page').issues.some(issue => issue.code === 'bullet-too-long'
+    && issue.section?.startsWith('experience:')));
+check('a bullet one character over the ceiling is rejected',
+  verifyResumeContent(normalizeResumeContent({
+    ...good.resume,
+    experience: good.resume.experience.map(entry => ({ ...entry, bullets: ['x'.repeat(111)] })),
+  }), {}, 'one-page').issues.some(issue => issue.code === 'bullet-too-long'
+    && issue.section?.startsWith('experience:')));
+check('mostly unquantified one-page bullets are rejected',
+  verifyResumeContent(normalizeResumeContent({
+    ...good.resume,
+    experience: good.resume.experience.map(entry => ({
+      ...entry,
+      bullets: ['Maintained documentation standards to ensure project quality', 'Improved workflows to support operations'],
+    })),
+    projects: good.resume.projects.map(project => ({ ...project, bullets: ['Built a platform to improve efficiency'] })),
+  }), {}, 'one-page').issues.some(issue => issue.code === 'bullets-unquantified'));
+check('over-long reserve bullets are pruned so expansion cannot promote them',
+  Object.values(applyLengthBudget(normalizeResumeContent({
+    ...good.resume,
+    experience: good.resume.experience.map(entry => ({
+      ...entry,
+      reserveBullets: ['y'.repeat(140), 'Trained 10+ associates on equipment safety with a 100% record'],
+    })),
+  }), 'one-page').reserve.experience).flat().every(bullet => bullet.length <= 110));
+
+check('one-page does not also demand longer bullets',
+  !verifyResumeContent(onePageContent, {}, 'one-page').issues
+    .some(issue => issue.code === 'short-bullets'));
+check('one-page is materially shorter than two-page',
+  onePageMd.split(/\s+/).length < twoPageMd.split(/\s+/).length * 0.75,
+  `one=${onePageMd.split(/\s+/).length} two=${twoPageMd.split(/\s+/).length}`);
+check('one-page budget still respects the two-role cap',
+  onePageContent.experience.length === 2);
 
 // ── Result ───────────────────────────────────────────────────────────────────
 

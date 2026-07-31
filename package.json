@@ -22,7 +22,8 @@
     "contacts:qa": "node --no-warnings test-contact-intel.mjs",
     "apply:qa": "node --no-warnings test-apply-assistant.mjs",
     "email:qa": "node --no-warnings test-apply-email.mjs",
-    "docs:qa": "node --no-warnings test-document-content.mjs"
+    "docs:qa": "node --no-warnings test-document-content.mjs",
+    "length:qa": "node --no-warnings test-resume-length.mjs"
   },
   "keywords": [
     "ai",

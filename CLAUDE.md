@@ -461,6 +461,20 @@ The draft is saved to `applications/{id}/apply-email.json` and surfaced in the A
 
 QA: `npm run email:qa` (`test-apply-email.mjs`, 21 checks, no Gemini calls).
 
+### Resume Length: one-page or two-page (per application)
+
+Two locked templates now exist. `templates/cv-template.html` is the two-page format and is unchanged; `templates/cv-template-onepage.html` is a one-page format modelled on the FAANGPath Overleaf template (centred header, section rules, skills as a label/value table, projects as bold name + inline description, no Highlights or Certifications). Neither may be edited without Girish asking for a layout change.
+
+`frontend/lib/resume-length.ts` suggests a length from the JD **deterministically** (no model call) and returns the signals that fired, so the UI can explain itself: *"1 page suggested — early-career role title, asks for 2 years of experience"*. Signals are **weighted, not counted** — a stated years-of-experience bar outranks how many tools the posting lists, and an early-career title outranks a seniority numeral ("Graduate Analyst II" is one page).
+
+Selection precedence in `/api/generate-docs/{id}`: explicit `length` in the request → the application's stored `resumeLength` → the JD suggestion. The choice is persisted on the application so re-downloads and hand-edited `resume.md` re-render through the same template. `RESUME_BUDGETS` in `document-content-core.mjs` holds the per-length page limit and fill targets; `applyLengthBudget` trims content for one page and **returns two-page content untouched**, which `docs:qa` guards as a regression test.
+
+The UI offers a 1 page / 2 pages toggle on the Job Discovery score card and the Application Detail actions row, pre-selected from the suggestion with the reason shown.
+
+**`autopilot.mjs` is pinned to `length: 'two-page'`** so unattended overnight runs do not silently switch format. Drop that field to follow the suggestion instead.
+
+QA: `npm run length:qa` (`test-resume-length.mjs`, 13 checks, no Gemini calls).
+
 ### Resume Header Location (per application)
 
 The resume/cover-letter header location is **not** in `resume.md`; it is injected at render time by `contactPlaceholders` in `document-renderer.ts`. Precedence: per-application `resumeLocation` → `candidate.resume_location` in `config/profile.yml` → literal `city, province`.
@@ -551,6 +565,7 @@ npm run contacts:qa    # contact extraction policy
 npm run apply:qa       # apply form safety
 npm run docs:qa        # resume/cover-letter content layer (builder, verifier, trimmer, CL checks)
 npm run email:qa       # apply-by-email parsing (subject/recipient/RQ) + humanization checks
+npm run length:qa      # one-page/two-page resume length suggestion from the JD
 cd frontend && npm run build  # frontend compiles cleanly
 ```
 

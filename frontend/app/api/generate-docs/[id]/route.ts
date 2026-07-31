@@ -9,6 +9,7 @@ import { debugLog } from '@/lib/debug';
 import { refreshDocumentPdfIfStale } from '@/lib/document-renderer';
 import { pdfFilename, resolvePdfPath } from '@/lib/pdf-filename';
 import { formatJobReferenceForSubject } from '@/lib/job-reference';
+import { suggestResumeLength, type ResumeLength } from '@/lib/resume-length';
 import { extractApplicantProfile } from '@/lib/apply-assistant';
 import {
   assertUsableJobDescription,
@@ -22,7 +23,8 @@ import {
   expandResumeForUnderfill,
   varyLeadingVerbs,
   buildCoverLetterChecks,
-  RESUME_FILL_TARGETS,
+  applyLengthBudget,
+  RESUME_BUDGETS,
 } from '@/lib/document-content-core.mjs';
 import type { ResumeContent, ResumeAnalysis, ContentIssue, KeywordCoverageEntry, ResumePage } from '@/lib/document-content-core';
 import type { PageFills } from '@/lib/document-renderer';
@@ -294,6 +296,10 @@ interface ResumeReport {
   reserveProvided: { experience: number; projects: number; extracurricular: number };
   pageCount: number | null;
   pageFills: PageFills | null;
+  resumeLength: ResumeLength;
+  /** Which JD signals produced the suggested length, shown in the UI. */
+  lengthReasons: string[];
+  lengthWasSuggested: boolean;
 }
 
 function countReserve(content: ResumeContent): { experience: number; projects: number; extracurricular: number } {
@@ -342,13 +348,24 @@ export async function POST(
   const app = getApplication(id);
   if (!app) return NextResponse.json({ error: 'Application not found' }, { status: 404 });
 
-  const body = await req.json().catch(() => ({})) as { type?: string; documentType?: string };
+  const body = await req.json().catch(() => ({})) as { type?: string; documentType?: string; length?: ResumeLength };
   const requestedType = body.type ?? body.documentType ?? 'both';
   if (requestedType !== 'resume' && requestedType !== 'cover-letter' && requestedType !== 'both') {
     return NextResponse.json({ error: 'type must be resume, cover-letter, or both' }, { status: 400 });
   }
   const shouldGenerateResume = requestedType === 'resume' || requestedType === 'both';
   const shouldGenerateCoverLetter = requestedType === 'cover-letter' || requestedType === 'both';
+
+  // Explicit choice wins; otherwise suggest from the JD so API callers and the
+  // autopilot keep working without knowing about resume length at all.
+  const lengthSuggestion = suggestResumeLength(app.jobDescription, app.jobTitle);
+  const resumeLength: ResumeLength = body.length ?? app.resumeLength ?? lengthSuggestion.length;
+  const { maxPages } = RESUME_BUDGETS[resumeLength];
+  // Annotated because the .mjs specifier bypasses the .d.ts, so TS would infer
+  // a union in which page2Min does not exist on the one-page budget.
+  const fillTargets: { page1Min: number; page2Min?: number } = RESUME_BUDGETS[resumeLength].fillTargets;
+  // Persist before rendering: refreshDocumentPdfIfStale reads it to pick the template.
+  if (app.resumeLength !== resumeLength) updateApplicationFields(id, { resumeLength });
 
   const cv        = readRoot('cv.md');
   const profile   = readRoot('config/profile.yml');
@@ -374,6 +391,7 @@ export async function POST(
   if (shouldGenerateResume) {
   const resumeSystem = buildResumeSystemPrompt({ cv, profile, profileMd });
   const resumeUser = buildResumeUserPrompt({
+    resumeLength,
     company: app.company,
     jobTitle: app.jobTitle,
     score: app.score ?? null,
@@ -408,12 +426,16 @@ export async function POST(
   let resumeContent: ResumeContent = normalizeResumeContent(parsedPayload.resume);
 
   // Verify → single targeted repair call when hard issues remain.
-  let { issues, keywordCoverage } = verifyResumeContent(resumeContent, analysis);
+  let { issues, keywordCoverage } = verifyResumeContent(resumeContent, analysis, resumeLength);
   let repairApplied = false;
   let issuesFixedByRepair = 0;
-  const fixIssues = issues.filter(issue => issue.severity === 'fix');
-  if (fixIssues.length > 0) {
-    debugLog('[generate-docs] resume repair triggered:', fixIssues.map(issue => issue.code).join(', '));
+  // Two attempts, like the cover letter: one pass regularly left fix-severity
+  // issues in the delivered resume, because a repair that merely reduced the
+  // count was still accepted. The loop stops early once the content is clean.
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const fixIssues = issues.filter(issue => issue.severity === 'fix');
+    if (fixIssues.length === 0) break;
+    debugLog(`[generate-docs] resume repair ${attempt}:`, fixIssues.map(issue => issue.code).join(', '));
     try {
       // The repair call is triggered by hard failures, but it also receives the
       // minor issues so the model can clean those up in the same pass.
@@ -441,19 +463,20 @@ export async function POST(
         if (!repairedHasReserve && resumeContent.reserve) {
           repairedContent.reserve = resumeContent.reserve;
         }
-        const reverified = verifyResumeContent(repairedContent, analysis);
+        const reverified = verifyResumeContent(repairedContent, analysis, resumeLength);
         const remainingFixes = reverified.issues.filter(issue => issue.severity === 'fix').length;
         // Accept the repair only if it did not make things worse.
         if (remainingFixes <= fixIssues.length) {
           resumeContent = repairedContent;
-          issuesFixedByRepair = fixIssues.length - remainingFixes;
+          issuesFixedByRepair += fixIssues.length - remainingFixes;
           issues = reverified.issues;
           keywordCoverage = reverified.keywordCoverage;
           repairApplied = true;
         }
       }
     } catch (repairErr) {
-      debugLog('[generate-docs] resume repair failed:', apiErrorMessage(repairErr));
+      debugLog(`[generate-docs] resume repair ${attempt} failed:`, apiErrorMessage(repairErr));
+      break;
     }
   }
 
@@ -463,7 +486,7 @@ export async function POST(
   if (verbPass.changes.length > 0) {
     resumeContent = verbPass.content;
     debugLog('[generate-docs] leading verbs varied:', verbPass.changes.join(', '));
-    const finalCheck = verifyResumeContent(resumeContent, analysis);
+    const finalCheck = verifyResumeContent(resumeContent, analysis, resumeLength);
     issues = finalCheck.issues;
     keywordCoverage = finalCheck.keywordCoverage;
   }
@@ -474,7 +497,15 @@ export async function POST(
   const reserveProvided = countReserve(resumeContent);
   debugLog('[generate-docs] reserve provided:', JSON.stringify(reserveProvided));
 
-  const resumeMd = normalizeGeneratedPunctuation(buildResumeMarkdown(resumeContent, { name: contact.name }));
+  resumeContent = applyLengthBudget(resumeContent, resumeLength);
+  // Re-verify AFTER the budget: it trims bullets to fit one line, so issues
+  // computed before it describe a draft the user never receives.
+  {
+    const postBudget = verifyResumeContent(resumeContent, analysis, resumeLength);
+    issues = postBudget.issues;
+    keywordCoverage = postBudget.keywordCoverage;
+  }
+  const resumeMd = normalizeGeneratedPunctuation(buildResumeMarkdown(resumeContent, { name: contact.name }, resumeLength));
 
   snapshotDocumentVersion(id, 'resume', 'regenerate');
   fs.writeFileSync(path.join(folderPath, 'resume.md'), resumeMd);
@@ -486,14 +517,14 @@ export async function POST(
   let finalPageFills: PageFills | null = null;
   const writeResumeMarkdown = () => fs.writeFileSync(
     path.join(folderPath, 'resume.md'),
-    normalizeGeneratedPunctuation(buildResumeMarkdown(resumeContent, { name: contact.name })),
+    normalizeGeneratedPunctuation(buildResumeMarkdown(resumeContent, { name: contact.name }, resumeLength)),
   );
   try {
     let renderResult = await refreshDocumentPdfIfStale(id, 'resume');
 
     // Deterministic overflow handling: trim content in priority order and
     // re-render until the locked template fits 2 pages. No extra LLM calls.
-    while (renderResult.pageCount && renderResult.pageCount > 2 && trimsApplied.length < MAX_OVERFLOW_TRIMS) {
+    while (renderResult.pageCount && renderResult.pageCount > maxPages && trimsApplied.length < MAX_OVERFLOW_TRIMS) {
       const { content: trimmedContent, action } = trimResumeForOverflow(resumeContent);
       if (!action) break;
       resumeContent = trimmedContent;
@@ -514,8 +545,17 @@ export async function POST(
     ) {
       const fills = renderResult.pageFills;
       const underfilledPages: ResumePage[] = [];
-      if ((fills.page1 ?? 1) < RESUME_FILL_TARGETS.page1Min) underfilledPages.push('page1');
-      if ((fills.page2 ?? 1) < RESUME_FILL_TARGETS.page2Min) underfilledPages.push('page2');
+      // A single-page render reports 'content' rather than 'page1', so without
+      // this fallback a one-pager never qualifies as under-filled and stays sparse.
+      if ((fills.page1 ?? fills.content ?? 1) < fillTargets.page1Min) {
+        underfilledPages.push('page1');
+        // On one page EVERYTHING sits on page 1, including projects. The
+        // expander keeps its project levers under the 'page2' branch, so the
+        // one-pager needs both or it runs out of levers while still short.
+        if (resumeLength === 'one-page') underfilledPages.push('page2');
+      }
+      // A one-page budget has no page-2 target, so page 2 is never chased.
+      if (fillTargets.page2Min != null && (fills.page2 ?? 1) < fillTargets.page2Min) underfilledPages.push('page2');
       if (underfilledPages.length === 0) break;
 
       let action: string | null = null;
@@ -537,7 +577,7 @@ export async function POST(
       writeResumeMarkdown();
       renderResult = await refreshDocumentPdfIfStale(id, 'resume');
 
-      if (renderResult.pageCount && renderResult.pageCount > 2) {
+      if (renderResult.pageCount && renderResult.pageCount > maxPages) {
         // The expansion pushed content onto page 3 — revert it and stop.
         resumeContent = contentBeforeExpansion;
         writeResumeMarkdown();
@@ -554,9 +594,9 @@ export async function POST(
 
     // Coverage was measured before the page-fill expansion added bullets, so the
     // report could list a keyword as missing that the delivered PDF contains.
-    keywordCoverage = verifyResumeContent(resumeContent, analysis).keywordCoverage;
+    keywordCoverage = verifyResumeContent(resumeContent, analysis, resumeLength).keywordCoverage;
 
-    if (renderResult.pageCount && renderResult.pageCount > 2) {
+    if (renderResult.pageCount && renderResult.pageCount > maxPages) {
       warnings.push(`Resume still renders to ${renderResult.pageCount} pages after trimming. Reduce content in resume.md manually.`);
     }
     if (trimsApplied.length > 0) {
@@ -568,8 +608,8 @@ export async function POST(
     const fills = renderResult.pageFills;
     if (fills) {
       const shortPages: string[] = [];
-      if ((fills.page1 ?? 1) < RESUME_FILL_TARGETS.page1Min) shortPages.push(`page 1 at ${Math.round((fills.page1 ?? 0) * 100)}%`);
-      if ((fills.page2 ?? 1) < RESUME_FILL_TARGETS.page2Min) shortPages.push(`page 2 at ${Math.round((fills.page2 ?? 0) * 100)}%`);
+      if ((fills.page1 ?? fills.content ?? 1) < fillTargets.page1Min) shortPages.push(`page 1 at ${Math.round((fills.page1 ?? fills.content ?? 0) * 100)}%`);
+      if (fillTargets.page2Min != null && (fills.page2 ?? 1) < fillTargets.page2Min) shortPages.push(`page 2 at ${Math.round((fills.page2 ?? 0) * 100)}%`);
       if (shortPages.length > 0) {
         warnings.push(`Resume renders under the fill target (${shortPages.join(', ')}) and reserve content is exhausted. Add bullets manually if desired.`);
       }
@@ -595,6 +635,9 @@ export async function POST(
     reserveProvided,
     pageCount: finalPageCount,
     pageFills: finalPageFills,
+    resumeLength,
+    lengthReasons: lengthSuggestion.reasons,
+    lengthWasSuggested: body.length == null,
   };
   mergeGenerationReport(folderPath, { resume: resumeReport });
   }

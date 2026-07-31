@@ -38,6 +38,8 @@ export interface ApplicationEntry {
    * Never used for application-form address fields.
    */
   resumeLocation: string | null;
+  /** Which resume template this application renders through. */
+  resumeLength: 'one-page' | 'two-page' | null;
   jobUrl: string | null;
   status: string;
   score: number | null;
@@ -124,6 +126,9 @@ export interface GenerationReport {
     expansionsApplied?: string[];
     pageCount?: number | null;
     pageFills?: { page1?: number; page2?: number; content?: number } | null;
+    resumeLength?: 'one-page' | 'two-page';
+    lengthReasons?: string[];
+    lengthWasSuggested?: boolean;
   };
   coverLetter?: {
     generatedAt: string;
@@ -255,6 +260,7 @@ function normalizeApplicationEntry(entry: Partial<ApplicationEntry> & { id: stri
     jobTitle: entry.jobTitle ?? 'Unknown Role',
     location: entry.location ?? null,
     resumeLocation: entry.resumeLocation ?? null,
+    resumeLength: entry.resumeLength ?? null,
     jobUrl: entry.jobUrl ?? null,
     status: entry.status ?? 'Saved',
     score: entry.score ?? null,
@@ -797,6 +803,7 @@ export function createApplication(
   apps.push({
     id: actualId, company, jobTitle, location, jobUrl,
     resumeLocation: null, // falls back to the profile default until overridden
+    resumeLength: null,   // set at generation time; null renders the two-page format
     status: 'Saved',
     score: null, fitLevel: null,
     applicationFolder,

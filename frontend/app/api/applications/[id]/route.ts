@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getApplication, saveDocumentEdit, updateApplicationFields } from '@/lib/filesystem';
 import { refreshDocumentPdfIfStale } from '@/lib/document-renderer';
+import { suggestResumeLength } from '@/lib/resume-length';
 
 // Header line only, so a short single line. Keeps a stray paragraph out of the
 // PDF letterhead and bounds what a bad value can do to the layout.
@@ -13,7 +14,12 @@ export async function GET(
   const { id } = await params;
   const app = getApplication(id);
   if (!app) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-  return NextResponse.json(app);
+  // Suggested resume length travels with the application so the UI can
+  // pre-select it and explain why, without a second round trip.
+  return NextResponse.json({
+    ...app,
+    resumeLengthSuggestion: suggestResumeLength(app.jobDescription, app.jobTitle),
+  });
 }
 
 export async function PUT(

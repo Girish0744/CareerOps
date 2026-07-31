@@ -240,7 +240,11 @@ async function generateDocs(frontendUrl, applicationId) {
   return fetchJson(`${frontendUrl}/api/generate-docs/${applicationId}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'both' }),
+    // Pinned to two-page on purpose. The API would otherwise apply the JD-based
+    // length suggestion, which would silently change unattended overnight output
+    // to one-pagers. Change this to 'one-page', or drop the field to follow the
+    // suggestion, once the one-page format has been used enough to trust it.
+    body: JSON.stringify({ type: 'both', length: 'two-page' }),
   }, 240000);
 }
 

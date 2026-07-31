@@ -131,7 +131,7 @@ function capExperienceEntries(entries) {
 export const EXTRACURRICULAR_CATALOG = {
   // Ongoing since Jul 2026, so the chronological sort puts it first in the
   // section. Event is November 2026: describe organizing it, never the outcome.
-  'nasa-space-apps': { title: 'Local Lead, NASA International Space Apps Challenge', organization: 'Waterloo, ON', dateRange: 'Jul 2026 - Present', required: true },
+  'nasa-space-apps': { title: 'Lead, NASA International Space Apps Challenge', organization: 'Waterloo, ON', dateRange: 'Jul 2026 - Present', required: true },
   'it-club': { title: 'President, IT Club', organization: 'Conestoga College', dateRange: 'Apr 2025 - Present', required: true },
   hackthebrain: { title: 'Director, Student Success Team', organization: 'HackTheBrain, Toronto Tech Week', dateRange: 'Mar 2025 - Jul 2025', required: false },
   'ai-build-lab': { title: 'Area Leader, AI Build Lab', organization: 'Toronto Tech Week', dateRange: 'May 2026 - Jun 2026', required: false },
@@ -327,6 +327,78 @@ export const FABRICATION_TRIPWIRES = ['Golang', 'Spring Boot', 'Kubernetes', 'Ka
 // a high target just means "fill until one bullet short of overflow."
 export const RESUME_FILL_TARGETS = { page1Min: 0.93, page2Min: 0.97 };
 
+/**
+ * Per-length page rules. The two-page entry keeps today's values exactly, so
+ * the approved format cannot regress when the one-page option is added.
+ */
+export const RESUME_BUDGETS = {
+  'two-page': { maxPages: 2, fillTargets: RESUME_FILL_TARGETS },
+  // 0.96 so the bottom margin ends up matching the top one. The expansion loop
+  // reverts any promotion that spills onto a second page, so this fills to one
+  // bullet short of overflow rather than risking it.
+  'one-page': { maxPages: 1, fillTargets: { page1Min: 0.96 } },
+};
+
+/**
+ * Cut content down to what one page can hold. Selection stays JD-driven: this
+ * only limits HOW MUCH survives, never WHICH items, so the relevance ranking
+ * upstream still decides what makes the cut.
+ *
+ * Returns the content untouched for two-page, which is the regression guard.
+ */
+export function applyLengthBudget(content, length = 'two-page') {
+  if (length !== 'one-page') return content;
+  // Leadership gets a single line on one page, and the NASA Space Apps lead is
+  // the chosen entry: it is the most recent role and the token a recruiter's eye
+  // stops on when skimming.
+  const leadership = content.extracurricular.filter(entry => entry.key === 'nasa-space-apps');
+  // Reserve bullets were written for the two-page format and are promoted AFTER
+  // verification, so an over-long one would reach the page unchecked and wrap.
+  // Drop the ones that cannot fit a single line rather than truncating them.
+  const fits = bullet => bullet.length <= ONE_PAGE_BULLET_MAX_CHARS;
+  // Last-resort guarantee. The prompt asks for one-line bullets and two repair
+  // passes usually deliver them, but a wrapped bullet silently breaks the page,
+  // so anything still over the ceiling is shortened here rather than shipped.
+  // Dropping the trailing clause is preferred: that tail is normally the
+  // low-value "to improve efficiency" filler, not the evidence.
+  const fitBullet = bullet => {
+    if (fits(bullet)) return bullet;
+    const lastClause = bullet.lastIndexOf(', ');
+    if (lastClause > 45 && lastClause <= ONE_PAGE_BULLET_MAX_CHARS) return bullet.slice(0, lastClause);
+    const window = bullet.slice(0, ONE_PAGE_BULLET_MAX_CHARS + 1);
+    const lastSpace = window.lastIndexOf(' ');
+    const cut = lastSpace > 45 ? window.slice(0, lastSpace) : window.slice(0, ONE_PAGE_BULLET_MAX_CHARS);
+    return cut.replace(/[\s,;:]+$/, '');
+  };
+  const pruneReserveMap = (map = {}) => Object.fromEntries(
+    Object.entries(map).map(([key, bullets]) => [key, (bullets ?? []).filter(fits)]),
+  );
+  const reserve = content.reserve ?? {};
+  return {
+    ...content,
+    reserve: {
+      ...reserve,
+      experience: pruneReserveMap(reserve.experience),
+      projects: pruneReserveMap(reserve.projects),
+      // Page-fill must never grow the profile past three rendered lines, nor add
+      // a second Leadership entry, so both levers are removed. The page fills
+      // through project and experience bullets instead.
+      profileSentence: '',
+      extracurricular: [],
+    },
+    // Two sentences lands at three rendered lines at this width.
+    profileSentences: content.profileSentences.slice(0, 2),
+    // The one-page template has no Highlights section; its content is carried
+    // by Profile, Education and Leadership instead.
+    highlights: [],
+    experience: content.experience.map(entry => ({ ...entry, bullets: entry.bullets.slice(0, 3).map(fitBullet) })),
+    projects: content.projects.slice(0, 3).map(project => ({ ...project, bullets: project.bullets.slice(0, 2).map(fitBullet) })),
+    extracurricular: (leadership.length ? leadership : content.extracurricular).slice(0, 1)
+      .map(entry => ({ ...entry, bullet: fitBullet(entry.bullet) })),
+    educationCoursework: content.educationCoursework.slice(0, 4),
+  };
+}
+
 // Most bullets a single project may hold after deep page-2 fill.
 export const MAX_PROJECT_BULLETS = 5;
 
@@ -520,17 +592,20 @@ export function normalizeResumeContent(raw) {
 
 // ── Markdown builder (the compatibility contract with document-renderer.ts) ──
 
-export function buildResumeMarkdown(content, contact = {}) {
+export function buildResumeMarkdown(content, contact = {}, length = 'two-page') {
   const name = sanitizeInline(contact.name || 'Girish Bhuteja');
+  const onePage = length === 'one-page';
   const lines = [];
 
   lines.push(`# ${name}`, '');
 
   lines.push('## Profile', '', content.profileSentences.join(' '), '');
 
-  lines.push('## Highlights of Qualifications', '');
-  for (const highlight of content.highlights) lines.push(`- ${highlight}`);
-  lines.push('');
+  if (!onePage) {
+    lines.push('## Highlights of Qualifications', '');
+    for (const highlight of content.highlights) lines.push(`- ${highlight}`);
+    lines.push('');
+  }
 
   lines.push('## Technical Skills Summary', '');
   for (const row of content.skills) lines.push(`- **${row.category}:** ${row.items.join(', ')}`);
@@ -571,16 +646,27 @@ export function buildResumeMarkdown(content, contact = {}) {
   lines.push('## Extracurricular Activities', '');
   for (const entry of content.extracurricular) {
     const fixed = EXTRACURRICULAR_CATALOG[entry.key];
-    lines.push(`**${fixed.title}**, ${fixed.organization}`);
+    // One page renders leadership exactly like an experience entry (bold title,
+    // italic organisation on its own line) so the type never changes mid-page.
+    // Two pages keep the compact single-line header they were approved with.
+    if (onePage) {
+      lines.push(`**${fixed.title}**`);
+      lines.push(fixed.organization);
+    } else {
+      lines.push(`**${fixed.title}**, ${fixed.organization}`);
+    }
     lines.push(fixed.dateRange);
     lines.push(`- ${entry.bullet}`, '');
   }
 
-  lines.push('## Awards and Recognition', '');
-  for (const award of AWARDS) {
-    lines.push(`**${award.name}** | ${award.institution}`);
-    lines.push(award.date);
-    lines.push(`- ${award.bullet}`, '');
+  // Awards are dropped on one page; Certifications earn the space instead.
+  if (!onePage) {
+    lines.push('## Awards and Recognition', '');
+    for (const award of AWARDS) {
+      lines.push(`**${award.name}** | ${award.institution}`);
+      lines.push(award.date);
+      lines.push(`- ${award.bullet}`, '');
+    }
   }
 
   lines.push('## Certifications & Memberships', '', CERTIFICATIONS_LINE, '');
@@ -643,16 +729,58 @@ export function countProjectBulletItems(content) {
  *   keywordCoverage: [{ keyword, present, locations }]
  * 'fix' issues trigger the single repair call; 'warn' issues surface to the UI.
  */
-export function verifyResumeContent(content, analysis = {}) {
+/**
+ * Longest bullet that still fits one printed line in the one-page template.
+ * Measured in the rendered PDF, not estimated: bullets up to 110 characters
+ * render on one line with nothing wrapping, so that is the ceiling. Anything
+ * longer genuinely wraps and silently grows the page.
+ */
+export const ONE_PAGE_BULLET_MAX_CHARS = 110;
+
+export function verifyResumeContent(content, analysis = {}, length = 'two-page') {
   const issues = [];
   const push = (code, severity, section, message) => issues.push({ code, severity, section, message });
 
-  // Structure
-  const sentenceTotal = content.profileSentences.length;
-  if (sentenceTotal < 3 || sentenceTotal > 4) {
-    push('profile-sentence-count', 'fix', 'profile', `profile has ${sentenceTotal} sentences; needs 3-4`);
+  // On one page every bullet must fit a single line, or the resume silently
+  // grows past the page. The prompt asks for this and the model overshoots, so
+  // it is enforced here and handed to the repair pass to rewrite shorter.
+  if (length === 'one-page') {
+    const longBullets = [
+      ...content.experience.flatMap(entry => entry.bullets.map(bullet => ({ section: `experience:${entry.key}`, bullet }))),
+      ...content.projects.flatMap(project => project.bullets.map(bullet => ({ section: `project:${project.key}`, bullet }))),
+      ...content.extracurricular.map(entry => ({ section: `extracurricular:${entry.key}`, bullet: entry.bullet })),
+    ].filter(item => item.bullet.length > ONE_PAGE_BULLET_MAX_CHARS);
+    // Shortening must not hollow the bullets out. A page of unquantified
+    // one-liners reads as filler, which is worse than a slightly longer page.
+    const contentBullets = [
+      ...content.experience.flatMap(entry => entry.bullets),
+      ...content.projects.flatMap(project => project.bullets),
+    ];
+    const quantified = contentBullets.filter(bullet => /\d/.test(bullet));
+    // Half is the practical bar: some true bullets (a protocol implemented, a
+    // system built) carry no honest number, and inventing one is worse.
+    if (contentBullets.length > 0 && quantified.length < Math.ceil(contentBullets.length * 0.5)) {
+      push('bullets-unquantified', 'fix', 'bullets',
+        `only ${quantified.length} of ${contentBullets.length} bullets carry a number; at least 60% must state a concrete figure from the master resume. Replace vague tails such as "to improve efficiency" with the actual metric`);
+    }
+
+    for (const item of longBullets) {
+      push('bullet-too-long', 'fix', item.section,
+        `bullet is ${item.bullet.length} characters and wraps to a second line; rewrite it under ${ONE_PAGE_BULLET_MAX_CHARS} characters (about 12-15 words) keeping the metric and the JD keyword: "${item.bullet.slice(0, 60)}..."`);
+    }
   }
-  if (content.highlights.length !== 5) {
+
+  // Structure
+  // Structural counts differ by format: the one-page template has no Highlights
+  // section and holds a two-sentence profile, so the two-page counts would fire
+  // against content that is exactly right for the page it renders on.
+  const onePageFormat = length === 'one-page';
+  const sentenceTotal = content.profileSentences.length;
+  if (onePageFormat ? sentenceTotal !== 2 : (sentenceTotal < 3 || sentenceTotal > 4)) {
+    push('profile-sentence-count', 'fix', 'profile',
+      `profile has ${sentenceTotal} sentences; needs ${onePageFormat ? 'exactly 2 (one page)' : '3-4'}`);
+  }
+  if (!onePageFormat && content.highlights.length !== 5) {
     push('highlights-count', 'fix', 'highlights', `highlights has ${content.highlights.length} bullets; needs exactly 5`);
   }
   if (content.skills.length !== 5) {
@@ -742,11 +870,14 @@ export function verifyResumeContent(content, analysis = {}) {
   }
   const extracurricularKeys = content.extracurricular.map(entry => entry.key);
   for (const [key, fixed] of Object.entries(EXTRACURRICULAR_CATALOG)) {
-    if (fixed.required && !extracurricularKeys.includes(key)) {
+    // One page carries a single leadership line, and that line is the NASA
+    // entry, so only that one stays required; the rest do not apply.
+    const requiredHere = onePageFormat ? key === 'nasa-space-apps' : fixed.required;
+    if (requiredHere && !extracurricularKeys.includes(key)) {
       push('extracurricular-missing', 'fix', 'extracurricular', `required extracurricular entry "${key}" is missing`);
     }
   }
-  if (content.extracurricular.length < 2 || content.extracurricular.length > 3) {
+  if (onePageFormat ? content.extracurricular.length !== 1 : (content.extracurricular.length < 2 || content.extracurricular.length > 3)) {
     push('extracurricular-count', 'fix', 'extracurricular',
       `extracurricular has ${content.extracurricular.length} entries; needs 2-3`);
   }
@@ -816,9 +947,12 @@ export function verifyResumeContent(content, analysis = {}) {
     }
   }
 
-  // Bullet length targets (warn only — page fill happens through richer bullets)
-  const shortBullets = [...content.experience.flatMap(e => e.bullets), ...content.projects.flatMap(p => p.bullets)]
-    .filter(bullet => bullet.split(/\s+/).length < 12);
+  // Bullet length targets (warn only — page fill happens through richer bullets).
+  // Skipped for one page, where bullets are deliberately cut to a single line
+  // and this would contradict the bullet-too-long rule above.
+  const shortBullets = length === 'one-page' ? [] :
+    [...content.experience.flatMap(e => e.bullets), ...content.projects.flatMap(p => p.bullets)]
+      .filter(bullet => bullet.split(/\s+/).length < 12);
   if (shortBullets.length > 2) {
     push('short-bullets', 'warn', 'bullets',
       `${shortBullets.length} experience/project bullets are under 12 words; expand with technical detail from the master resume`);

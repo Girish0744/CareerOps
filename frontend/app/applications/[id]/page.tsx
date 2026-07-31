@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 
 type Tab = 'resume' | 'cover-letter' | 'job-description' | 'interview' | 'outreach' | 'apply' | 'notes';
+type ResumeLength = 'one-page' | 'two-page';
+interface ResumeLengthSuggestion { length: ResumeLength; reasons: string[] }
 type DocumentGenerationType = 'resume' | 'cover-letter';
 type DocumentGenerationNotice = { kind: 'success' | 'warning'; message: string } | null;
 
@@ -222,11 +224,20 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
   const [jobDescriptionLoading, setJobDescriptionLoading] = useState(false);
   const [jobDescriptionError, setJobDescriptionError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // null until the app loads, then the JD-based suggestion; the user can override.
+  const [resumeLength, setResumeLength] = useState<ResumeLength | null>(null);
+  const [lengthSuggestion, setLengthSuggestion] = useState<ResumeLengthSuggestion | null>(null);
 
   useEffect(() => {
     fetch(`/api/applications/${id}`)
       .then(r => r.json())
-      .then((data: ApplicationDetail) => { setApp(data); setLoading(false); })
+      .then((data: ApplicationDetail & { resumeLengthSuggestion?: ResumeLengthSuggestion }) => {
+        setApp(data);
+        if (data.resumeLengthSuggestion) setLengthSuggestion(data.resumeLengthSuggestion);
+        // A length already chosen for this application wins over the suggestion.
+        setResumeLength(prev => prev ?? data.resumeLength ?? data.resumeLengthSuggestion?.length ?? 'two-page');
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, [id, refreshTick]);
 
@@ -414,7 +425,7 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
       const res = await fetch(`/api/generate-docs/${id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type }),
+        body: JSON.stringify({ type, ...(type === 'resume' && resumeLength ? { length: resumeLength } : {}) }),
       });
       const data = await res.json().catch(() => ({})) as {
         error?: string;
@@ -1206,6 +1217,36 @@ export default function ApplicationDetailPage({ params }: { params: Promise<{ id
               <Download className="w-4 h-4" /> Cover Letter PDF
             </a>
           )}
+
+          {/* Resume length: pre-selected from the JD, always overridable. */}
+          <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+            <span className="text-xs font-semibold text-slate-500">Resume</span>
+            <div className="inline-flex overflow-hidden rounded-md border border-slate-200">
+              {(['one-page', 'two-page'] as const).map(option => (
+                <button
+                  key={option}
+                  onClick={() => setResumeLength(option)}
+                  title={lengthSuggestion && lengthSuggestion.length === option
+                    ? `Suggested: ${lengthSuggestion.reasons.join(', ')}`
+                    : undefined}
+                  className={`px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    resumeLength === option
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {option === 'one-page' ? '1 page' : '2 pages'}
+                </button>
+              ))}
+            </div>
+            {lengthSuggestion && (
+              <span className="max-w-[22rem] text-[11px] leading-tight text-slate-400">
+                {resumeLength === lengthSuggestion.length
+                  ? `Suggested - ${lengthSuggestion.reasons.join(', ')}`
+                  : `You chose this; ${lengthSuggestion.length === 'one-page' ? '1 page' : '2 pages'} was suggested`}
+              </span>
+            )}
+          </div>
 
           {!(app.resumeMd || app.resumePath) && (
             <button
