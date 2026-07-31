@@ -352,24 +352,15 @@ export function applyLengthBudget(content, length = 'two-page') {
   // the chosen entry: it is the most recent role and the token a recruiter's eye
   // stops on when skimming.
   const leadership = content.extracurricular.filter(entry => entry.key === 'nasa-space-apps');
-  // Reserve bullets were written for the two-page format and are promoted AFTER
-  // verification, so an over-long one would reach the page unchecked and wrap.
-  // Drop the ones that cannot fit a single line rather than truncating them.
+  // NOTE: an earlier version truncated an over-long bullet at a word boundary.
+  // That produced broken English in the delivered PDF ("...using Gemini API for
+  // automated", "...across 8 modules in under"), which is far worse than a
+  // bullet that wraps to a second line. Over-long bullets are now left intact:
+  // the verifier flags them and the repair pass rewrites them properly.
+  //
+  // Reserve bullets are still pruned, because they are promoted AFTER
+  // verification and would otherwise reach the page unchecked.
   const fits = bullet => bullet.length <= ONE_PAGE_BULLET_MAX_CHARS;
-  // Last-resort guarantee. The prompt asks for one-line bullets and two repair
-  // passes usually deliver them, but a wrapped bullet silently breaks the page,
-  // so anything still over the ceiling is shortened here rather than shipped.
-  // Dropping the trailing clause is preferred: that tail is normally the
-  // low-value "to improve efficiency" filler, not the evidence.
-  const fitBullet = bullet => {
-    if (fits(bullet)) return bullet;
-    const lastClause = bullet.lastIndexOf(', ');
-    if (lastClause > 45 && lastClause <= ONE_PAGE_BULLET_MAX_CHARS) return bullet.slice(0, lastClause);
-    const window = bullet.slice(0, ONE_PAGE_BULLET_MAX_CHARS + 1);
-    const lastSpace = window.lastIndexOf(' ');
-    const cut = lastSpace > 45 ? window.slice(0, lastSpace) : window.slice(0, ONE_PAGE_BULLET_MAX_CHARS);
-    return cut.replace(/[\s,;:]+$/, '');
-  };
   const pruneReserveMap = (map = {}) => Object.fromEntries(
     Object.entries(map).map(([key, bullets]) => [key, (bullets ?? []).filter(fits)]),
   );
@@ -391,10 +382,9 @@ export function applyLengthBudget(content, length = 'two-page') {
     // The one-page template has no Highlights section; its content is carried
     // by Profile, Education and Leadership instead.
     highlights: [],
-    experience: content.experience.map(entry => ({ ...entry, bullets: entry.bullets.slice(0, 3).map(fitBullet) })),
-    projects: content.projects.slice(0, 3).map(project => ({ ...project, bullets: project.bullets.slice(0, 2).map(fitBullet) })),
-    extracurricular: (leadership.length ? leadership : content.extracurricular).slice(0, 1)
-      .map(entry => ({ ...entry, bullet: fitBullet(entry.bullet) })),
+    experience: content.experience.map(entry => ({ ...entry, bullets: entry.bullets.slice(0, 3) })),
+    projects: content.projects.slice(0, 3).map(project => ({ ...project, bullets: project.bullets.slice(0, 2) })),
+    extracurricular: (leadership.length ? leadership : content.extracurricular).slice(0, 1),
     educationCoursework: content.educationCoursework.slice(0, 4),
   };
 }
@@ -756,6 +746,28 @@ export function verifyResumeContent(content, analysis = {}, length = 'two-page')
       ...content.experience.flatMap(entry => entry.bullets),
       ...content.projects.flatMap(project => project.bullets),
     ];
+    // A JD keyword stapled to the end of a bullet is the clearest tell that the
+    // resume was machine-written: the phrase is grammatically dangling and says
+    // nothing. Real examples: "...and software development", "...to enforce
+    // software development", "...improving platform functionality".
+    const STAPLED_TAIL = /(?:and|to (?:ensure|enforce|support|drive|improve)|improving|strengthening|ensuring)\s+(?:software development|technical excellence|high[- ]quality|user engagement metrics|platform functionality|business needs|operational efficiency|project quality|system efficiency)\s*$/i;
+    for (const entry of content.experience) {
+      for (const bullet of entry.bullets) {
+        if (STAPLED_TAIL.test(bullet)) {
+          push('stapled-keyword-tail', 'fix', `experience:${entry.key}`,
+            `bullet ends on a stapled keyword phrase that says nothing: "${bullet.slice(-46)}". End on the concrete result or a number instead`);
+        }
+      }
+    }
+    for (const project of content.projects) {
+      for (const bullet of project.bullets) {
+        if (STAPLED_TAIL.test(bullet)) {
+          push('stapled-keyword-tail', 'fix', `project:${project.key}`,
+            `bullet ends on a stapled keyword phrase that says nothing: "${bullet.slice(-46)}". End on the concrete result or a number instead`);
+        }
+      }
+    }
+
     const quantified = contentBullets.filter(bullet => /\d/.test(bullet));
     // Half is the practical bar: some true bullets (a protocol implemented, a
     // system built) carry no honest number, and inventing one is worse.

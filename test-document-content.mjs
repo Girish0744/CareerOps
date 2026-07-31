@@ -759,6 +759,30 @@ check('one-page is materially shorter than two-page',
 check('one-page budget still respects the two-role cap',
   onePageContent.experience.length === 2);
 
+// ── Bullet substance (from a real weak Geotab resume) ────────────────────────
+
+const withBullet = bullet => normalizeResumeContent({
+  ...good.resume,
+  experience: good.resume.experience.map(entry => ({ ...entry, bullets: [bullet] })),
+});
+const stapledCount = bullet => verifyResumeContent(withBullet(bullet), {}, 'one-page')
+  .issues.filter(issue => issue.code === 'stapled-keyword-tail').length;
+
+for (const bullet of [
+  'Resolved front-end and back-end issues, strengthening cross-platform performance and software development',
+  'Implemented new React and Node.js features, improving platform functionality',
+  'Implemented a 100-point scoring rubric guarded by 5 QA suites to enforce software development',
+]) {
+  check(`stapled keyword tail caught: "...${bullet.slice(-34)}"`, stapledCount(bullet) > 0);
+}
+check('a bullet ending on a real result is not flagged',
+  stapledCount('Rebuilt the shared course-template system across 5+ OER titles, cutting publishing effort for 1,000+ users') === 0);
+
+// Truncation used to produce broken English ("...Gemini API for automated").
+check('over-long bullets are left intact rather than truncated mid-sentence',
+  applyLengthBudget(withBullet('Engineered a 5-stage AI document-generation pipeline using the Gemini API for automated resume rendering across every application'), 'one-page')
+    .experience[0].bullets[0].endsWith('across every application'));
+
 // ── Result ───────────────────────────────────────────────────────────────────
 
 console.log(failures === 0 ? '\nAll document-content checks passed.' : `\n${failures} check(s) FAILED.`);

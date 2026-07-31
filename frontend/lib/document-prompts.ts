@@ -148,7 +148,12 @@ export const resumeResponseSchema: Schema = {
 
 export const resumeRepairResponseSchema: Schema = resumeContentSchema;
 
-export function buildResumeSystemPrompt(sources: { cv: string; profile: string; profileMd: string }): string {
+export function buildResumeSystemPrompt(sources: { cv: string; profile: string; profileMd: string }, resumeLength: 'one-page' | 'two-page' = 'two-page'): string {
+  // The bullet budget differs by format. Stating it here matters: this prompt
+  // carries the bullet formula, so a 20-30 word instruction here overrides the
+  // one-page rules injected later and the model splits the difference.
+  const onePage = resumeLength === 'one-page';
+  const bulletWords = onePage ? '12-16 words (never more than 110 characters, so it fits one printed line)' : '20-30 words';
   return `You are an expert ATS resume writer producing the strongest possible tailored 2-page resume for this candidate. The resume must clear ATS keyword screening first, then read naturally to HR, and give a technical manager confidence the evidence is real. Your objective is to maximize the probability of an interview.
 
 ${SECURITY_PREAMBLE}
@@ -197,7 +202,8 @@ CSHARP_DOTNET: medinet, dineease, zonalyze
 HELPDESK_IT: zonalyze, careerops, meditwin
 GENERAL: zonalyze, careerops, ethos
 careerops (CareerOps - AI Job Application Platform) is a flagship full-stack AI project: Next.js/React/TypeScript/Node.js web app, a Gemini-powered document-generation pipeline with deterministic verification guardrails, Playwright PDF automation, an ATS-API job scanner, and scheduled batch automation. STRONGLY prefer it for software developer, full-stack, AI/ML application, applied-AI, automation, developer-tooling, and platform/SaaS roles. It is truthful to describe it as extended from an open-source base — never claim sole authorship of the entire upstream; the web app, AI pipeline, verification layer, automation, and Canadian job sourcing are the candidate's own work.
-Swap one default out only when a different project clearly matches the JD better (e.g. analytics roles prefer data projects over web-only projects). For each project: stack line front-loads JD-relevant tech; then 2-3 content bullets, metric-bearing first, each 15-30 words, reconstructed from master-CV facts. Never merge two separate facts into one mega-bullet.
+Swap one default out only when a different project clearly matches the JD better (e.g. analytics roles prefer data projects over web-only projects). For each project: stack line front-loads JD-relevant tech; then 2-3 content bullets, metric-bearing first, each ${bulletWords}, reconstructed from master-CV facts. Never merge two separate facts into one mega-bullet.
+PROJECT BULLETS FOLLOW THE SAME FORMULA AS EXPERIENCE: strong verb + what was built + the scale or hard part + the result. A project bullet must show engineering judgement, not just that the project exists. State what made it difficult (the data was unreliable, the protocol had to be defensive, the queue had duplicates) and what the build achieved. Never end a project bullet on a stapled JD phrase such as "to enforce software development" — end on the outcome or the number.
 
 BULLET BUDGET (calibrated so the PDF fills exactly 2 pages): 3 projects x (1 stack + 2 content bullets) = 9 items standard. You may give ONE project (the most JD-relevant) 3 content bullets when you keep only 2 extracurricular entries. Code trims overflow, but hitting the budget preserves your best content.
 
@@ -295,7 +301,27 @@ SYNONYM-SWAPPING IS THE FAILURE MODE TO AVOID. Producing the same sentence with 
   "Automated repetitive operational workflows using Power Automate..."
 Those are the same bullet three times. If the JD changes, the FACT selected should usually change too: the OER role alone covers accessibility and WCAG testing, template and content systems, workflow automation, documentation standards, technical troubleshooting and support for 1,000+ students and faculty, and cross-department coordination. A support JD should surface the troubleshooting and user-support facts; a data JD should surface the automation and data-organisation facts. Do not default to the automation bullet.
 
-Each bullet: 20-30 words, third person with no pronouns, leading with a strong varied verb, and QUANTIFIED wherever the CV supports a number (users served, percentage gained, people trained, systems handled). At least one bullet per role must carry a number.
+THE BULLET FORMULA (this decides whether the resume is taken seriously)
+Every bullet is a compressed STAR story. A resume line cannot hold four sentences, so compress it to:
+    STRONG VERB + WHAT WAS BUILT OR CHANGED + THE SCALE OR CONTEXT + THE RESULT IT PRODUCED
+The situation and task live inside the scale and context; the action is the verb; the result is the ending. Every bullet must survive the SO WHAT test: after reading it, a hiring manager knows what changed because Girish did the work. If the bullet only names an activity, it fails.
+
+  WEAK  "Created accessible HTML/CSS templates for Pressbooks and H5P"
+        Activity only. No scale, no result, and it advertises commodity skills.
+  STRONG "Rebuilt the shared course-template system used across 5+ OER titles, cutting content-publishing effort for 1,000+ students and faculty"
+
+  WEAK  "Resolved front-end and back-end issues"
+  STRONG "Diagnosed and fixed cross-browser and API defects across the volunteer platform, restoring reliable access for mentorship users"
+
+NEVER LEAD WITH COMMODITY WORK ON AN ENGINEERING ROLE. For software, full-stack, backend or AI roles, do not open a bullet with HTML, CSS, templates, formatting, proofreading or document cleanup. Those are true but they read as an assistant, not an engineer. Lead with the SYSTEM built, the DEFECT diagnosed, the AUTOMATION shipped, the DATA moved, the USERS served. The same OER role can truthfully be described as automation, troubleshooting, system maintenance and support at scale, and for an engineering JD it must be.
+
+NEVER STAPLE A JD KEYWORD ONTO THE END OF A BULLET. Code rejects these. A keyword must sit where it makes grammatical sense or not appear at all. Real failures to avoid:
+  BAD  "...strengthening cross-platform performance and software development"
+  BAD  "...guarded by 5 automated QA suites to enforce software development"
+  BAD  "...improving platform functionality and user engagement metrics"   (no number, means nothing)
+Each ends in a noun phrase that says nothing and exposes the resume as machine-written. End on the RESULT instead, and end on a number whenever the master CV honestly supplies one.
+
+Each bullet: ${bulletWords}, third person with no pronouns, a strong verb that is not reused elsewhere on the page, and QUANTIFIED wherever the CV supports a number (users served, percentage gained, people trained, records handled, tests written). At least one bullet per role must carry a number, and more is better.
 
 ==========================
 EXTRACURRICULAR AND COURSEWORK

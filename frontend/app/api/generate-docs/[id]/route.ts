@@ -389,7 +389,7 @@ export async function POST(
   let resumeGenerationError: string | null = null;
 
   if (shouldGenerateResume) {
-  const resumeSystem = buildResumeSystemPrompt({ cv, profile, profileMd });
+  const resumeSystem = buildResumeSystemPrompt({ cv, profile, profileMd }, resumeLength);
   const resumeUser = buildResumeUserPrompt({
     resumeLength,
     company: app.company,
