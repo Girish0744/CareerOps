@@ -22,6 +22,7 @@ import {
   dateRangeSortKey,
   sortChronologically,
   applyLengthBudget,
+  experienceKeyForEmployer,
 } from './frontend/lib/document-content-core.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -396,6 +397,27 @@ check('omitting the required oer role is still caught',
 check('Home Depot renders when selected for a client-facing role',
   withHomeDepot.experience.some(entry => entry.key === 'home-depot')
   && buildResumeMarkdown(withHomeDepot, { name: 'Girish Bhuteja' }).includes('The Home Depot'));
+
+// Applying back to a current employer: that role is mandatory, not a choice.
+for (const name of ['Home Depot', 'The Home Depot', 'Home Depot Canada', 'The Home Depot of Canada Inc.']) {
+  check(`"${name}" maps to the home-depot role`, experienceKeyForEmployer(name) === 'home-depot');
+}
+check('an unrelated employer forces nothing', experienceKeyForEmployer('Shopify') === '');
+check('a Home Depot posting without the Home Depot role is rejected',
+  verifyResumeContent(normalizeResumeContent(good.resume), { company: 'Home Depot Canada' })
+    .issues.some(issue => issue.code === 'experience-employer-missing' && issue.severity === 'fix'));
+check('a Home Depot posting keeps the Home Depot role over the model ordering',
+  normalizeResumeContent({
+    ...good.resume,
+    experience: [
+      good.resume.experience.find(entry => entry.key === 'oer'),
+      { key: 'olive-branch', bullets: twoBullets('ob') },
+      { key: 'home-depot', bullets: twoBullets('hd') },
+    ],
+  }, 'The Home Depot').experience.some(entry => entry.key === 'home-depot'));
+check('a non-employer posting is untouched by the employer rule',
+  !verifyResumeContent(normalizeResumeContent(good.resume), { company: 'Shopify' })
+    .issues.some(issue => issue.code === 'experience-employer-missing'));
 
 const unquantified = normalizeResumeContent({
   ...good.resume,

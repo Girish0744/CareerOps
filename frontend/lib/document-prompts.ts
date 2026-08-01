@@ -5,6 +5,7 @@ import {
   EXTRACURRICULAR_CATALOG,
   ALLOWED_COURSEWORK,
   RESUME_ARCHETYPES,
+  experienceKeyForEmployer,
 } from './document-content-core.mjs';
 import type { ResumeContent, ResumeAnalysis, ContentIssue } from './document-content-core';
 
@@ -378,9 +379,18 @@ export function buildResumeUserPrompt(context: {
     'Shape each bullet as: strong action verb + what was built or done + the concrete scale or result. Never repeat a leading verb inside the same section.',
     '',
   ] : [];
+  // Applying back to a current employer: their own role outranks JD relevance.
+  const employerKey = experienceKeyForEmployer(context.company);
+  const employerRule = employerKey ? [
+    `!! THIS POSTING IS FROM ${context.company.toUpperCase()}, WHERE THE CANDIDATE ALREADY WORKS.`,
+    `Slot 2 is NOT a choice here: it MUST be "${employerKey}". An internal candidate's own record at this employer is the single strongest thing on the page, and omitting it is a hard failure. Drop the other optional role.`,
+    'Write those bullets for THIS posting: internal knowledge of their systems, processes and teams is the advantage no external applicant has.',
+    '',
+  ] : [];
   return [
     `COMPANY: ${context.company}`,
     `ROLE: ${context.jobTitle}`,
+    ...employerRule,
     `SCORE: ${context.score ?? 'n/a'}/100 (${context.fitLevel ?? 'n/a'})`,
     `EVALUATION MATCHED KEYWORDS (hints): ${context.matchedKeywords.slice(0, 10).join(', ') || 'none'}`,
     `EVALUATION GAPS (hints): ${context.missingKeywords.slice(0, 5).join(', ') || 'none'}`,

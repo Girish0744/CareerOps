@@ -422,8 +422,10 @@ export async function POST(
     throw new Error('Resume generation returned unparseable JSON. Try again; if it persists check GEMINI model configuration.');
   }
 
-  const analysis = (parsedPayload.analysis ?? {}) as ResumeAnalysis & { projectRationale?: string };
-  let resumeContent: ResumeContent = normalizeResumeContent(parsedPayload.resume);
+  // company rides along on analysis so the verifier can require the candidate's
+  // own role when the posting comes from an employer he already works for.
+  const analysis = { ...(parsedPayload.analysis ?? {}), company: app.company } as ResumeAnalysis & { projectRationale?: string; company?: string };
+  let resumeContent: ResumeContent = normalizeResumeContent(parsedPayload.resume, app.company);
 
   // Verify → single targeted repair call when hard issues remain.
   let { issues, keywordCoverage } = verifyResumeContent(resumeContent, analysis, resumeLength);
@@ -452,7 +454,7 @@ export async function POST(
       });
       const repairedPayload = parseJsonObject(repairResult.text ?? '');
       if (repairedPayload) {
-        const repairedContent: ResumeContent = normalizeResumeContent(repairedPayload.resume ?? repairedPayload);
+        const repairedContent: ResumeContent = normalizeResumeContent(repairedPayload.resume ?? repairedPayload, app.company);
         // The repair model often omits reserve fields — keep the original
         // reserve so under-fill expansion still has content to promote.
         const repairedReserve = repairedContent.reserve;

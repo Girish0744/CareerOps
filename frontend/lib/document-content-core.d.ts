@@ -46,6 +46,8 @@ export interface ResumeAnalysis {
   topResponsibilities?: string[];
   mustHaveKeywords?: string[];
   niceToHaveKeywords?: string[];
+  /** Target employer; set by the route so the verifier can require his own role there. */
+  company?: string;
 }
 
 export interface ContentIssue {
@@ -87,7 +89,8 @@ export declare const BANNED_PROFILE_PHRASES: string[];
 export declare const FABRICATION_TRIPWIRES: string[];
 export declare const BANNED_COVER_LETTER_PHRASES: string[];
 
-export declare function normalizeResumeContent(raw: unknown): ResumeContent;
+export declare function normalizeResumeContent(raw: unknown, company?: string): ResumeContent;
+export declare function experienceKeyForEmployer(company: string): string;
 export declare function buildResumeMarkdown(content: ResumeContent, contact?: { name?: string }, length?: ResumeLengthOption): string;
 export declare function buildKeywordCoverage(content: ResumeContent, keywords: string[]): KeywordCoverageEntry[];
 export declare function countProjectBulletItems(content: ResumeContent): number;

@@ -118,17 +118,40 @@ export const MAX_EXPERIENCE_ENTRIES = 2;
 /** Always rendered first, regardless of dates. See the ordering note below. */
 export const PRIMARY_EXPERIENCE_KEY = 'oer';
 
-function capExperienceEntries(entries) {
+const normalizeEmployer = name => String(name ?? '')
+  .toLowerCase()
+  .split(',')[0]
+  .replace(/\b(the|inc|ltd|llc|corp|corporation|company|canada|of)\b/g, ' ')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
+
+/**
+ * A posting FROM a past employer must show that employer's role: it is the one
+ * piece of evidence no other candidate has. Returns '' for everyone else.
+ */
+export function experienceKeyForEmployer(company) {
+  const target = normalizeEmployer(company);
+  if (target.length < 4) return '';
+  return Object.keys(EXPERIENCE_CATALOG).find(key => {
+    const known = normalizeEmployer(EXPERIENCE_CATALOG[key].company);
+    return known.length >= 4 && (target.includes(known) || known.includes(target));
+  }) ?? '';
+}
+
+function capExperienceEntries(entries, forcedKey = '') {
   const seen = new Set();
   const unique = entries.filter(entry => {
     if (seen.has(entry.key)) return false;
     seen.add(entry.key);
     return true;
   });
-  // Required roles first, then the model's own ordering (its relevance ranking).
+  // Required roles first, then the employer's own role when this posting is
+  // theirs, then the model's own ordering (its relevance ranking).
   const required = unique.filter(entry => EXPERIENCE_CATALOG[entry.key].required);
   const optional = unique.filter(entry => !EXPERIENCE_CATALOG[entry.key].required);
-  return [...required, ...optional].slice(0, MAX_EXPERIENCE_ENTRIES);
+  const forced = optional.filter(entry => entry.key === forcedKey);
+  return [...required, ...forced, ...optional.filter(entry => entry.key !== forcedKey)]
+    .slice(0, MAX_EXPERIENCE_ENTRIES);
 }
 
 export const EXTRACURRICULAR_CATALOG = {
@@ -499,7 +522,7 @@ const MAX_RESERVE_BULLETS_PER_ENTRY = 3;
  * bullets, an extra extracurricular entry). It is never rendered directly —
  * expandResumeForUnderfill promotes from it when the rendered page is short.
  */
-export function normalizeResumeContent(raw) {
+export function normalizeResumeContent(raw, company = '') {
   const source = raw && typeof raw === 'object' ? raw : {};
 
   const profileSentences = asArray(source.profileSentences).map(sanitizeSentence).filter(Boolean);
@@ -536,6 +559,7 @@ export function normalizeResumeContent(raw) {
         bullets: asArray(entry?.bullets).map(sanitizeBullet).filter(Boolean),
       }))
       .filter(entry => EXPERIENCE_CATALOG[entry.key]),
+    experienceKeyForEmployer(company),
   );
   const experience = [
     ...orderedExperience.filter(entry => entry.key === PRIMARY_EXPERIENCE_KEY),
@@ -875,6 +899,13 @@ export function verifyResumeContent(content, analysis = {}, length = 'two-page')
     if (fixed.required && !experienceKeys.includes(key)) {
       push('experience-missing', 'fix', `experience:${key}`, `required experience entry "${key}" is missing`);
     }
+  }
+  // Applying back to a past employer: their own role is the strongest evidence
+  // on the page and dropping it is indefensible, so it outranks JD relevance.
+  const employerKey = experienceKeyForEmployer(analysis.company);
+  if (employerKey && !experienceKeys.includes(employerKey)) {
+    push('experience-employer-missing', 'fix', `experience:${employerKey}`,
+      `this posting is from ${analysis.company}, where the candidate already works: slot 2 MUST be "${employerKey}" (${EXPERIENCE_CATALOG[employerKey].title}). Drop the other optional role to make room.`);
   }
   for (const entry of content.experience) {
     const bounds = EXPERIENCE_CATALOG[entry.key];
