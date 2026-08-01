@@ -452,6 +452,7 @@ Frontend workflow statuses are authoritative for this personalized fork. Legacy 
 | 17B | Visible ATS apply filling — Playwright opens a visible browser, resolves posting-page Apply links, fills high-confidence fields/uploads, and stops before final Submit/Apply | ✅ First batch |
 | 17B.2 | Reliable apply-fill hardening — source-balanced scan ranking, multi-hop Apply resolver, natural field matching, checkbox/radio safety, and current-application upload guard | ✅ Complete |
 | 24 | Resume format lock — `templates/cv-template.html` is the final visual format for generated resume PDFs; future work should improve tailored content without editing the template unless explicitly requested | ✅ Complete |
+| 25 | Gmail status sync — `gmail-sync.mjs` reads INBOX over IMAP (readonly), matches recruiter replies to applications waiting on an answer, and moves status forward; the autopilot runs it and reports replies first | ✅ Complete |
 | 18 | **Expanded portals, next batch** — continue toward 150+ companies; add Workday/Teamtailor/BambooHR/custom parsers only for verified high-value Canadian sources | 🔜 Next |
 | 19 | **Email job alerts** — After scan, diff against last run; new jobs ≥ threshold → Resend API digest email | 🔜 After 18 |
 | 16 | **Settings / Profile page** — `/settings`: edit `profile.yml` and `portals.yml` from the browser | 🔜 After 19 |

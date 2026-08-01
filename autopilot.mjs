@@ -17,6 +17,7 @@
  *   node autopilot.mjs --limit=1     override max packages this run
  *   node autopilot.mjs --no-briefing skip the Postbox message
  *   node autopilot.mjs --no-scan     skip the discovery refresh
+ *   node autopilot.mjs --no-inbox    skip the Gmail status sync
  */
 
 import fs from 'fs';
@@ -24,6 +25,10 @@ import path from 'path';
 import { spawn, execFile } from 'child_process';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
+
+// Also loads .env + frontend/.env.local (see ENV_FILES there) — the scheduled
+// task runs with a bare environment, so the keys must come from the files.
+import { syncInbox } from './gmail-sync.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const QUEUE_PATH = path.join(ROOT, 'data', 'scored-queue.json');
@@ -40,6 +45,7 @@ const DEFAULTS = {
   max_packages_per_run: 4,
   delay_between_jobs_seconds: 45,
   refresh_scan: true,
+  sync_inbox: true,
   frontend_url: 'http://localhost:3000',
   postbox: { url: '', phone: '' },
 };
@@ -48,6 +54,7 @@ const args = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run');
 const NO_BRIEFING = args.includes('--no-briefing');
 const NO_SCAN = args.includes('--no-scan');
+const NO_INBOX = args.includes('--no-inbox');
 const LIMIT_ARG = Number(args.find(a => a.startsWith('--limit='))?.split('=')[1] ?? NaN);
 
 function log(message) {
@@ -252,6 +259,22 @@ function composeBriefing(summary) {
   const date = new Date().toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' });
   const lines = [`Career Autopilot — ${date}`];
 
+  // Replies go first — a scheduling request is worth more than any new posting.
+  const inbox = summary.inbox;
+  if (inbox?.updates?.length > 0) {
+    lines.push(`📬 ${inbox.updates.length} repl${inbox.updates.length === 1 ? 'y' : 'ies'}:`);
+    for (const u of inbox.updates) {
+      const nudge = u.next === 'Interview' ? '  ⚡ reply today'
+        : u.next === 'Offer' ? '  🎉'
+        : '';
+      lines.push(`   ${u.company} — ${u.jobTitle} → ${u.next}${nudge}`);
+    }
+  }
+  if (inbox?.review?.length > 0) {
+    lines.push(`❓ ${inbox.review.length} email(s) need review: `
+      + inbox.review.map(r => `${r.company} "${r.subject}"`).join('; '));
+  }
+
   const referralPackages = summary.packages.filter(p => p.referralContacts?.length);
   const otherPackages = summary.packages.filter(p => !p.referralContacts?.length);
   let n = 0;
@@ -330,6 +353,7 @@ async function main() {
       limit,
     },
     scanRefreshed: false,
+    inbox: null,
     candidates: [],
     packages: [],
     borderline: [],
@@ -356,6 +380,20 @@ async function main() {
 
   let startedChild = null;
   try {
+    // Recruiter replies first — they are the most time-sensitive thing in the
+    // briefing, and they must not depend on the frontend booting. Fail-soft:
+    // a mailbox problem never blocks the package run.
+    if (config.sync_inbox && !NO_INBOX) {
+      log('syncing inbox for recruiter replies...');
+      try {
+        summary.inbox = await syncInbox({ apply: true });
+        log(`inbox: ${summary.inbox.updates.length} status update(s), ${summary.inbox.review.length} to review`);
+      } catch (err) {
+        log(`WARN inbox sync failed (${err.message}) — continuing`);
+        summary.inbox = { error: err.message, updates: [], review: [] };
+      }
+    }
+
     startedChild = await ensureFrontend(config.frontend_url);
 
     if (config.refresh_scan && !NO_SCAN) {

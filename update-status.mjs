@@ -24,7 +24,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const VALID_STATUSES = [
+export const VALID_STATUSES = [
   'Saved',
   'Resume Generated',
   'Cover Letter Generated',
@@ -55,9 +55,70 @@ function writeJson(path, data) {
   writeFileSync(path, JSON.stringify(data, null, 2));
 }
 
-const args = parseArgs(process.argv.slice(2));
 const appsJsonPath = resolve(__dirname, 'data', 'applications.json');
 const appsMdPath = resolve(__dirname, 'data', 'applications.md');
+
+/**
+ * Set an application's status across all three data stores.
+ * Throws on unknown id or invalid status. Returns the previous status so
+ * callers (CLI, gmail-sync) can report the transition.
+ */
+export function setStatus(id, status) {
+  if (!VALID_STATUSES.includes(status)) {
+    throw new Error(`Invalid status: "${status}"`);
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  const metaPath = resolve(__dirname, 'applications', id, 'metadata.json');
+  if (!existsSync(metaPath)) {
+    throw new Error(`Application folder not found: applications/${id}`);
+  }
+
+  const meta = readJson(metaPath);
+  const prevStatus = meta.status;
+  meta.status = status;
+  meta.updatedAt = today;
+  if (status === 'Applied' && !meta.appliedAt) meta.appliedAt = today;
+  writeJson(metaPath, meta);
+
+  const appsData = readJson(appsJsonPath);
+  if (appsData) {
+    const entry = appsData.applications.find(a => a.id === id);
+    if (entry) {
+      entry.status = status;
+      entry.updatedAt = today;
+      if (status === 'Applied' && !entry.appliedAt) entry.appliedAt = today;
+      writeJson(appsJsonPath, appsData);
+    }
+  }
+
+  // data/applications.md is the legacy markdown mirror — matched by company +
+  // role because it has no id column. Missing rows are fine (only the CLI flow
+  // ever wrote to it), so this is best-effort.
+  if (existsSync(appsMdPath)) {
+    const md = readFileSync(appsMdPath, 'utf-8');
+    const updated = md.split('\n').map(line => {
+      if (!line.startsWith('|')) return line;
+      const cols = line.split('|').map(c => c.trim());
+      // Row format: | # | Date | Company | Role | Score | Status | PDF | Report | Notes |
+      if (cols[3] === meta.company && cols[4] === meta.jobTitle) {
+        cols[6] = ` ${status} `;
+        return cols.join('|');
+      }
+      return line;
+    });
+    writeFileSync(appsMdPath, updated.join('\n'));
+  }
+
+  return { id, prevStatus, status, company: meta.company, jobTitle: meta.jobTitle };
+}
+
+// ── CLI ─────────────────────────────────────────────────────────────────────
+// Imported as a module (gmail-sync.mjs, tests) → skip the CLI entirely.
+const isMain = process.argv[1]
+  && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+if (isMain) {
+const args = parseArgs(process.argv.slice(2));
 
 // --list: show all applications
 if (args.list) {
@@ -93,61 +154,16 @@ if (!VALID_STATUSES.includes(args.status)) {
   process.exit(1);
 }
 
-const today = new Date().toISOString().split('T')[0];
-
-// Update metadata.json
-const metaPath = resolve(__dirname, 'applications', args.id, 'metadata.json');
-if (!existsSync(metaPath)) {
-  console.error(`Application folder not found: applications/${args.id}`);
+let result;
+try {
+  result = setStatus(args.id, args.status);
+} catch (err) {
+  console.error(err.message);
   console.error('Run "node update-status.mjs --list" to see valid IDs.');
   process.exit(1);
 }
 
-const meta = readJson(metaPath);
-const prevStatus = meta.status;
-meta.status = args.status;
-meta.updatedAt = today;
-if (args.status === 'Applied' && !meta.appliedAt) {
-  meta.appliedAt = today;
-}
-writeJson(metaPath, meta);
-
-// Update data/applications.json
-const appsData = readJson(appsJsonPath);
-if (appsData) {
-  const entry = appsData.applications.find(a => a.id === args.id);
-  if (entry) {
-    entry.status = args.status;
-    entry.updatedAt = today;
-    if (args.status === 'Applied' && !entry.appliedAt) entry.appliedAt = today;
-    writeJson(appsJsonPath, appsData);
-  }
-}
-
-// Update data/applications.md (update the status column of the matching row)
-if (existsSync(appsMdPath)) {
-  let md = readFileSync(appsMdPath, 'utf-8');
-  // The markdown tracker uses the company name + role, not the ID.
-  // Match by company + role derived from metadata.
-  const company = meta.company;
-  const role = meta.jobTitle;
-  // Replace the status in the matching row — status is in column 6 (after Score)
-  // Row format: | # | Date | Company | Role | Score | Status | PDF | Report | Notes |
-  const lines = md.split('\n');
-  const updated = lines.map(line => {
-    if (!line.startsWith('|')) return line;
-    const cols = line.split('|').map(c => c.trim());
-    // cols[3] = Company, cols[4] = Role
-    if (cols[3] === company && cols[4] === role) {
-      cols[6] = ` ${args.status} `;
-      return cols.join('|');
-    }
-    return line;
-  });
-  writeFileSync(appsMdPath, updated.join('\n'));
-}
-
-console.log(`Status updated: ${prevStatus} → ${args.status}`);
+console.log(`Status updated: ${result.prevStatus} → ${args.status}`);
 console.log(`Application:    ${args.id}`);
 console.log(`Updated:        metadata.json, applications.json, applications.md`);
 
@@ -163,4 +179,5 @@ if (args.status === 'Interview') {
   console.log(`  applications/${args.id}/resume.md`);
   console.log(`  applications/${args.id}/cover-letter.md`);
   console.log('  interview-prep/story-bank.md');
+}
 }

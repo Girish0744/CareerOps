@@ -7,7 +7,29 @@ import StatusBadge, { ALL_STATUSES } from '@/components/StatusBadge';
 import ScoreBadge from '@/components/ScoreBadge';
 import DocIndicators from '@/components/DocIndicators';
 import type { ApplicationEntry } from '@/lib/filesystem';
-import { MapPin, Calendar, ExternalLink, Search, Briefcase, TrendingUp } from 'lucide-react';
+import { MapPin, Calendar, ExternalLink, Search, Briefcase, TrendingUp, Mail, X, Check } from 'lucide-react';
+
+interface SyncEntry {
+  messageId: string;
+  appId: string;
+  company: string;
+  jobTitle: string;
+  from: string;
+  subject: string;
+  date: string;
+  class: string;
+  current: string;
+  next: string | null;
+  reason?: string;
+}
+
+interface SyncResult {
+  mode: 'preview' | 'apply' | 'dismiss';
+  waitingCount: number;
+  scanned: number;
+  updates: SyncEntry[];
+  review: SyncEntry[];
+}
 
 function timeValue(value?: string | null) {
   if (!value) return 0;
@@ -20,6 +42,20 @@ function formatDateTime(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString('en-CA', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+/** Email timestamps carry the weekday: "did this arrive Friday?" is the question. */
+function formatEmailDate(value?: string | null) {
+  if (!value) return 'No date';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-CA', {
+    weekday: 'short',
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -41,6 +77,9 @@ export default function ApplicationsPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
+  const [sync, setSync] = useState<SyncResult | null>(null);
+  const [syncBusy, setSyncBusy] = useState<null | 'preview' | 'apply' | 'dismiss' | 'resolve'>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/applications')
@@ -48,6 +87,64 @@ export default function ApplicationsPage() {
       .then((data: ApplicationEntry[]) => { setApps(data); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
+
+  /** Apply or ignore specific messages without re-reading the mailbox. */
+  async function resolveEntries(apply: SyncEntry[], dismiss: SyncEntry[]) {
+    const ids = new Set([...apply, ...dismiss].map(e => e.messageId));
+    setSyncBusy('resolve');
+    setSyncError(null);
+    try {
+      const res = await fetch('/api/inbox/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'resolve', apply, dismiss }),
+      });
+      const data = await res.json() as { skipped?: Array<{ reason: string; company: string }>; error?: string };
+      if (!res.ok) throw new Error(data.error ?? 'Could not save that decision');
+      if (data.skipped?.length) {
+        setSyncError(data.skipped.map(s => `${s.company}: ${s.reason}`).join('\n'));
+      }
+      // Drop the handled rows; close the panel once nothing is left.
+      setSync(prev => {
+        if (!prev) return prev;
+        const updates = prev.updates.filter(u => !ids.has(u.messageId));
+        const review = prev.review.filter(r => !ids.has(r.messageId));
+        return updates.length === 0 && review.length === 0 ? null : { ...prev, updates, review };
+      });
+      if (apply.length > 0) setApps(await (await fetch('/api/applications')).json());
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSyncBusy(null);
+    }
+  }
+
+  async function runSync(mode: 'preview' | 'apply' | 'dismiss') {
+    setSyncBusy(mode);
+    setSyncError(null);
+    try {
+      const res = await fetch('/api/inbox/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, days: 45 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Inbox sync failed');
+      if (mode === 'preview') {
+        setSync(data as SyncResult);
+      } else {
+        // Applying rewrote statuses; dismissing only silenced the messages.
+        setSync(null);
+        if (mode === 'apply') {
+          setApps(await (await fetch('/api/applications')).json());
+        }
+      }
+    } catch (err) {
+      setSyncError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSyncBusy(null);
+    }
+  }
 
   const filtered = apps
     .filter(a => filter === 'All' || a.status === filter)
@@ -88,11 +185,141 @@ export default function ApplicationsPage() {
             {apps.length} application{apps.length !== 1 ? 's' : ''} tracked
           </p>
         </div>
-        <Link href="/"
-          className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors shadow-sm self-start sm:self-auto">
-          <Briefcase className="w-4 h-4" /> Evaluate New Job
-        </Link>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => runSync('preview')}
+            disabled={syncBusy !== null}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-xl hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-60 disabled:cursor-not-allowed">
+            <Mail className={`w-4 h-4 ${syncBusy === 'preview' ? 'animate-pulse' : ''}`} />
+            {syncBusy === 'preview' ? 'Reading inbox...' : 'Check inbox'}
+          </button>
+          <Link href="/"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-xl hover:bg-slate-700 transition-colors shadow-sm">
+            <Briefcase className="w-4 h-4" /> Evaluate New Job
+          </Link>
+        </div>
       </div>
+
+      {syncError && (
+        <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm font-medium text-red-800">Inbox sync failed</p>
+          <pre className="mt-1 text-xs text-red-700 whitespace-pre-wrap font-mono">{syncError}</pre>
+        </div>
+      )}
+
+      {/* Inbox sync results — nothing is written until a button here is clicked. */}
+      {sync && (
+        <div className="mb-8 rounded-xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-slate-100">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">Inbox check</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {sync.scanned} new message{sync.scanned !== 1 ? 's' : ''} across {sync.waitingCount} application
+                {sync.waitingCount !== 1 ? 's' : ''} awaiting a reply
+              </p>
+            </div>
+            <button onClick={() => setSync(null)} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          {sync.updates.length === 0 && sync.review.length === 0 && (
+            <p className="px-5 py-6 text-sm text-slate-500">No recruiter replies matched. Nothing to change.</p>
+          )}
+
+          {sync.updates.length > 0 && (
+            <div className="px-5 py-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3">
+                Proposed status changes
+              </p>
+              <div className="space-y-3">
+                {sync.updates.map(u => (
+                  <div key={u.messageId} className="rounded-lg border border-slate-200 px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-slate-900">{u.company}</span>
+                          <span className="text-sm text-slate-500">{u.jobTitle}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <StatusBadge status={u.current} />
+                          <span className="text-slate-400 text-xs">&rarr;</span>
+                          {u.next && <StatusBadge status={u.next} />}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() => resolveEntries([u], [])}
+                          disabled={syncBusy !== null}
+                          title="Apply this status change"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-slate-900 text-white text-xs font-medium rounded-lg hover:bg-slate-700 transition-colors disabled:opacity-40">
+                          <Check className="w-3.5 h-3.5" /> Apply
+                        </button>
+                        <button
+                          onClick={() => resolveEntries([], [u])}
+                          disabled={syncBusy !== null}
+                          title="Ignore this email — no status change"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-40">
+                          <X className="w-3.5 h-3.5" /> Ignore
+                        </button>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-xs text-slate-500 truncate">
+                      &ldquo;{u.subject}&rdquo; &middot; {u.from}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-400">{formatEmailDate(u.date)}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {sync.review.length > 0 && (
+            <div className="px-5 py-4 border-t border-slate-100">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-3">
+                Needs your eyes ({sync.review.length}) — no change proposed
+              </p>
+              <div className="space-y-2.5">
+                {sync.review.map(r => (
+                  <div key={r.messageId} className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 text-xs text-slate-600">
+                      <span className="font-medium text-slate-800">{r.company}</span>
+                      {r.reason && <span className="text-slate-400"> · {r.reason}</span>}
+                      <p className="text-slate-500 truncate">&ldquo;{r.subject}&rdquo; · {r.from}</p>
+                      <p className="text-slate-400">{formatEmailDate(r.date)}</p>
+                    </div>
+                    <button
+                      onClick={() => resolveEntries([], [r])}
+                      disabled={syncBusy !== null}
+                      title="Ignore this email"
+                      className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-200 text-slate-600 text-xs font-medium rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-40 shrink-0">
+                      <X className="w-3.5 h-3.5" /> Ignore
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(sync.updates.length > 0 || sync.review.length > 0) && (
+            <div className="flex items-center gap-2 px-5 py-4 bg-slate-50 border-t border-slate-100">
+              <button
+                onClick={() => runSync('apply')}
+                disabled={syncBusy !== null || sync.updates.length === 0}
+                className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                {syncBusy === 'apply' ? 'Applying...' : `Apply all ${sync.updates.length}`}
+              </button>
+              <button
+                onClick={() => resolveEntries([], [...sync.updates, ...sync.review])}
+                disabled={syncBusy !== null}
+                className="px-4 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-40">
+                {syncBusy === 'resolve' ? 'Saving...' : 'Ignore all'}
+              </button>
+              <p className="text-xs text-slate-500 ml-auto">Nothing is saved until you choose.</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stats row */}
       {apps.length > 0 && (

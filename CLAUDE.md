@@ -425,6 +425,7 @@ This project has been customized into a personal job application command center 
 | 22 | Recent-first discovery — Eluta Canada adapter, 24h freshness mode, role-priority ranking, manual job-alert import | ✅ Complete |
 | 23 | Review-state tracking — scan cards track New, Viewed, Evaluated, Docs Ready, Applied, and Archived states; Applications sort by latest activity timestamps | ✅ Complete |
 | 24 | Resume format lock — `templates/cv-template.html` is the final visual format for generated resume PDFs; future work should improve tailored content without editing the template unless explicitly requested | ✅ Complete |
+| 25 | Gmail status sync — `gmail-sync.mjs` reads INBOX over IMAP, matches replies to waiting applications, and moves status forward; autopilot runs it and reports replies first in the briefing | ✅ Complete |
 | 18 | **Expanded portals, next batch** — grow from 19 → 150+ companies; add Workday/Teamtailor/BambooHR providers | 🔜 Next |
 | 19 | **Email job alerts** — diff scan queue after run; new jobs ≥ threshold → Resend API digest email | 🔜 After 18 |
 | 16 | **Settings / Profile page** — `/settings`: edit `profile.yml` and `portals.yml` from browser | 🔜 After 19 |
@@ -460,6 +461,44 @@ Only the email **body** is model-written, via `POST /api/applications/{id}/apply
 The draft is saved to `applications/{id}/apply-email.json` and surfaced in the Application Detail **Apply** tab with copy buttons and a mailto link. **Nothing is ever sent automatically** — Girish attaches the PDFs and clicks send.
 
 QA: `npm run email:qa` (`test-apply-email.mjs`, 21 checks, no Gemini calls).
+
+### Gmail Status Sync (added 2026-08-01)
+
+`gmail-sync.mjs` closes the loop that ended at "Applied": it reads recruiter replies and moves application status forward without manual tracking.
+
+**Auth is IMAP + a Google App Password** (`GMAIL_USER`, `GMAIL_APP_PASSWORD` in `.env`), not Gmail API OAuth — two env vars instead of a Google Cloud project. The mailbox lock is `readOnly`, so the script cannot send, delete, move, or flag mail. Deps: `imapflow` + `mailparser`, both dynamically imported so the pure logic stays testable without them.
+
+**Only applications in `Applied`, `In Progress`, or `Interview` are candidates** — everything else is pre-send or terminal. The IMAP lookback starts at the oldest waiting application's `appliedAt` minus a day.
+
+**Matching is sender-first.** The first live run (497 messages) proved that body-text company matching is worthless on a personal inbox — newsletters, Meetup blasts and friends' emails mention company names constantly, and it produced ~11 bogus status changes plus 80 noise rows. Three rules fixed it, and each has a regression test built from a real false positive:
+
+1. **Bulk headers are disqualifying.** `List-Unsubscribe`, `List-Id`, `List-Post`, `Precedence: bulk`, `Auto-Submitted` → skip. Marketing announces itself; a human recruiter reply does not. This is the single highest-leverage filter.
+2. **The sender domain carries the match.** Freemail senders (`gmail.com`, `outlook.com`, …) never match — a reply about an application comes from the employer or their ATS. Company names are compared against whole domain **labels**, never substrings: `td.com` matches TD, `email-td.com` and `wealthsimple.com` (vs "Aviso Wealth") do not.
+3. **Body text is corroboration, not evidence.** Word-boundary only, and names under 4 chars never match on text at all — `haystack.includes("ey")` hits *money, survey, they*. ATS senders are the sole exception, since their domain names the vendor: there the company must appear in subject/body.
+
+Job-title words only break ties between two openings at one company; an unresolved tie returns `null`. Matched mail that is neither classifiable nor job-shaped (`APPLICATION_WORDS`) is dropped rather than surfaced, so an Amazon order confirmation from `amazon.ca` stays out of the review list.
+
+**One proposal per application.** A thread yields several messages ("thanks for chatting", then a rejection); they are sorted by date and only the newest counts. Older ones are recorded as `superseded` so they are not re-read.
+
+**Classification is regex-first and order-dependent:** rejection patterns are tested before interview patterns, because "thank you for taking the time to interview … unfortunately" is a rejection. Take-homes and coding challenges map to `In Progress`, not `Interview`. Auto-acknowledgements map to no status change at all. When ack and interview signals both fire, confidence drops to `low`.
+
+**Only high-confidence, forward transitions are auto-applied.** `Rejected`/`Offer`/`Withdrawn` are terminal and never overwritten; `Interview` never falls back to `In Progress`. Everything else lands in the review list. An optional single batched Gemini call classifies what the patterns could not — it is fail-soft, and its results are always marked `low` confidence, so AI output is proposed to a human and never written unattended.
+
+Default run is a **dry run**; `--apply` writes through `setStatus()` (exported from `update-status.mjs`, which keeps all three data stores in sync). `--dismiss` records the same messages as handled **without changing any status** — the escape hatch for a correctly-matched email that needs no action, which a dry run would otherwise re-surface forever. It silences those message ids only; a later reply in the same thread is a new id and still gets processed.
+
+State lives in gitignored `data/inbox-sync.json` and stores only message id, date, sender, subject, app id, and class — **never body text**. `statePath` is injectable so QA never touches the real file.
+
+The autopilot runs it first (`config/autopilot.yml` → `sync_inbox`, or `--no-inbox` to skip) and puts replies at the top of the WhatsApp briefing, since a scheduling request outranks any new posting. Inbox failures are logged and never block the package run.
+
+**In the frontend:** the **Check inbox** button on `/applications` posts to `/api/inbox/sync` with `{ mode, days }`. The route **spawns** `node gmail-sync.mjs --json` rather than importing it — `imapflow`/`mailparser` are server-only deps that would otherwise need bundler exemptions, and the script already speaks `--json` (same approach as `/api/scan/run`).
+
+`mode: 'preview'` reads the mailbox and writes nothing. Each row in the results panel shows the email's **weekday, date and time** and carries its own **Apply** / **Ignore** buttons; `Apply all` / `Ignore all` remain at the bottom.
+
+Per-row actions post `mode: 'resolve'` with `apply[]` / `dismiss[]` entry arrays, which routes to `resolveMessages()` via a temp decisions file (`--resolve=<file>` — structured data, too awkward for argv). **This path never opens IMAP**, so a per-row click is instant instead of a 60s re-read. Entries have been through a browser, so nothing in them is trusted: the application is re-read from disk and `canTransition` is re-checked against its *current* status, so a stale panel cannot force an illegal change. Refused entries come back in `skipped[]` with a reason and are surfaced, not silently dropped.
+
+Handled rows disappear from the panel; the panel closes when empty. Applying refetches `/api/applications` so the table and stat tiles update.
+
+QA: `npm run gmail:qa` (`test-gmail-sync.mjs`, 43 checks, no IMAP, no Gemini, no writes).
 
 ### Resume Length: one-page or two-page (per application)
 
@@ -511,6 +550,7 @@ frontend/                        Next.js app — run with: cd frontend && npm ru
   app/api/scan/run/              POST — runs scan.mjs + bulk quick-scores
   app/api/scan/import/           POST — imports pasted job URLs or job-alert text
   app/api/scan/viewed/           POST — marks a scan card viewed without creating an application
+  app/api/inbox/sync/            POST — spawns gmail-sync.mjs; preview/apply/dismiss recruiter replies
   app/api/applications/[id]/contacts/  GET/POST — compliant contact leads + outreach drafts
   app/api/applications/[id]/apply/     GET/POST — human-reviewed apply-session fields + answers
   app/api/applications/[id]/apply/automate/  POST — visible Playwright assisted fill, stops before submit
@@ -548,6 +588,7 @@ Font paths in generated HTML use `../../fonts/` (relative to `applications/{id}/
 | Script | Usage |
 |--------|-------|
 | `new-application.mjs` | `node new-application.mjs --company="..." --role="..." [--url="..."] [--location="..."]` |
+| `gmail-sync.mjs` | `node gmail-sync.mjs [--apply|--dismiss] [--days=N] [--no-ai] [--json]` — read recruiter replies, propose/apply status changes |
 | `update-status.mjs` | `node update-status.mjs --id="..." --status="..."` — syncs metadata.json + applications.json + applications.md |
 | `update-status.mjs` | `node update-status.mjs --list` — list all application IDs |
 | `list-applications.mjs` | `node list-applications.mjs [--id="..."] [--open="..."]` |
@@ -566,6 +607,7 @@ npm run apply:qa       # apply form safety
 npm run docs:qa        # resume/cover-letter content layer (builder, verifier, trimmer, CL checks)
 npm run email:qa       # apply-by-email parsing (subject/recipient/RQ) + humanization checks
 npm run length:qa      # one-page/two-page resume length suggestion from the JD
+npm run gmail:qa       # inbox reply matching, classification, transition guard
 cd frontend && npm run build  # frontend compiles cleanly
 ```
 

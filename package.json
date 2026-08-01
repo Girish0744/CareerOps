@@ -17,6 +17,8 @@
     "scan": "node scan.mjs",
     "patterns": "node analyze-patterns.mjs",
     "gemini:eval": "node gemini-eval.mjs",
+    "gmail:sync": "node gmail-sync.mjs",
+    "gmail:qa": "node --no-warnings test-gmail-sync.mjs",
     "eval:qa": "node test-evaluation-guardrails.mjs",
     "scan:qa": "node --no-warnings test-scan-utils.mjs",
     "contacts:qa": "node --no-warnings test-contact-intel.mjs",
@@ -42,7 +44,9 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "dotenv": "^17.0.0",
+    "imapflow": "^1.6.5",
     "js-yaml": "^4.1.1",
+    "mailparser": "^3.9.14",
     "playwright": "^1.58.1"
   }
 }
