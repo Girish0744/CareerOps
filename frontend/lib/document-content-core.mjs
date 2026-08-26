@@ -667,6 +667,7 @@ export function normalizeResumeContent(raw, company = '') {
   // oer is pinned to the top rather than sorted. It is the primary technical
   // role, and the roles overlap in time, so a pure date sort would put the
   // volunteer role above it purely because it started four months later.
+  const employerKey = experienceKeyForEmployer(company);
   const orderedExperience = capExperienceEntries(
     asArray(source.experience)
       .map(entry => ({
@@ -674,12 +675,18 @@ export function normalizeResumeContent(raw, company = '') {
         bullets: asArray(entry?.bullets).map(sanitizeBullet).filter(Boolean),
       }))
       .filter(entry => EXPERIENCE_CATALOG[entry.key]),
-    experienceKeyForEmployer(company),
+    employerKey,
   );
+  // A posting FROM a past employer leads with that employer's own role: it is the
+  // one line on the resume no other candidate can write. oer follows it, and
+  // otherwise oer leads on its own.
+  const pinnedKeys = employerKey && employerKey !== PRIMARY_EXPERIENCE_KEY
+    ? [employerKey, PRIMARY_EXPERIENCE_KEY]
+    : [PRIMARY_EXPERIENCE_KEY];
   const experience = [
-    ...orderedExperience.filter(entry => entry.key === PRIMARY_EXPERIENCE_KEY),
+    ...pinnedKeys.flatMap(key => orderedExperience.filter(entry => entry.key === key)),
     ...sortChronologically(
-      orderedExperience.filter(entry => entry.key !== PRIMARY_EXPERIENCE_KEY),
+      orderedExperience.filter(entry => !pinnedKeys.includes(entry.key)),
       entry => EXPERIENCE_CATALOG[entry.key].dateRange,
     ),
   ];

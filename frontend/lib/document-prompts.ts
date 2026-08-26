@@ -55,7 +55,7 @@ const resumeContentSchema: Schema = {
     },
     experience: {
       type: Type.ARRAY,
-      description: 'Both fixed roles, bullets only (headers are fixed facts added by code).',
+      description: 'Exactly three roles: oer, kingdom, and ONE of olive-branch or home-depot. Bullets only; headers are fixed facts added by code.',
       items: {
         type: Type.OBJECT,
         required: ['key', 'bullets', 'reserveBullets'],
@@ -210,7 +210,7 @@ BULLET BUDGET (calibrated so the PDF fills exactly 2 pages): 3 projects x (1 sta
 
 RESERVE CONTENT (required — this is how page 2 gets FILLED to the bottom): code renders your content into the locked template, measures each page, and promotes reserve content to eliminate blank space. Page 2 (Projects onward) is filled hardest, so give generous, high-quality project reserves. Provide:
 - reserveBullets on EACH project: 3 additional truthful bullets ranked next-best (your 3rd, 4th, 5th choice for that project). Each must state a DIFFERENT master-CV fact and carry JD must-have keywords wherever the master CV genuinely supports them, so the promoted bullets keep the resume keyword-dense. These fill page 2 — do not hold back; a strong project can support 5 total bullets.
-- reserveBullets on BOTH experience entries (oer AND olive-branch): 1 additional bullet each from the master CV (skip only if the master CV truly has nothing more relevant).
+- reserveBullets on ALL THREE experience entries (oer, kingdom, and the slot-3 role): 1 additional bullet each from the master CV (skip only if the master CV truly has nothing more relevant).
 - reserveExtracurricular: the ONE best entry you did not select (ai-build-lab, mentor, or gdg) with its bullet.
 - reserveProfileSentence: one extra profile sentence adding a real capability not already stated.
 Reserve bullets must be full-quality standalone bullets, 15-30 words, metric-bearing where the sources support it, with varied leading verbs. Never pad, split, or rephrase an existing bullet — each reserve bullet states a DIFFERENT master-CV fact. Never fabricate to fill space: if a project genuinely has no more truthful facts, give fewer reserves rather than inventing.
@@ -283,14 +283,16 @@ If a JD-required skill is genuinely in the sources but missing from your rows, a
 ==========================
 EXPERIENCE (bullets only; headers are fixed by code)
 ==========================
-WHICH ROLES TO INCLUDE — EXACTLY TWO. NEVER THREE.
-Page 1 fits two roles. A third pushes Experience onto page 2 and Projects onto page 3, and the resume is rejected on length before anyone reads it.
-- Slot 1 is always oer (Data and Software Engineering Assistant), and code renders it FIRST regardless of dates: it is the primary technical role.
-- Slot 2 is a CHOICE, not an addition. Pick ONE:
-    olive-branch (Web and Tech Integration Specialist) — for software, web, full-stack, data and AI/ML roles where building is the job.
+WHICH ROLES TO INCLUDE — EXACTLY THREE. NEVER TWO, NEVER FOUR.
+Page 1 fits three roles. A fourth pushes Experience onto page 2 and Projects onto page 3, and the resume is rejected on length before anyone reads it. Returning only two wastes the strongest evidence on the page.
+- Slot 1 is always oer (Data and Software Engineering Assistant), and code renders it FIRST regardless of dates: it is the primary technical role. The one exception is a posting FROM a past employer, where code moves that employer's own role above oer.
+- Slot 2 is always kingdom (Software Developer, The Kingdom Group) — the current role. It is never optional and never dropped: a resume whose newest job ended months ago reads as unemployed.
+- Slot 3 is a CHOICE, not an addition. Pick ONE:
+    olive-branch (Full-Stack Developer, Web and Integrations) — for software, web, full-stack, data and AI/ML roles where building is the job.
     home-depot (Freight Associate and Trainer) — for client-facing support, service desk, operations, training, logistics and retail roles, and ALWAYS for a Home Depot posting. It is the candidate's only paid customer-facing role, so for those postings it is his strongest evidence.
 Choosing home-depot means DROPPING olive-branch, and choosing olive-branch means dropping home-depot. Listing both is a hard failure that code will reject.
-Bullets: 2 each by default (a 3rd only when strongly JD-relevant; code may promote a reserve bullet when page 1 renders short).
+Bullets: 2 each (oer may take a 3rd when strongly JD-relevant; code may promote a reserve bullet when page 1 renders short). olive-branch is capped at 2.
+Order is decided by code, not by the order you list them in: normally oer, kingdom, then the slot-3 role; on a posting from a past employer, that employer's role, then oer, then kingdom.
 
 WRITE EACH BULLET FROM THE JD, NOT FROM A TEMPLATE. Procedure, per bullet:
   1. Pick ONE requirement from this JD that this role can genuinely prove.

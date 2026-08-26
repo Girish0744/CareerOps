@@ -98,7 +98,7 @@ There is no dynamic resume theme or format selection. If a generated resume look
 2. Profile — max 4-sentence paragraph, no first-person wording
 3. Highlights of Qualifications — 5 bullets always
 4. Technical Skills — two-column table: **bold category** | skills list
-5. Professional Experience — OER role (3 bullets) + Olive Branch (2 bullets)
+5. Professional Experience — three roles: OER (3 bullets) + The Kingdom Group (2 bullets) + Olive Branch (2 bullets)
 6. Projects — start on page 2; 3 projects required, 4 optional only if space allows
 7. Education — degree, institution, location | dates
 8. Extracurricular Activities — 2 always + 1 optional
@@ -150,9 +150,11 @@ Profile starters by archetype (adapt, do not copy verbatim):
 - DA_BA: automation bullet → engagement/metrics bullet → HTML/CSS templates
 - SYSTEMS_CPP/CSHARP_DOTNET: automation bullet → open-source contribution → HTML/CSS templates
 
+**The Kingdom Group — always included, both bullets:** the current role. The React/Next.js site rebuild and the biweekly payroll automation for 30 workers. Never drop it: a resume whose newest job ended months ago reads as unemployed.
+
 **Olive Branch — both bullets (only 2 in master CV):** front-load JD-relevant one
 
-**Home Depot — DROP entirely** (not relevant to tech roles)
+**Home Depot — DROP entirely for tech roles.** Include it only for client-facing support, service, operations or retail postings, and always for a Home Depot posting, in which case it replaces Olive Branch rather than adding to it.
 
 ### Skills (Step 10)
 

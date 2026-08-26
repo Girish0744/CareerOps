@@ -3020,13 +3020,13 @@
       "id": "the-home-depot-business-analyst-2026-07-30",
       "company": "The Home Depot",
       "jobTitle": "Business Analyst",
-      "location": "Not specified",
+      "location": "Toronto Store Support Location",
       "resumeLocation": "Brampton, ON (Open to relocation)",
-      "resumeLength": null,
+      "resumeLength": "two-page",
       "jobUrl": null,
-      "status": "Applied",
-      "score": 74,
-      "fitLevel": "Apply",
+      "status": "Cover Letter Generated",
+      "score": 68,
+      "fitLevel": "Maybe",
       "applicationFolder": "applications/the-home-depot-business-analyst-2026-07-30",
       "resumePath": "applications/the-home-depot-business-analyst-2026-07-30/Girish_Bhuteja_Resume.pdf",
       "coverLetterPath": "applications/the-home-depot-business-analyst-2026-07-30/Girish_Bhuteja_Cover_Letter.pdf",
@@ -3034,13 +3034,13 @@
       "notesPath": "applications/the-home-depot-business-analyst-2026-07-30/notes.md",
       "reportPath": null,
       "createdAt": "2026-07-30T17:30:56.562Z",
-      "updatedAt": "2026-07-30T17:54:07.200Z",
-      "evaluatedAt": "2026-07-30T17:30:54.092Z",
-      "resumeGeneratedAt": "2026-07-30T17:42:49.084Z",
-      "coverLetterGeneratedAt": "2026-07-30T17:31:55.409Z",
-      "lastDocumentGeneratedAt": "2026-07-30T17:42:49.084Z",
+      "updatedAt": "2026-08-26T18:35:55.472Z",
+      "evaluatedAt": "2026-08-26T18:31:14.879Z",
+      "resumeGeneratedAt": "2026-08-26T18:31:50.552Z",
+      "coverLetterGeneratedAt": "2026-08-26T18:35:27.057Z",
+      "lastDocumentGeneratedAt": "2026-08-26T18:35:27.057Z",
       "appliedAt": "2026-07-30T17:54:07.200Z",
-      "lastActivityAt": "2026-07-30T17:54:07.200Z"
+      "lastActivityAt": "2026-08-26T18:35:55.472Z"
     },
     {
       "id": "manulife-associate-full-stack-software-engineer-2026-07-30",
@@ -3593,6 +3593,8 @@
       "company": "Cognizant",
       "jobTitle": "Junior Software Developer",
       "location": "Mississauga, ON",
+      "resumeLocation": null,
+      "resumeLength": null,
       "jobUrl": null,
       "status": "Ready to Apply",
       "score": null,
@@ -3605,7 +3607,12 @@
       "reportPath": null,
       "createdAt": "2026-08-26",
       "updatedAt": "2026-08-26",
-      "appliedAt": null
+      "evaluatedAt": null,
+      "resumeGeneratedAt": null,
+      "coverLetterGeneratedAt": null,
+      "lastDocumentGeneratedAt": null,
+      "appliedAt": null,
+      "lastActivityAt": "2026-08-26"
     }
   ]
 }

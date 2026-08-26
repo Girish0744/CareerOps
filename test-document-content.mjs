@@ -449,6 +449,22 @@ check('a Home Depot posting keeps the Home Depot role over the model ordering',
       { key: 'home-depot', bullets: twoBullets('hd') },
     ],
   }, 'The Home Depot').experience.some(entry => entry.key === 'home-depot'));
+const homeDepotPosting = normalizeResumeContent({
+  ...good.resume,
+  experience: [
+    good.resume.experience.find(entry => entry.key === 'oer'),
+    good.resume.experience.find(entry => entry.key === 'kingdom'),
+    { key: 'home-depot', bullets: twoBullets('hd') },
+  ],
+}, 'The Home Depot');
+check('a Home Depot posting leads with the Home Depot role, then oer, then kingdom',
+  homeDepotPosting.experience.map(entry => entry.key).join(',') === 'home-depot,oer,kingdom',
+  homeDepotPosting.experience.map(entry => entry.key).join(','));
+check('every other posting leads with oer, then kingdom, then olive-branch',
+  normalizeResumeContent(good.resume, 'Shopify').experience.map(entry => entry.key).join(',')
+    === 'oer,kingdom,olive-branch',
+  normalizeResumeContent(good.resume, 'Shopify').experience.map(entry => entry.key).join(','));
+
 check('a non-employer posting is untouched by the employer rule',
   !verifyResumeContent(normalizeResumeContent(good.resume), { company: 'Shopify' })
     .issues.some(issue => issue.code === 'experience-employer-missing'));
