@@ -35,7 +35,8 @@
       "Spearheaded 8+ projects with a passionate about attitude",
       "Built systems with Golang and Kubernetes",
       "Third highlight",
-      "Fourth highlight"
+      "Fourth highlight",
+      "Deployed 8+ full-stack and ML projects using Python, SQL, PostgreSQL, Docker, and AWS; all publicly available on GitHub"
     ],
     "skills": [
       {
@@ -67,7 +68,7 @@
     ],
     "projects": [
       {
-        "key": "zonalyze",
+        "key": "bestspot",
         "stack": "React",
         "bullets": [
           "Only one bullet"

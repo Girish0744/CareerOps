@@ -7,7 +7,7 @@
  * Only the email BODY is model-written.
  */
 
-import { BANNED_COVER_LETTER_PHRASES } from './document-content-core.mjs';
+import { BANNED_COVER_LETTER_PHRASES, findGraduationMention } from './document-content-core.mjs';
 
 // Trailing punctuation that regularly abuts an address in prose ("at a@b.com.").
 const EMAIL_PATTERN = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
@@ -217,6 +217,12 @@ export function verifyApplyEmailBody(body, options = {}) {
     return issues;
   }
 
+  const gradMention = findGraduationMention(text);
+  if (gradMention) {
+    push('graduation-mention', 'fix',
+      `email says "${gradMention}" — drop it; sell capability, not schooling`);
+  }
+
   const wordCount = text.split(/\s+/).length;
   if (wordCount < 60 || wordCount > 220) {
     push('word-count', 'fix', `body is ${wordCount} words; target 90-160`);
@@ -268,7 +274,7 @@ export function fallbackEmailBody(parsed, app = {}) {
     '',
     `I would like to be considered for the ${role}${ref} position${company}. My resume is attached.`,
     '',
-    'I am a computer science student at Conestoga College finishing in August 2026, and I have spent the last two years building and shipping real software projects alongside the degree. I would welcome the chance to talk through how that lines up with what you are looking for.',
+    'I hold a Bachelor of Computer Science from Conestoga College, and I have spent the last two years building and shipping real software projects alongside the degree. I would welcome the chance to talk through how that lines up with what you are looking for.',
     '',
     `Happy to share anything else that would help${contactBits ? `, and you can reach me at ${contactBits}` : ''}.`,
     '',

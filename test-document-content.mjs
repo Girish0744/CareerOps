@@ -23,6 +23,8 @@ import {
   sortChronologically,
   applyLengthBudget,
   experienceKeyForEmployer,
+  EDUCATION_ENTRY,
+  findGraduationMention,
 } from './frontend/lib/document-content-core.mjs';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -71,14 +73,38 @@ check('markdown includes fixed OER header + italic context note',
   && markdown.includes(`*${EXPERIENCE_CATALOG.oer.note}*`));
 
 check('markdown includes fixed project name, URL link, and date from catalog',
-  markdown.includes(`**${PROJECT_CATALOG.zonalyze.name}**`)
-  && markdown.includes('[github.com/Girish0744/Zonalyze](https://github.com/Girish0744/Zonalyze)')
-  && markdown.includes(PROJECT_CATALOG.zonalyze.dateRange));
+  markdown.includes(`**${PROJECT_CATALOG.bestspot.name}**`)
+  && markdown.includes('[bestspot.biz](https://bestspot.biz)')
+  && markdown.includes(PROJECT_CATALOG.bestspot.dateRange));
 
 check('markdown includes fixed education, awards, and certifications facts',
-  markdown.includes('GPA: 3.74/4.00; expected graduation August 2026')
+  markdown.includes('GPA: 3.76/4.00')
   && markdown.includes('**Narhari Sharma Memorial Award** | Conestoga College')
   && markdown.includes('AI Agents: Intensive Vibe Coding, Google & Kaggle'));
+
+
+// The resume never mentions graduation — past OR future tense. The model
+// reaches for both constantly, so the verifier has to catch them.
+for (const [label, sentence] of [
+  ['future tense', 'Computer Science Honours candidate graduating August 2026 with applied support experience.'],
+  ['past tense', 'Computer Science Honours graduate, graduated August 2026, with applied support experience.'],
+  ['student framing', 'Currently a student at Conestoga College with applied support experience.'],
+]) {
+  const result = verifyResumeContent({
+    ...goodContent,
+    profileSentences: [sentence, ...goodContent.profileSentences.slice(1)],
+  }, good.analysis);
+  check(`a graduation mention in the profile (${label}) is a fix-severity issue`,
+    result.issues.some(i => i.code === 'graduation-mention' && i.severity === 'fix' && i.section === 'profile'));
+}
+
+// "New Graduate Software Developer" is a real job title and must stay usable.
+check('the bare noun "graduate" in a role title is not flagged',
+  findGraduationMention('Applying for the New Graduate Software Developer role') === null);
+
+check('the education entry carries dates only, no graduation wording',
+  EDUCATION_ENTRY.dateRange === 'Sept 2022 - Aug 2026'
+  && !/graduat/i.test(`${EDUCATION_ENTRY.dateRange} ${EDUCATION_ENTRY.gpaBullet}`));
 
 const bulletLines = markdown.split('\n').filter(line => line.startsWith('- '));
 check('no bullet ends with a period and no em dashes anywhere',
@@ -87,8 +113,8 @@ check('no bullet ends with a period and no em dashes anywhere',
 
 const experienceSection = markdown.split('## Professional Experience')[1].split('## Projects')[0];
 const projectSection = markdown.split('## Projects')[1].split('## Education')[0];
-check('experience section has 2 bold entry headers, projects has 3',
-  (experienceSection.match(/^\*\*/gm) ?? []).length === 2
+check('experience section has 3 bold entry headers, projects has 3',
+  (experienceSection.match(/^\*\*/gm) ?? []).length === 3
   && (projectSection.match(/^\*\*/gm) ?? []).length === 3);
 
 const goodResult = verifyResumeContent(goodContent, good.analysis);
@@ -151,7 +177,10 @@ check('trim step 1 drops the 3rd extracurricular first', /extracurricular/.test(
 const step2 = trimResumeForOverflow(step1.content);
 check('trim step 2 trims the fattest project bullet', /project/.test(step2.action ?? ''), step2.action ?? 'null');
 const step3 = trimResumeForOverflow(step2.content);
-check('trim step 3 drops the 3rd OER bullet', /OER/.test(step3.action ?? ''), step3.action ?? 'null');
+check('trim step 3 drops the last highlight, the cheapest page-1 line',
+  /highlight/.test(step3.action ?? ''), step3.action ?? 'null');
+const step4 = trimResumeForOverflow(step3.content);
+check('trim step 4 drops the 3rd OER bullet', /OER/.test(step4.action ?? ''), step4.action ?? 'null');
 check('project bullet accounting matches builder output',
   countProjectBulletItems(step2.content) === countProjectBulletItems(step1.content) - 1);
 
@@ -228,7 +257,7 @@ check('page2 expansion step 3 adds a 5th coursework subject from the fixed catal
 
 const p2Step4 = expandResumeForUnderfill(p2Step3.content, 'page2');
 check('page2 expansion step 4 deep-fills another project bullet',
-  /project "zonalyze"/.test(p2Step4.action ?? '')
+  /project "bestspot"/.test(p2Step4.action ?? '')
   && p2Step4.content.projects[0].bullets.includes(RESERVE_PROJECT_2)
   && p2Step4.content.projects[0].bullets.length === 4,
   p2Step4.action ?? 'null');
@@ -326,7 +355,7 @@ for (const expectedCode of letters.badExpectedCodes) {
 
 // ── Experience selection + bullet quality ────────────────────────────────────
 
-// A third role pushed Experience to page 2 and Projects to page 3; the overflow
+// A fourth role pushes Experience to page 2 and Projects to page 3; the overflow
 // trimmer cannot recover from that because it only cuts bullets, never entries.
 const twoBullets = key => [
   `${key} bullet one serving 1,000+ users across three academic programs each term`,
@@ -336,17 +365,19 @@ const threeRoles = normalizeResumeContent({
   ...good.resume,
   experience: [
     { key: 'oer', bullets: twoBullets('oer') },
+    { key: 'kingdom', bullets: twoBullets('kg') },
     { key: 'olive-branch', bullets: twoBullets('ob') },
     { key: 'home-depot', bullets: twoBullets('hd') },
   ],
 });
-check('three roles are capped to two',
-  threeRoles.experience.length === 2, threeRoles.experience.map(e => e.key).join(', '));
+check('four roles are capped to three',
+  threeRoles.experience.length === 3, threeRoles.experience.map(e => e.key).join(', '));
 
 const supportRanked = normalizeResumeContent({
   ...good.resume,
   experience: [
     { key: 'oer', bullets: twoBullets('oer') },
+    { key: 'kingdom', bullets: twoBullets('kg') },
     { key: 'home-depot', bullets: twoBullets('hd') },
     { key: 'olive-branch', bullets: twoBullets('ob') },
   ],
@@ -356,10 +387,13 @@ check('the JD ranking decides which optional role survives, not the date order',
   && !supportRanked.experience.some(e => e.key === 'olive-branch'),
   supportRanked.experience.map(e => e.key).join(', '));
 
-check('a single role is flagged so the repair pass adds the second',
+check('the current software role is required, never optional',
+  EXPERIENCE_CATALOG.kingdom && EXPERIENCE_CATALOG.kingdom.required === true);
+
+check('two roles are flagged so the repair pass adds the third',
   verifyResumeContent(normalizeResumeContent({
     ...good.resume,
-    experience: [{ key: 'oer', bullets: twoBullets('oer') }],
+    experience: [{ key: 'oer', bullets: twoBullets('oer') }, { key: 'kingdom', bullets: twoBullets('kg') }],
   }), {}).issues.some(issue => issue.code === 'experience-count'));
 
 check('"Early-career" in the profile is rejected',
@@ -779,7 +813,10 @@ check('one-page is materially shorter than two-page',
   onePageMd.split(/\s+/).length < twoPageMd.split(/\s+/).length * 0.75,
   `one=${onePageMd.split(/\s+/).length} two=${twoPageMd.split(/\s+/).length}`);
 check('one-page budget still respects the two-role cap',
-  onePageContent.experience.length === 2);
+  onePageContent.experience.length === 2, onePageContent.experience.map(e => e.key).join(', '));
+check('the one-page pair is the two required roles',
+  onePageContent.experience.every(entry => EXPERIENCE_CATALOG[entry.key].required),
+  onePageContent.experience.map(e => e.key).join(', '));
 
 // ── Bullet substance (from a real weak Geotab resume) ────────────────────────
 

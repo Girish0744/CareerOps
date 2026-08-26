@@ -22,7 +22,7 @@
       "WebSocket",
       "AWS"
     ],
-    "projectRationale": "Zonalyze, AegisGrid, and MediTwin show end-to-end React plus API delivery matching the JD stack."
+    "projectRationale": "BestSpot, AegisGrid, and MediTwin show end-to-end React plus API delivery matching the JD stack."
   },
   "resume": {
     "profileSentences": [
@@ -31,7 +31,6 @@
       "Built a real-time business feasibility platform with WebSocket updates across 8 monitoring modules on live census data"
     ],
     "highlights": [
-      "Bachelor of Computer Science (Honours) candidate at Conestoga College with a 3.74 GPA, graduating August 2026; coursework includes Software Engineering, Data Structures and Algorithms, Database Systems, Cloud Computing",
       "Completed 2 co-op work terms at Conestoga College; converted from part-time to co-op based on performance and retained through departmental restructuring",
       "Deployed 8+ full-stack and ML projects using React, TypeScript, FastAPI, Python, PostgreSQL, AWS EC2, Docker, and Vercel; all publicly available on GitHub",
       "Built real-time WebSocket systems, containerised deployments with Docker Compose, and LLM-powered chat interfaces across multiple full-stack projects",
@@ -105,6 +104,13 @@
         ]
       },
       {
+        "key": "kingdom",
+        "bullets": [
+          "Delivered the company website end to end as the sole developer, owning design, build, content, and launch",
+          "Automated biweekly invoice and paystub generation for 30 workers, cutting a full day of manual preparation to minutes per cycle"
+        ]
+      },
+      {
         "key": "olive-branch",
         "bullets": [
           "Designed new React components and Node.js API routes for mentorship matching workflows, improving platform functionality and user engagement",
@@ -114,7 +120,7 @@
     ],
     "projects": [
       {
-        "key": "zonalyze",
+        "key": "bestspot",
         "stack": "React, TypeScript, FastAPI, PostgreSQL, scikit-learn, WebSocket, Docker, LLM | Capstone (In Progress)",
         "bullets": [
           "Architected a full-stack business feasibility platform evaluating location viability across 26 business types in 552 Ontario municipalities using census and OpenStreetMap data",

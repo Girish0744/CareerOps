@@ -193,15 +193,15 @@ Then write the "resume" object using the rules below. The master resume is a lib
 ==========================
 PROJECT SELECTION (exactly 3, by archetype default)
 ==========================
-SWE_FULLSTACK: zonalyze, careerops, aegisgrid
-AI_ML: zonalyze, ethos, careerops
-DA_BA: zonalyze, dropout-analysis, ethos
-DATA_ENGINEER: zonalyze, ethos, dropout-analysis
-BACKEND_JAVA_SYSTEMS: medinet, telemetry, zonalyze
-SYSTEMS_CPP: telemetry, medinet, zonalyze
-CSHARP_DOTNET: medinet, dineease, zonalyze
-HELPDESK_IT: zonalyze, careerops, meditwin
-GENERAL: zonalyze, careerops, ethos
+SWE_FULLSTACK: bestspot, careerops, aegisgrid
+AI_ML: bestspot, ethos, careerops
+DA_BA: bestspot, dropout-analysis, ethos
+DATA_ENGINEER: bestspot, ethos, dropout-analysis
+BACKEND_JAVA_SYSTEMS: medinet, telemetry, bestspot
+SYSTEMS_CPP: telemetry, medinet, bestspot
+CSHARP_DOTNET: medinet, dineease, bestspot
+HELPDESK_IT: bestspot, careerops, meditwin
+GENERAL: bestspot, careerops, ethos
 careerops (CareerOps - AI Job Application Platform) is a flagship full-stack AI project: Next.js/React/TypeScript/Node.js web app, a Gemini-powered document-generation pipeline with deterministic verification guardrails, Playwright PDF automation, an ATS-API job scanner, and scheduled batch automation. STRONGLY prefer it for software developer, full-stack, AI/ML application, applied-AI, automation, developer-tooling, and platform/SaaS roles. It is truthful to describe it as extended from an open-source base — never claim sole authorship of the entire upstream; the web app, AI pipeline, verification layer, automation, and Canadian job sourcing are the candidate's own work.
 Swap one default out only when a different project clearly matches the JD better (e.g. analytics roles prefer data projects over web-only projects). For each project: stack line front-loads JD-relevant tech; then 2-3 content bullets, metric-bearing first, each ${bulletWords}, reconstructed from master-CV facts. Never merge two separate facts into one mega-bullet.
 PROJECT BULLETS FOLLOW THE SAME FORMULA AS EXPERIENCE: strong verb + what was built + the scale or hard part + the result. A project bullet must show engineering judgement, not just that the project exists. State what made it difficult (the data was unreliable, the protocol had to be defensive, the queue had duplicates) and what the build achieved. Never end a project bullet on a stapled JD phrase such as "to enforce software development" — end on the outcome or the number.
@@ -218,25 +218,26 @@ Reserve bullets must be full-quality standalone bullets, 15-30 words, metric-bea
 ==========================
 PROFILE (3-4 sentences, impersonal resume voice)
 ==========================
-- Sentence 1: LEAD WITH VALUE, not credentials — role-relevant identity + strongest JD-relevant capabilities + 3-4 tools. Never open with degree, GPA, school, or graduation date (those live in Highlights and Education).
+- Sentence 1: LEAD WITH VALUE, not credentials — role-relevant identity + strongest JD-relevant capabilities + 3-4 tools. Never open with degree, GPA, or school (those live in Highlights and Education). Never state a graduation date anywhere — the Education entry carries the date range and nothing else.
 - THE FIRST TWO WORDS DECIDE WHETHER THE RESUME GETS READ. Open with the professional identity this JD is hiring for, taken from the JD's own job title and language: "Software Developer with...", "IT Support Technician with...", "Computer Systems Technologist with...", "Technical Support Analyst with...". Mirror the posting's title where it is truthful.
 - NEVER label the candidate as a beginner. Banned openers (code rejects them): "early-career", "early career", "aspiring", "entry-level", "recent graduate", "junior", "emerging", "budding", "motivated student". A resume that announces inexperience in its first three words is discarded before the evidence is read, and the evidence here is strong.
 - This is NOT permission to invent seniority. Never state a number of years of experience, and never claim a job title he has not held. State WHAT HE DOES, not how long he has done it: the function is truthful, a fabricated tenure is not.
+- REQUIRED: the posting's exact job title must appear verbatim somewhere in these sentences. Recruiters search their ATS on that literal string, and a resume that never contains it does not come back in the search. Work it into sentence 1 where that reads naturally ("Data Analyst with..."), otherwise state the target plainly in the closing sentence. Describing the target role is truthful; claiming to have HELD it is not, so keep it as what he is applying for, never as past experience. If code has to append this sentence itself, the resume reads worse — put it in.
 - Sentence 2: mirror the JD's top responsibility in the candidate's own words.
 - Sentence 3: one concrete project fact or capability connecting to the JD's domain or the company's industry.
 - Optional sentence 4 only if it adds a real capability.
 - CORRECT: "Data-focused developer with applied experience in data analysis, stakeholder engagement, and translating complex datasets into actionable business insights."
-- WRONG: "Computer Science Honours candidate (3.74 GPA) graduating August 2026 with experience in..."
-- Never use the candidate's name, he/his/him, I/my/we, "proven track record", "expertise in", "adept at", "possesses", "leveraging". Say "applied experience" or "project experience", never "expertise" — this candidate graduates August 2026.
+- WRONG: "Computer Science Honours graduate (3.76 GPA) with experience in..."
+- Never use the candidate's name, he/his/him, I/my/we, "proven track record", "expertise in", "adept at", "possesses", "leveraging". Say "applied experience" or "project experience", never "expertise" — this candidate’s evidence comes from co-op terms and shipped projects, not years in industry.
 - The profile must not repeat facts stated in Highlights or Education. It sells capabilities in JD language found nowhere else on the resume.
 - If the company is not pure tech, connect real experience to the industry honestly ("applied experience in data analysis, workflow automation, and stakeholder engagement") without claiming domain experience the candidate lacks.
 
 ==========================
-HIGHLIGHTS (exactly 5 bullets)
+HIGHLIGHTS (exactly 4 bullets)
 ==========================
-1 (always): "Bachelor of Computer Science (Honours) candidate at Conestoga College with a 3.74 GPA, graduating August 2026; coursework includes [4-5 most JD-relevant from the coursework list]"
-2 (always): "Completed 2 co-op work terms at Conestoga College; converted from part-time to co-op based on performance and retained through departmental restructuring"
-3 (by archetype — 6-8 tools, prioritize tools in the JD):
+1 (always): "Completed 2 co-op work terms at Conestoga College; converted from part-time to co-op based on performance and retained through departmental restructuring"
+NEVER put the degree, the school, or the GPA in Highlights. The Education section already states all three, and repeating them burns a line that JD-relevant evidence needs. This is a hard rule, not a preference.
+2 (by archetype — 6-8 tools, prioritize tools in the JD):
    DA_BA: "Deployed 8+ full-stack and ML projects using Python, SQL, PostgreSQL, AWS (Athena/S3/EC2), Docker, and Power BI; all publicly available on GitHub"
    AI_ML/GENERAL: same pattern with Python, scikit-learn, MLflow, AWS EC2, Docker, React
    SWE_FULLSTACK: same pattern with React, TypeScript, FastAPI, Python, PostgreSQL, AWS EC2, Docker, Vercel
@@ -245,7 +246,7 @@ HIGHLIGHTS (exactly 5 bullets)
    SYSTEMS_CPP: C++, C#, Python, SQL Server, AWS EC2, Docker, React
    CSHARP_DOTNET: C#, SQL Server, Python, FastAPI, React, AWS EC2, Docker, MSTest
    HELPDESK_IT: Python, SQL, React, FastAPI, Docker, AWS
-4 (by archetype — strongest matching evidence):
+3 (by archetype — strongest matching evidence):
    DA_BA/DATA_ENGINEER: "Analyzed 4,400+ student records across two real-world datasets applying IQR-based outlier detection and multi-variable correlation analysis to generate institutional recommendations"
    AI_ML/GENERAL: "Built ML pipelines with scikit-learn, MLflow, and Random Forest, achieving 94.9% classification accuracy on real NASA Kepler telescope data"
    SWE_FULLSTACK: "Built real-time WebSocket systems, containerised deployments with Docker Compose, and LLM-powered chat interfaces across multiple full-stack projects"
@@ -253,9 +254,9 @@ HIGHLIGHTS (exactly 5 bullets)
    SYSTEMS_CPP: "Implemented a 7-type binary packet protocol and 5-state server lifecycle state machine with Stop-and-Wait ACK, achieving 32 passing tests and a byte-exact 1 MB file transfer"
    CSHARP_DOTNET: "Wrote 85+ MSTest methods across unit, integration, and system tiers covering patient workflows, billing calculations, and server connectivity for complex multi-role systems"
    HELPDESK_IT: "Deployed 8+ accessible web platforms and interactive learning objects using HTML, CSS, WordPress, and Power Automate, supporting 1,000+ students across Business and Health Sciences"
-5 (always): "Lead for the NASA International Space Apps Challenge 2026; Narhari Sharma Memorial Award recipient (April 2026) and IT Club President coordinating hackathons and mentorship for 100+ students"
-Bullet 5 leads with NASA deliberately: it is the token a recruiter's eye stops on when skimming page 1. Keep it first in the sentence, keep the bullet short, and never drop it. The event runs in November 2026, so never attach attendance numbers, sponsors raised, or any completed outcome to it. Never phrase it as employment by NASA; it is a NASA-sponsored, locally organized event that he leads for the Waterloo site.
-Leadership appears in bullet 5 — do NOT repeat it in the profile or extracurricular bullets.
+4 (always): "Lead for the NASA International Space Apps Challenge 2026; Narhari Sharma Memorial Award recipient (April 2026) and IT Club President coordinating hackathons and mentorship for 100+ students"
+Bullet 4 leads with NASA deliberately: it is the token a recruiter's eye stops on when skimming page 1. Keep it first in the sentence, keep the bullet short, and never drop it. The event runs in November 2026, so never attach attendance numbers, sponsors raised, or any completed outcome to it. Never phrase it as employment by NASA; it is a NASA-sponsored, locally organized event that he leads for the Waterloo site.
+Leadership appears in bullet 4 — do NOT repeat it in the profile or extracurricular bullets.
 
 ==========================
 SKILLS (exactly 5 rows; reorder rows after Languages so the most JD-relevant category comes first; only skills present in the sources)
@@ -332,7 +333,7 @@ Each bullet: ${bulletWords}, third person with no pronouns, a strong verb that i
 ==========================
 EXTRACURRICULAR AND COURSEWORK
 ==========================
-extracurricular: nasa-space-apps and it-club always (1 bullet each stating a DIFFERENT fact than Highlights bullet 5 — what was done, who it served, what was produced). For nasa-space-apps write the operational detail (venue, sponsorship, mentor/judge recruitment, volunteer coordination) since Highlights bullet 5 already carries the selection itself; keep it forward-looking, never a completed outcome. Add a 3rd (hackthebrain for operations/event roles, ai-build-lab for AI/tech roles, mentor for engagement roles, gdg for community roles) ONLY with the standard 9-item project budget.
+extracurricular: nasa-space-apps and it-club always (1 bullet each stating a DIFFERENT fact than Highlights bullet 4 — what was done, who it served, what was produced). For nasa-space-apps write the operational detail (venue, sponsorship, mentor/judge recruitment, volunteer coordination) since Highlights bullet 4 already carries the selection itself; keep it forward-looking, never a completed outcome. Add a 3rd (hackthebrain for operations/event roles, ai-build-lab for AI/tech roles, mentor for engagement roles, gdg for community roles) ONLY with the standard 9-item project budget.
 educationCoursework: pick 4-5 most JD-relevant from: ${ALLOWED_COURSEWORK.join(', ')}.
 
 ==========================
@@ -575,9 +576,9 @@ This is where letters go wrong most often: a technology company hiring a client-
 
 Girish's non-technical evidence is genuinely strong and often under-used: Home Depot Associate Trainer (customer-facing retail under pressure, mentored 10+ associates, subject matter expert), HackTheBrain participant operations (250+ attendees, onboarding, escalation, coordination), IT Club President (workshops and mentorship for 100+ students), Student Experience Mentor, and Open Education support for 1,000+ students and faculty. IMPORTANT: only use any of these if that experience actually appears in the TAILORED RESUME below.
 
-Data analyst: Zonalyze, Student Dropout Risk Analysis, ETHOS, Power Automate, SQL, data interpretation, decision support.
-Software/full-stack: Zonalyze, AegisGrid, MediTwin, Olive Branch, React, FastAPI, full-stack delivery, deployment.
-AI/ML: ETHOS, Zonalyze, MLflow, scikit-learn, model comparison, data cleaning, deployed ML workflows.
+Data analyst: BestSpot, Student Dropout Risk Analysis, ETHOS, Power Automate, SQL, data interpretation, decision support.
+Software/full-stack: BestSpot, AegisGrid, MediTwin, Olive Branch, React, FastAPI, full-stack delivery, deployment.
+AI/ML: ETHOS, BestSpot, MLflow, scikit-learn, model comparison, data cleaning, deployed ML workflows.
 Client-facing support / service desk: Home Depot trainer and SME, Open Education support for 1,000+ users, HackTheBrain participant operations, IT Club mentoring, troubleshooting, documentation, escalation, working a queue under time pressure.
 Leadership/program: IT Club, HackTheBrain, AI Build Lab, mentorship, event coordination.
 Business/operations: Home Depot, Open Education, Student Ambassador, process improvement, training, communication.

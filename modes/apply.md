@@ -72,7 +72,7 @@ For each question, generate the response following:
 3. **"I'm choosing you" tone**: Same auto-pipeline framework
 4. **Specificity**: Reference something specific from the JD visible on screen
 5. **career-ops proof point**: Include in "Additional info" if there is a field for it
-6. **Natural voice**: Keep it concise and human. Prefer specific examples like Zonalyze, ETHOS, AegisGrid, MediTwin, OER tools, MediNet+, TelemetryDownloader, Student Dropout Risk Analysis, IT Club/community leadership, or support/trainer experience when they fit the question. Do not use phrases like "perfect fit", "leverage", "dynamic team", or "I am passionate about".
+6. **Natural voice**: Keep it concise and human. Prefer specific examples like BestSpot, ETHOS, AegisGrid, MediTwin, OER tools, MediNet+, TelemetryDownloader, Student Dropout Risk Analysis, IT Club/community leadership, or support/trainer experience when they fit the question. Do not use phrases like "perfect fit", "leverage", "dynamic team", or "I am passionate about".
 
 ## Step 5B — Assisted fill
 

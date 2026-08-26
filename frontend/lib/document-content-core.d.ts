@@ -48,6 +48,8 @@ export interface ResumeAnalysis {
   niceToHaveKeywords?: string[];
   /** Target employer; set by the route so the verifier can require his own role there. */
   company?: string;
+  /** Exact posting title; recruiters search their ATS on it, so the profile must state it. */
+  jobTitle?: string;
 }
 
 export interface ContentIssue {
@@ -94,6 +96,17 @@ export declare function experienceKeyForEmployer(company: string): string;
 export declare function buildResumeMarkdown(content: ResumeContent, contact?: { name?: string }, length?: ResumeLengthOption): string;
 export declare function buildKeywordCoverage(content: ResumeContent, keywords: string[]): KeywordCoverageEntry[];
 export declare function countProjectBulletItems(content: ResumeContent): number;
+export declare function stripFabricatedSkills(
+  content: ResumeContent,
+): { content: ResumeContent; removed: string[] };
+
+export declare function profileHasJobTitle(content: ResumeContent, jobTitle: string): boolean;
+
+export declare function ensureJobTitleInProfile(
+  content: ResumeContent,
+  jobTitle: string,
+): { content: ResumeContent; added: boolean };
+
 export declare function verifyResumeContent(
   content: ResumeContent,
   analysis?: ResumeAnalysis,

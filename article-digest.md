@@ -6,19 +6,28 @@ Use this file for additional proof points, articles, case studies, and project n
 
 This proof-point library was refreshed from `Girish-Bhuteja-Master-Resume.docx` on 2026-06-17. Use it to pick job-specific evidence honestly. Do not invent metrics beyond what is listed here.
 
-### Zonalyze -- Business Feasibility Intelligence Platform
+### BestSpot -- Business Location Intelligence Platform
 
-- Built a full-stack business feasibility intelligence platform for entrepreneurs evaluating location viability across 26 business types in 552 Ontario municipalities.
-- Uses Statistics Canada 2021 Census data plus live OpenStreetMap competitor, transit, and commercial activity feeds.
-- Trained three Random Forest models on 50,000+ synthetic records derived from real census features:
+- Live at bestspot.biz. Four-person capstone team, eight months (Jan 2026 - Aug 2026), publicly demonstrated at the Conestoga Waterloo showcase in August 2026.
+- Answers "will this business work in this location?" by scoring viability for 26 business types across 552 Ontario municipalities and showing the evidence behind each score.
+- Girish's contribution: systems integration across the geospatial, prediction, and explanation layers; the data pipeline; and model training/evaluation.
+- Data pipeline transforming raw Statistics Canada CSD census files into a 45-feature model-ready dataset (cleaning, joins, feature engineering).
+- Three Random Forest models trained on 50,000 synthetic records derived from real census features:
   - Risk classifier: 88.14% accuracy.
   - Revenue regressor: R2 = 0.93.
-  - Feasibility score regressor: R2 = 0.99.
-- Built a data pipeline transforming raw Statistics Canada CSD files into 45-feature model-ready matrices.
-- Implemented WebSocket updates across 8 monitoring modules in under 2 seconds.
-- Added LLM-powered natural language scenario analysis and business insight Q&A.
-- Containerized the multi-service stack with Docker Compose.
-- Delivered investor-ready PDF export, scenario history, multi-scenario comparison, geospatial market context mapping, and token-based authentication.
+  - Feasibility regressor: near-perfect R2, reported as DIRECTIONAL ONLY. Do not put this number on a resume or in a cover letter. Synthetic training data means the score partly reflects the structure used to generate it. Girish has publicly taken this position; overclaiming it contradicts him.
+- Live OpenStreetMap competitor, transit, and commercial-activity feeds combined with 2021 Census demographics, giving each recommendation a traceable evidence trail.
+- LLM assistant answering scenario questions from the platform's own census, competitor, and model output as context. Describe as context-grounded, NOT as RAG or vector retrieval unless that is confirmed in the codebase.
+- WebSocket message bus broadcasting updates across 8 monitoring modules in under 2 seconds.
+- Stakeholder-ready PDF reports, multi-scenario comparison, geospatial market context mapping, token-based authentication, Docker Compose single-command deployment.
+- Available metrics: 26 business types, 552 municipalities, 45 features, 50,000 training records, 88.14% accuracy, R2 = 0.93, 8 modules, sub-2-second updates.
+
+### The Kingdom Group -- Software Developer (May 2026 - Present, Brampton, ON)
+
+- Rebuilt the company's single landing page into a full React and Next.js website as sole developer: marketing, client acquisition, completed-work showcase, and online quote requests.
+- Automated biweekly invoice and paystub generation for 30 workers, cutting a full day of manual preparation to minutes per cycle.
+- Available metrics: 30 workers, biweekly cycle, a full day of manual work reduced to minutes, sole developer, landing page rebuilt into a full site.
+- Stack for this role: React, Next.js. No traffic, lead-volume, or conversion figures exist; never state one.
 
 ### CareerOps -- AI Job Application Platform
 

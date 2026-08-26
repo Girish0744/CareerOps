@@ -343,7 +343,7 @@ Write one TSV file per evaluation to `batch/tracker-additions/{num}-{company-slu
 
 ## Personal Job Application Command Center
 
-This project has been customized into a personal job application command center for **Girish Bhuteja** (Cambridge, ON · graduating BCS Conestoga August 2026 · targeting AI/ML roles in Canada).
+This project has been customized into a personal job application command center for **Girish Bhuteja** (Brampton, ON · BCS Conestoga · targeting AI/ML roles in Canada).
 
 ### Product Goals
 

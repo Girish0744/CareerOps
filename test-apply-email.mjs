@@ -121,7 +121,7 @@ const GOOD_BODY = `Hi Neha,
 
 I would like to apply for the Product Manager - Junior role (RQ11356). My resume is attached.
 
-Most of my product experience comes from building Zonalyze, a zoning analysis tool I took from an idea to a working product used by real users. I owned the roadmap, talked to the people using it, and decided what shipped each week. I am finishing my computer science degree at Conestoga in August 2026.
+Most of my product experience comes from building BestSpot, a zoning analysis tool I took from an idea to a working product used by real users. I owned the roadmap, talked to the people using it, and decided what shipped each week. I am finishing my computer science degree at Conestoga in August 2026.
 
 Happy to walk through any of it. You can reach me at girishbhuteja07@gmail.com or 519-555-0123.
 

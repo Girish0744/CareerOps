@@ -9,7 +9,7 @@
 5. Detect company location → paper format: US/Canada → `letter`, rest of world → `a4`
 6. Select the most relevant projects using the Project Selection Matrix: 3 projects by default, 4 only if page 2 needs density and space allows
 7. Write the tailored profile paragraph (3-4 sentences, zero first-person)
-8. Build Highlights of Qualifications (always exactly 5 bullets)
+8. Build Highlights of Qualifications (always exactly 4 bullets)
 9. Select experience bullets by archetype
 10. Reorder skills within each category by JD relevance
 11. Select extracurricular entries (2 always + 1 optional)
@@ -45,12 +45,12 @@ Every tailored resume must include at least 3 projects. Use exactly 3 by default
 
 | Archetype | Projects to select |
 |-----------|-------------------|
-| SWE_FULLSTACK | Zonalyze, AegisGrid, MediTwin |
-| AI_ML | Zonalyze, ETHOS, AegisGrid |
-| DA_BA | Zonalyze, ETHOS, Student Dropout Risk Analysis |
-| SYSTEMS_CPP | TelemetryDownloader, MediNet+, Zonalyze |
-| CSHARP_DOTNET | MediNet+, DineEase, Zonalyze |
-| GENERAL | Zonalyze, ETHOS, AegisGrid |
+| SWE_FULLSTACK | BestSpot, AegisGrid, MediTwin |
+| AI_ML | BestSpot, ETHOS, AegisGrid |
+| DA_BA | BestSpot, ETHOS, Student Dropout Risk Analysis |
+| SYSTEMS_CPP | TelemetryDownloader, MediNet+, BestSpot |
+| CSHARP_DOTNET | MediNet+, DineEase, BestSpot |
+| GENERAL | BestSpot, ETHOS, AegisGrid |
 
 Optional 4th project guidance:
 - Full-stack/web: MediTwin or DineEase
@@ -65,7 +65,7 @@ For data analytics roles, choose analytics/data-related projects over unrelated 
 
 | Project | GitHub | Live |
 |---------|--------|------|
-| Zonalyze | https://github.com/Girish0744/Zonalyze | — |
+| BestSpot | https://bestspot.biz | — |
 | ETHOS | https://github.com/Girish0744/ETHOS-MLPROJECT | https://eth0s.online |
 | AegisGrid | https://github.com/Girish0744/AegisGrid | https://aegis-grid.vercel.app |
 | MediTwin | https://github.com/Girish0744/MediTwin | — |
@@ -129,9 +129,9 @@ Profile starters by archetype (adapt, do not copy verbatim):
 - SYSTEMS_CPP: "Software developer with hands-on experience building networked systems and protocol implementations in C++ using TCP/IP, binary packet design, and state machine architecture..."
 - CSHARP_DOTNET: "Software developer with hands-on experience building multi-role desktop applications in C# using Windows Forms, SQL Server, and TCP networking..."
 
-### Highlights of Qualifications (Step 8) — always exactly 5 bullets
+### Highlights of Qualifications (Step 8) — always exactly 4 bullets
 
-1. Education: "Bachelor of Computer Science (Honours) candidate at Conestoga College with a 3.74 GPA, graduating August 2026; coursework includes [4–5 JD-relevant subjects from: Software Engineering, OOP, Data Structures and Algorithms, Database Systems, Computer Networks, OS and Security, Cloud Computing, Big Data, AI and Machine Learning]"
+1. Delivery range (NEVER the degree, school, or GPA — Education states those): coursework may still be referenced from [4–5 JD-relevant subjects from: Software Engineering, OOP, Data Structures and Algorithms, Database Systems, Computer Networks, OS and Security, Cloud Computing, Big Data, AI and Machine Learning]"
 2. Co-op: "Completed 2 co-op work terms at Conestoga College; converted from part-time to co-op based on performance and retained through departmental restructuring"
 3. Deployment proof: "Deployed 8+ full-stack and ML projects using [6–8 JD-relevant tools from cv.md]; all publicly available on GitHub"
 4a. IF AI_ML or GENERAL: "Built ML pipelines with scikit-learn, MLflow, and Random Forest, achieving 94.9% classification accuracy on real NASA Kepler telescope data"
@@ -197,7 +197,7 @@ Never drop CIPS Ontario.
 - **Never fabricate** — every number and fact from cv.md exactly
 - **Vary action verbs** — never use the same action verb twice on the same page
 - **No AI filler**: no "passionate about", "excited to", "I believe", "team player", "detail-oriented", "innovative solutions", "fast-paced environment", "results-driven"
-- **Use "candidate"** not "holds" for the degree (graduation is future)
+- **The degree is complete** (conferred August 2026). Write "holds" / "graduate of", never "candidate", "pursuing", "expected", or any graduation date. The Education entry carries the date range Sept 2022 - Aug 2026 and nothing else.
 - Bullets are direct statements of fact and impact — no preamble, no hedging
 - JD keywords appear in context, not bolted on — if a bullet sounds forced, rewrite it
 
@@ -266,7 +266,7 @@ Use `templates/cv-template.html`. Replace every `{{...}}` placeholder:
     <div class="entry-right">September 2022 – August 2026</div>
   </div>
   <ul>
-    <li>GPA: 3.74/4.00; expected graduation August 2026</li>
+    <li>GPA: 3.76/4.00</li>
     <li>Relevant coursework: Software Engineering, Database Systems, Cloud Computing, Big Data, AI and Machine Learning</li>
   </ul>
 </div>

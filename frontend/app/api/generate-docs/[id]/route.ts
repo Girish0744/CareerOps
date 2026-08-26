@@ -19,6 +19,8 @@ import {
   normalizeResumeContent,
   buildResumeMarkdown,
   verifyResumeContent,
+  stripFabricatedSkills,
+  ensureJobTitleInProfile,
   trimResumeForOverflow,
   expandResumeForUnderfill,
   varyLeadingVerbs,
@@ -424,7 +426,7 @@ export async function POST(
 
   // company rides along on analysis so the verifier can require the candidate's
   // own role when the posting comes from an employer he already works for.
-  const analysis = { ...(parsedPayload.analysis ?? {}), company: app.company } as ResumeAnalysis & { projectRationale?: string; company?: string };
+  const analysis = { ...(parsedPayload.analysis ?? {}), company: app.company, jobTitle: app.jobTitle } as ResumeAnalysis & { projectRationale?: string; company?: string };
   let resumeContent: ResumeContent = normalizeResumeContent(parsedPayload.resume, app.company);
 
   // Verify → single targeted repair call when hard issues remain.
@@ -491,6 +493,27 @@ export async function POST(
     const finalCheck = verifyResumeContent(resumeContent, analysis, resumeLength);
     issues = finalCheck.issues;
     keywordCoverage = finalCheck.keywordCoverage;
+  }
+
+  // A fabricated skill must never ship. The verifier flags it, but a flagged issue
+  // only reports — the Home Depot AI Engineer resume (2026-08-01) went out with
+  // "Spring Boot" in its skills row and the tripwire sitting in remainingIssues.
+  // Strip it deterministically instead of trusting the repair pass to comply.
+  // Recruiters search their ATS by the exact posting title. The prompt asks for it in
+  // the opening sentence; this guarantees it lands even when the model skips it.
+  const titlePass = ensureJobTitleInProfile(resumeContent, app.jobTitle ?? '');
+  if (titlePass.added) {
+    resumeContent = titlePass.content;
+    debugLog('[generate-docs] posting title appended to profile:', app.jobTitle);
+  }
+
+  const skillStrip = stripFabricatedSkills(resumeContent);
+  if (skillStrip.removed.length > 0) {
+    resumeContent = skillStrip.content;
+    debugLog('[generate-docs] fabricated skills removed:', skillStrip.removed.join(', '));
+    const afterStrip = verifyResumeContent(resumeContent, analysis, resumeLength);
+    issues = afterStrip.issues;
+    keywordCoverage = afterStrip.keywordCoverage;
   }
 
   // Never block generation on residual issues — surface them instead.

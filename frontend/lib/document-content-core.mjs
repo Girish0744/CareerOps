@@ -21,10 +21,10 @@
 // ── Fixed candidate facts ────────────────────────────────────────────────────
 
 export const PROJECT_CATALOG = {
-  zonalyze: {
-    name: 'Zonalyze - Business Feasibility Intelligence Platform',
-    links: [{ label: 'github.com/Girish0744/Zonalyze', url: 'https://github.com/Girish0744/Zonalyze' }],
-    dateRange: 'Jan 2026 - Present',
+  bestspot: {
+    name: 'BestSpot - Business Location Intelligence Platform',
+    links: [{ label: 'bestspot.biz', url: 'https://bestspot.biz' }],
+    dateRange: 'Jan 2026 - Aug 2026',
   },
   careerops: {
     name: 'CareerOps - AI Job Application Platform',
@@ -84,6 +84,17 @@ export const EXPERIENCE_CATALOG = {
     maxBullets: 3,
     required: true,
   },
+  // Current software role. Required: a resume that ends its newest job in Aug 2026
+  // reads as unemployed, and the recruiter feedback was explicitly to add a third role.
+  kingdom: {
+    title: 'Software Developer',
+    company: 'The Kingdom Group, Brampton, ON',
+    dateRange: 'May 2026 - Present',
+    note: '',
+    minBullets: 2,
+    maxBullets: 2,
+    required: true,
+  },
   // Selectable, not automatic: the strongest evidence for client-facing,
   // service-desk, operations and retail roles, and mandatory for any Home Depot
   // posting. Left off engineering-heavy resumes to keep page 1 for technical work.
@@ -97,23 +108,23 @@ export const EXPERIENCE_CATALOG = {
     required: false,
   },
   'olive-branch': {
-    title: 'Web and Tech Integration Specialist',
+    title: 'Full-Stack Developer, Web and Integrations',
     company: 'Olive Branch Mentorship Inc., Cambridge, ON',
-    dateRange: 'May 2025 - Present',
+    dateRange: 'May 2025 - Aug 2026',
     note: '',
     minBullets: 2,
-    maxBullets: 3, // 3rd bullet is promoted from reserve only when page 1 renders short
+    maxBullets: 2, // page 1 now carries three roles; there is no room for a third bullet
     required: false,
   },
 };
 
 /**
- * Page 1 fits exactly two roles. A third pushes Professional Experience onto
- * page 2 and Projects onto page 3, which the overflow trimmer cannot recover
- * from because it can only cut bullets, never a whole entry. So the second slot
- * is a CHOICE between olive-branch and home-depot, never both.
+ * Page 1 fits exactly three roles: the two required ones (oer, kingdom) plus ONE
+ * of olive-branch or home-depot chosen for this JD. A fourth pushes Professional
+ * Experience onto page 2 and Projects onto page 3, which the overflow trimmer
+ * cannot recover from because it can only cut bullets, never a whole entry.
  */
-export const MAX_EXPERIENCE_ENTRIES = 2;
+export const MAX_EXPERIENCE_ENTRIES = 3;
 
 /** Always rendered first, regardless of dates. See the ordering note below. */
 export const PRIMARY_EXPERIENCE_KEY = 'oer';
@@ -168,8 +179,8 @@ export const EXTRACURRICULAR_CATALOG = {
 export const EDUCATION_ENTRY = {
   title: 'Bachelor of Computer Science (Honours)',
   company: 'Conestoga College, Waterloo, ON',
-  dateRange: 'Sept 2022 - Present',
-  gpaBullet: 'GPA: 3.74/4.00; expected graduation August 2026',
+  dateRange: 'Sept 2022 - Aug 2026',
+  gpaBullet: 'GPA: 3.76/4.00',
 };
 
 /**
@@ -341,7 +352,110 @@ export const BANNED_RESUME_PHRASES = [
 
 export const BANNED_PROFILE_PHRASES = ['expertise in', 'deep technical experience', 'possesses', 'utilizes'];
 
-export const FABRICATION_TRIPWIRES = ['Golang', 'Spring Boot', 'Kubernetes', 'Kafka'];
+// The resume states the degree and its date range and stops there. A graduation
+// date adds nothing a recruiter needs and dates the candidate, and student
+// framing reads as inexperience. The model reaches for both constantly because
+// so much of its training data describes this profile as a student, so they are
+// caught here rather than trusted away.
+//
+// Deliberately matches graduated/graduating/graduation but NOT the bare noun
+// "graduate" — "New Graduate Software Developer" is a real job title and must
+// stay usable.
+const GRADUATION_MENTION = new RegExp([
+  'graduat(?:ed|ing|ion)',
+  'will graduate',
+  'upcoming graduate',
+  'soon-to-be graduate',
+  'final[- ]year student',
+  'currently (?:a |an )?(?:student|undergraduate)',
+  'pursuing (?:a |an |his )?(?:bachelor|b\.?sc|degree)',
+  '(?:is|am) (?:a |an )?(?:computer science |cs )?student',
+  'candidate at Conestoga',
+].join('|'), 'i');
+
+/** Returns the offending phrase, or null. */
+export function findGraduationMention(text) {
+  const match = String(text ?? '').match(GRADUATION_MENTION);
+  return match ? match[0] : null;
+}
+
+// Tech that appears in job descriptions but NOT in cv.md. If the model reaches for
+// one of these it is copying the JD, not describing Girish. Keep every entry checked
+// against cv.md before adding — a term he genuinely has here would silently delete a
+// true skill in stripFabricatedSkills().
+export const FABRICATION_TRIPWIRES = [
+  'Golang', 'Spring Boot', 'Spring', 'Kubernetes', 'Kafka', 'JUnit', 'Maven', 'Gradle',
+  'Angular', 'Vue', 'Spark', 'Hadoop', 'Hibernate', 'Scala', 'Ruby', 'Rails', 'PHP',
+  'Laravel', 'Django', 'Terraform', 'Ansible', 'Jenkins', 'GraphQL', 'Redis',
+  'Elasticsearch', 'Snowflake', 'Databricks', 'Tableau', 'Kotlin', 'Swift', 'Rust',
+];
+
+function normalizeTitleForMatch(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+/** True when the profile already states the posting title, in either word order. */
+export function profileHasJobTitle(content, jobTitle) {
+  const target = normalizeTitleForMatch(jobTitle);
+  if (!target) return true;
+  const profile = normalizeTitleForMatch(asArray(content.profileSentences).join(' '));
+  if (profile.includes(target)) return true;
+  // "Intern, AI Engineer" and "AI Engineer Intern" are the same posting to a
+  // recruiter's search, so accept either ordering of the same words.
+  const words = target.split(' ').filter(Boolean);
+  return words.length > 1 && words.every(word => new RegExp(`\\b${word}\\b`).test(profile));
+}
+
+/**
+ * Deterministic backstop for the posting title.
+ *
+ * The prompt asks the model to work the title into the opening sentence, which reads
+ * best. When it does not comply — and the Spring Boot incident showed the repair pass
+ * cannot be trusted to — append a short, truthful targeting sentence instead of
+ * rewriting a sentence the user may already be happy with.
+ */
+export function ensureJobTitleInProfile(content, jobTitle) {
+  const title = String(jobTitle || '').trim();
+  if (!title || profileHasJobTitle(content, title)) return { content, added: false };
+  return {
+    content: {
+      ...content,
+      // "Applying for the X role" rather than "Targeting X roles" because ATS titles
+      // are often comma-inverted ("Intern, AI Engineer", "Consultant, Data Engineer")
+      // and only the first phrasing stays grammatical while keeping the string exact.
+      profileSentences: [...asArray(content.profileSentences), `Applying for the ${title} role.`],
+    },
+    added: true,
+  };
+}
+
+/**
+ * Last line of defence for the skills rows.
+ *
+ * The verifier already flags a tripwire term anywhere in the resume, but a flagged
+ * issue only *reports* — generation still ships. That is fine for a wording nit and
+ * unacceptable for a fabricated skill, which is a claim Girish would have to defend
+ * in an interview. Skills are a plain list, so removing the item is deterministic and
+ * safe in a way that rewriting a bullet is not: drop it and the row still reads.
+ *
+ * Returns the cleaned content plus what was removed, so the caller can log it.
+ */
+export function stripFabricatedSkills(content) {
+  const removed = [];
+  const skills = asArray(content.skills).map(row => {
+    const items = asArray(row.items).filter(item => {
+      const hit = FABRICATION_TRIPWIRES.find(
+        term => new RegExp(`\\b${term}\\b`, 'i').test(String(item)),
+      );
+      if (hit) removed.push(`${row.category}: ${item}`);
+      return !hit;
+    });
+    return { ...row, items };
+  });
+  return removed.length === 0
+    ? { content, removed }
+    : { content: { ...content, skills }, removed };
+}
 
 // Rendered page-fill targets for the locked template's fixed page split
 // (page 1 = profile..experience, .page-two = projects..certifications).
@@ -408,7 +522,8 @@ export function applyLengthBudget(content, length = 'two-page') {
     // The one-page template has no Highlights section; its content is carried
     // by Profile, Education and Leadership instead.
     highlights: [],
-    experience: content.experience.map(entry => ({ ...entry, bullets: entry.bullets.slice(0, 3) })),
+    // Page 2 is where the third role lives; one page holds the two required ones.
+    experience: content.experience.slice(0, 2).map(entry => ({ ...entry, bullets: entry.bullets.slice(0, 3) })),
     projects: content.projects.slice(0, 3).map(project => ({ ...project, bullets: project.bullets.slice(0, 2) })),
     extracurricular: (leadership.length ? leadership : content.extracurricular).slice(0, 1),
     educationCoursework: content.educationCoursework.slice(0, 4),
@@ -765,6 +880,22 @@ export function verifyResumeContent(content, analysis = {}, length = 'two-page')
   const issues = [];
   const push = (code, severity, section, message) => issues.push({ code, severity, section, message });
 
+  // The education entry carries the degree and its dates. The model writes the
+  // profile, highlights and bullets freely, and that is where a graduation date
+  // or student framing creeps back in.
+  for (const [section, text] of [
+    ['profile', asArray(content.profileSentences).join(' ')],
+    ['highlights', asArray(content.highlights).join(' ')],
+    ...asArray(content.experience).map(e => [`experience:${e.key}`, asArray(e.bullets).join(' ')]),
+    ...asArray(content.projects).map(p => [`project:${p.key}`, asArray(p.bullets).join(' ')]),
+  ]) {
+    const claim = findGraduationMention(text);
+    if (claim) {
+      push('graduation-mention', 'fix', section,
+        `says "${claim}" — drop it; the Education entry already carries the degree and its dates`);
+    }
+  }
+
   // On one page every bullet must fit a single line, or the resume silently
   // grows past the page. The prompt asks for this and the model overshoots, so
   // it is enforced here and handed to the repair pass to rewrite shorter.
@@ -826,8 +957,8 @@ export function verifyResumeContent(content, analysis = {}, length = 'two-page')
     push('profile-sentence-count', 'fix', 'profile',
       `profile has ${sentenceTotal} sentences; needs ${onePageFormat ? 'exactly 2 (one page)' : '3-4'}`);
   }
-  if (!onePageFormat && content.highlights.length !== 5) {
-    push('highlights-count', 'fix', 'highlights', `highlights has ${content.highlights.length} bullets; needs exactly 5`);
+  if (!onePageFormat && content.highlights.length !== 4) {
+    push('highlights-count', 'fix', 'highlights', `highlights has ${content.highlights.length} bullets; needs exactly 4`);
   }
   if (content.skills.length !== 5) {
     push('skills-rows', 'fix', 'skills', `skills table has ${content.skills.length} rows; needs exactly 5`);
@@ -891,7 +1022,7 @@ export function verifyResumeContent(content, analysis = {}, length = 'two-page')
   const experienceKeys = content.experience.map(entry => entry.key);
   if (content.experience.length !== MAX_EXPERIENCE_ENTRIES) {
     push('experience-count', 'fix', 'experience',
-      `resume shows ${content.experience.length} roles; page 1 fits exactly ${MAX_EXPERIENCE_ENTRIES} (always oer, plus ONE of olive-branch or home-depot chosen for this JD)`);
+      `resume shows ${content.experience.length} roles; page 1 fits exactly ${MAX_EXPERIENCE_ENTRIES} (always oer and kingdom, plus ONE of olive-branch or home-depot chosen for this JD)`);
   }
   // Only entries flagged required are mandatory; the rest are selected when the
   // JD calls for them (Home Depot for client-facing/service/retail roles).
@@ -916,7 +1047,8 @@ export function verifyResumeContent(content, analysis = {}, length = 'two-page')
     // A recruiter skims for numbers. Every role in the sources has at least one
     // quantifiable fact available, so a role with none means the model chose
     // vague phrasing over the evidence it was given.
-    if (entry.bullets.length > 0 && !entry.bullets.some(bullet => /\d/.test(bullet))) {
+    if (!EXPERIENCE_CATALOG[entry.key]?.quantifyOptional
+        && entry.bullets.length > 0 && !entry.bullets.some(bullet => /\d/.test(bullet))) {
       push('experience-unquantified', 'fix', `experience:${entry.key}`,
         `no bullet for "${entry.key}" contains a number; quantify at least one (users served, percent improved, people trained, systems handled) using a figure from the sources`);
     }
@@ -954,6 +1086,15 @@ export function verifyResumeContent(content, analysis = {}, length = 'two-page')
   const profileBanned = findPhrase(profileText, [...BANNED_PROFILE_PHRASES, 'proven track record']);
   if (profileBanned) {
     push('profile-banned-phrase', 'fix', 'profile', `profile contains banned phrase "${profileBanned}"`);
+  }
+
+  // Recruiters search their ATS by the exact posting title, so a resume that never
+  // states it is invisible to that search. Jobscan flags the same thing. The profile
+  // is the right home for it — Girish has not held these titles, so it belongs in a
+  // summary statement rather than the experience section.
+  if (analysis.jobTitle && !profileHasJobTitle(content, analysis.jobTitle)) {
+    push('job-title-missing', 'fix', 'profile',
+      `profile never states the posting title "${analysis.jobTitle}"; recruiters search on it`);
   }
 
   // Whole-resume language
@@ -1034,7 +1175,7 @@ export function verifyResumeContent(content, analysis = {}, length = 'two-page')
 // Resume-safe synonym families: every replacement describes the same action at
 // the same level of honesty, so a swap can never fabricate or inflate a claim.
 const LEAD_VERB_SYNONYMS = {
-  built: ['developed', 'created', 'engineered', 'constructed'],
+  built: ['developed', 'created', 'engineered', 'constructed', 'designed', 'implemented'],
   developed: ['built', 'created', 'engineered', 'designed'],
   created: ['built', 'developed', 'produced', 'designed'],
   engineered: ['built', 'developed', 'implemented', 'designed'],
@@ -1149,6 +1290,7 @@ export function varyLeadingVerbs(content) {
 export function trimResumeForOverflow(content) {
   const next = {
     ...content,
+    highlights: [...content.highlights],
     experience: content.experience.map(entry => ({ ...entry, bullets: [...entry.bullets] })),
     projects: content.projects.map(project => ({ ...project, bullets: [...project.bullets] })),
     extracurricular: [...content.extracurricular],
@@ -1167,6 +1309,11 @@ export function trimResumeForOverflow(content) {
     const { project } = candidates[0];
     project.bullets.pop();
     return { content: next, action: `trimmed a content bullet from project "${project.key}"` };
+  }
+
+  if (next.highlights.length > 3) {
+    next.highlights = next.highlights.slice(0, -1);
+    return { content: next, action: 'dropped the last highlight' };
   }
 
   const oer = next.experience.find(entry => entry.key === 'oer');
@@ -1347,6 +1494,12 @@ export function buildCoverLetterChecks(letterText, options = {}) {
 
   if (paragraphs.length !== 3) {
     push('paragraph-count', 'fix', `letter has ${paragraphs.length} paragraphs; needs exactly 3`);
+  }
+
+  const gradMention = findGraduationMention(text);
+  if (gradMention) {
+    push('graduation-mention', 'fix',
+      `letter says "${gradMention}" — drop it; sell capability, not schooling`);
   }
 
   // Under-length is 'fix': a short letter is a thin letter, and the repair pass

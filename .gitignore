@@ -61,3 +61,17 @@ bun.lock
 .claude/memory/
 career-dashboard
 package-lock.json
+
+# Personal job-search working files. Same reasoning as cv.md and config/profile.yml
+# above: this repo is public, and these hold resume content, contact data and
+# target lists that should never be published.
+build-master-resume.py
+draft-agency-emails.py
+sakhi-import.mjs
+STRATEGY.md
+DAILY-PLAN.md
+data/hunt-log.md
+data/sakhi-contacts.json
+data/*.xlsx
+assets/
+tmp/
