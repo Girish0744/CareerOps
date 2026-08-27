@@ -66,6 +66,7 @@ package-lock.json
 # above: this repo is public, and these hold resume content, contact data and
 # target lists that should never be published.
 build-master-resume.py
+variants/
 draft-agency-emails.py
 sakhi-import.mjs
 STRATEGY.md

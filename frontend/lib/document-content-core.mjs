@@ -79,7 +79,7 @@ export const EXPERIENCE_CATALOG = {
     title: 'Data and Software Engineering Assistant',
     company: 'Conestoga College, Waterloo, ON',
     dateRange: 'Jan 2025 - Present',
-    note: 'Part-time and co-op role; converted to co-op based on performance; retained after departmental restructuring',
+    note: 'Part-time January to April 2025, then co-op work term; retained through a departmental restructuring and re-engaged part-time by the same team',
     minBullets: 2,
     maxBullets: 3,
     required: true,
@@ -108,7 +108,7 @@ export const EXPERIENCE_CATALOG = {
     required: false,
   },
   'olive-branch': {
-    title: 'Full-Stack Developer, Web and Integrations',
+    title: 'Full-Stack Developer, Web and Integrations (Volunteer)',
     company: 'Olive Branch Mentorship Inc., Cambridge, ON',
     dateRange: 'May 2025 - Aug 2026',
     note: '',
@@ -180,7 +180,7 @@ export const EDUCATION_ENTRY = {
   title: 'Bachelor of Computer Science (Honours)',
   company: 'Conestoga College, Waterloo, ON',
   dateRange: 'Sept 2022 - Aug 2026',
-  gpaBullet: 'GPA: 3.76/4.00',
+  gpaBullet: 'Graduated with Distinction; GPA: 3.76/4.00',
 };
 
 /**
@@ -964,8 +964,8 @@ export function verifyResumeContent(content, analysis = {}, length = 'two-page')
     push('profile-sentence-count', 'fix', 'profile',
       `profile has ${sentenceTotal} sentences; needs ${onePageFormat ? 'exactly 2 (one page)' : '3-4'}`);
   }
-  if (!onePageFormat && content.highlights.length !== 4) {
-    push('highlights-count', 'fix', 'highlights', `highlights has ${content.highlights.length} bullets; needs exactly 4`);
+  if (!onePageFormat && content.highlights.length !== 3) {
+    push('highlights-count', 'fix', 'highlights', `highlights has ${content.highlights.length} bullets; needs exactly 3`);
   }
   if (content.skills.length !== 5) {
     push('skills-rows', 'fix', 'skills', `skills table has ${content.skills.length} rows; needs exactly 5`);
@@ -1318,7 +1318,7 @@ export function trimResumeForOverflow(content) {
     return { content: next, action: `trimmed a content bullet from project "${project.key}"` };
   }
 
-  if (next.highlights.length > 3) {
+  if (next.highlights.length > 2) {
     next.highlights = next.highlights.slice(0, -1);
     return { content: next, action: 'dropped the last highlight' };
   }

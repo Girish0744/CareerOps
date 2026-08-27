@@ -102,9 +102,14 @@ for (const [label, sentence] of [
 check('the bare noun "graduate" in a role title is not flagged',
   findGraduationMention('Applying for the New Graduate Software Developer role') === null);
 
-check('the education entry carries dates only, no graduation wording',
+// The ban is on a graduation DATE ("graduating August 2026"), which dates the
+// candidate and reads as student framing. An awarded honour is neither.
+check('the education entry carries no graduation date wording',
   EDUCATION_ENTRY.dateRange === 'Sept 2022 - Aug 2026'
-  && !/graduat/i.test(`${EDUCATION_ENTRY.dateRange} ${EDUCATION_ENTRY.gpaBullet}`));
+  && !/graduat(?:ing|ion)|20\d\d/i.test(EDUCATION_ENTRY.gpaBullet),
+  EDUCATION_ENTRY.gpaBullet);
+check('the education entry records the distinction',
+  /with distinction/i.test(EDUCATION_ENTRY.gpaBullet), EDUCATION_ENTRY.gpaBullet);
 
 const bulletLines = markdown.split('\n').filter(line => line.startsWith('- '));
 check('no bullet ends with a period and no em dashes anywhere',
@@ -181,6 +186,8 @@ check('trim step 3 drops the last highlight, the cheapest page-1 line',
   /highlight/.test(step3.action ?? ''), step3.action ?? 'null');
 const step4 = trimResumeForOverflow(step3.content);
 check('trim step 4 drops the 3rd OER bullet', /OER/.test(step4.action ?? ''), step4.action ?? 'null');
+check('the trimmer never cuts below two highlights',
+  trimResumeForOverflow({ ...step4.content, highlights: ['a', 'b'] }).action !== 'dropped the last highlight');
 check('project bullet accounting matches builder output',
   countProjectBulletItems(step2.content) === countProjectBulletItems(step1.content) - 1);
 
@@ -878,9 +885,23 @@ check('oer renders first ahead of home-depot too',
 check('oer title is the updated one',
   EXPERIENCE_CATALOG.oer.title === 'Data and Software Engineering Assistant',
   EXPERIENCE_CATALOG.oer.title);
-check('the volunteer label is gone from the olive-branch title',
-  !/volunteer/i.test(EXPERIENCE_CATALOG['olive-branch'].title),
+check('the olive-branch title carries the volunteer label',
+  /volunteer/i.test(EXPERIENCE_CATALOG['olive-branch'].title),
   EXPERIENCE_CATALOG['olive-branch'].title);
+check('the co-op fact sits on the oer role, not in Highlights',
+  /co-op/i.test(EXPERIENCE_CATALOG.oer.note)
+  && !normalizeResumeContent(good.resume).highlights.some(h => /co-op/i.test(h)),
+  EXPERIENCE_CATALOG.oer.note);
+check('the rendered resume shows both labels',
+  (md => /co-op/i.test(md) && /\(Volunteer\)/.test(md))(
+    buildResumeMarkdown(normalizeResumeContent({
+      ...good.resume,
+      experience: [
+        good.resume.experience.find(e => e.key === 'oer'),
+        good.resume.experience.find(e => e.key === 'kingdom'),
+        { key: 'olive-branch', bullets: twoBullets('ob') },
+      ],
+    }), { name: 'Girish Bhuteja' })));
 
 // ── Result ───────────────────────────────────────────────────────────────────
 

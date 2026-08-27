@@ -228,16 +228,17 @@ PROFILE (3-4 sentences, impersonal resume voice)
 - Optional sentence 4 only if it adds a real capability.
 - CORRECT: "Data-focused developer with applied experience in data analysis, stakeholder engagement, and translating complex datasets into actionable business insights."
 - WRONG: "Computer Science Honours graduate (3.76 GPA) with experience in..."
+- The degree was awarded WITH DISTINCTION. Code prints that on the Education line; never repeat it in the profile or highlights. A cover letter may state it ONCE, and only where it supports a point being made, never as an opening credential.
 - Never use the candidate's name, he/his/him, I/my/we, "proven track record", "expertise in", "adept at", "possesses", "leveraging". Say "applied experience" or "project experience", never "expertise" — this candidate’s evidence comes from co-op terms and shipped projects, not years in industry.
 - The profile must not repeat facts stated in Highlights or Education. It sells capabilities in JD language found nowhere else on the resume.
 - If the company is not pure tech, connect real experience to the industry honestly ("applied experience in data analysis, workflow automation, and stakeholder engagement") without claiming domain experience the candidate lacks.
 
 ==========================
-HIGHLIGHTS (exactly 4 bullets)
+HIGHLIGHTS (exactly 3 bullets)
 ==========================
-1 (always): "Completed 2 co-op work terms at Conestoga College; converted from part-time to co-op based on performance and retained through departmental restructuring"
+NEVER put the co-op conversion in Highlights either: code prints it as the note line under the Conestoga role, where a reader can see WHICH role was the co-op. In Highlights it is an unattached claim.
 NEVER put the degree, the school, or the GPA in Highlights. The Education section already states all three, and repeating them burns a line that JD-relevant evidence needs. This is a hard rule, not a preference.
-2 (by archetype — 6-8 tools, prioritize tools in the JD):
+1 (by archetype — 6-8 tools, prioritize tools in the JD):
    DA_BA: "Deployed 8+ full-stack and ML projects using Python, SQL, PostgreSQL, AWS (Athena/S3/EC2), Docker, and Power BI; all publicly available on GitHub"
    AI_ML/GENERAL: same pattern with Python, scikit-learn, MLflow, AWS EC2, Docker, React
    SWE_FULLSTACK: same pattern with React, TypeScript, FastAPI, Python, PostgreSQL, AWS EC2, Docker, Vercel
@@ -246,7 +247,7 @@ NEVER put the degree, the school, or the GPA in Highlights. The Education sectio
    SYSTEMS_CPP: C++, C#, Python, SQL Server, AWS EC2, Docker, React
    CSHARP_DOTNET: C#, SQL Server, Python, FastAPI, React, AWS EC2, Docker, MSTest
    HELPDESK_IT: Python, SQL, React, FastAPI, Docker, AWS
-3 (by archetype — strongest matching evidence):
+2 (by archetype — strongest matching evidence):
    DA_BA/DATA_ENGINEER: "Analyzed 4,400+ student records across two real-world datasets applying IQR-based outlier detection and multi-variable correlation analysis to generate institutional recommendations"
    AI_ML/GENERAL: "Built ML pipelines with scikit-learn, MLflow, and Random Forest, achieving 94.9% classification accuracy on real NASA Kepler telescope data"
    SWE_FULLSTACK: "Built real-time WebSocket systems, containerised deployments with Docker Compose, and LLM-powered chat interfaces across multiple full-stack projects"
@@ -254,9 +255,9 @@ NEVER put the degree, the school, or the GPA in Highlights. The Education sectio
    SYSTEMS_CPP: "Implemented a 7-type binary packet protocol and 5-state server lifecycle state machine with Stop-and-Wait ACK, achieving 32 passing tests and a byte-exact 1 MB file transfer"
    CSHARP_DOTNET: "Wrote 85+ MSTest methods across unit, integration, and system tiers covering patient workflows, billing calculations, and server connectivity for complex multi-role systems"
    HELPDESK_IT: "Deployed 8+ accessible web platforms and interactive learning objects using HTML, CSS, WordPress, and Power Automate, supporting 1,000+ students across Business and Health Sciences"
-4 (always): "Lead for the NASA International Space Apps Challenge 2026; Narhari Sharma Memorial Award recipient (April 2026) and IT Club President coordinating hackathons and mentorship for 100+ students"
-Bullet 4 leads with NASA deliberately: it is the token a recruiter's eye stops on when skimming page 1. Keep it first in the sentence, keep the bullet short, and never drop it. The event runs in November 2026, so never attach attendance numbers, sponsors raised, or any completed outcome to it. Never phrase it as employment by NASA; it is a NASA-sponsored, locally organized event that he leads for the Waterloo site.
-Leadership appears in bullet 4 — do NOT repeat it in the profile or extracurricular bullets.
+3 (always): "Lead for the NASA International Space Apps Challenge 2026; Narhari Sharma Memorial Award recipient (April 2026) and IT Club President coordinating hackathons and mentorship for 100+ students"
+Bullet 3 leads with NASA deliberately: it is the token a recruiter's eye stops on when skimming page 1. Keep it first in the sentence, keep the bullet short, and never drop it. The event runs in November 2026, so never attach attendance numbers, sponsors raised, or any completed outcome to it. Never phrase it as employment by NASA; it is a NASA-sponsored, locally organized event that he leads for the Waterloo site.
+Leadership appears in bullet 3 — do NOT repeat it in the profile or extracurricular bullets.
 
 ==========================
 SKILLS (exactly 5 rows; reorder rows after Languages so the most JD-relevant category comes first; only skills present in the sources)
@@ -288,7 +289,7 @@ Page 1 fits three roles. A fourth pushes Experience onto page 2 and Projects ont
 - Slot 1 is always oer (Data and Software Engineering Assistant), and code renders it FIRST regardless of dates: it is the primary technical role. The one exception is a posting FROM a past employer, where code moves that employer's own role above oer.
 - Slot 2 is always kingdom (Software Developer, The Kingdom Group) — the current role. It is never optional and never dropped: a resume whose newest job ended months ago reads as unemployed.
 - Slot 3 is a CHOICE, not an addition. Pick ONE:
-    olive-branch (Full-Stack Developer, Web and Integrations) — for software, web, full-stack, data and AI/ML roles where building is the job.
+    olive-branch (Full-Stack Developer, Web and Integrations, a VOLUNTEER role — code prints the label, never hide it) — for software, web, full-stack, data and AI/ML roles where building is the job.
     home-depot (Freight Associate and Trainer) — for client-facing support, service desk, operations, training, logistics and retail roles, and ALWAYS for a Home Depot posting. It is the candidate's only paid customer-facing role, so for those postings it is his strongest evidence.
 Choosing home-depot means DROPPING olive-branch, and choosing olive-branch means dropping home-depot. Listing both is a hard failure that code will reject.
 Bullets: 2 each (oer may take a 3rd when strongly JD-relevant; code may promote a reserve bullet when page 1 renders short). olive-branch is capped at 2.
@@ -335,7 +336,7 @@ Each bullet: ${bulletWords}, third person with no pronouns, a strong verb that i
 ==========================
 EXTRACURRICULAR AND COURSEWORK
 ==========================
-extracurricular: nasa-space-apps and it-club always (1 bullet each stating a DIFFERENT fact than Highlights bullet 4 — what was done, who it served, what was produced). For nasa-space-apps write the operational detail (venue, sponsorship, mentor/judge recruitment, volunteer coordination) since Highlights bullet 4 already carries the selection itself; keep it forward-looking, never a completed outcome. Add a 3rd (hackthebrain for operations/event roles, ai-build-lab for AI/tech roles, mentor for engagement roles, gdg for community roles) ONLY with the standard 9-item project budget.
+extracurricular: nasa-space-apps and it-club always (1 bullet each stating a DIFFERENT fact than Highlights bullet 3 — what was done, who it served, what was produced). For nasa-space-apps write the operational detail (venue, sponsorship, mentor/judge recruitment, volunteer coordination) since Highlights bullet 3 already carries the selection itself; keep it forward-looking, never a completed outcome. Add a 3rd (hackthebrain for operations/event roles, ai-build-lab for AI/tech roles, mentor for engagement roles, gdg for community roles) ONLY with the standard 9-item project budget.
 educationCoursework: pick 4-5 most JD-relevant from: ${ALLOWED_COURSEWORK.join(', ')}.
 
 ==========================
@@ -494,6 +495,7 @@ INTERNAL THINKING PROCESS (do not output)
 STRUCTURE (exactly 3 paragraphs, 220-300 words total)
 ========================
 PARAGRAPH 1 — THE HOOK. This paragraph has one job: make the reader want to read paragraph 2. Recruiters skim the first line and decide. Do NOT start with "I".
+The degree was awarded WITH DISTINCTION, and the resume's Education line states it. The letter may state it ONCE, in the closing paragraph and only if it supports a point being made ("the analysis work that earned the distinction is the same work this role runs on"). NEVER in paragraph 1, never as a standalone boast, never alongside the GPA. A letter that opens on academic standing reads like a student; one that mentions it in passing reads like someone who has it and has something better to say.
 
 The FIRST SENTENCE must be a hook. Use ONE of these three moves, whichever the evidence best supports:
   (a) The problem: name the specific problem this team owns, in plain words, in a way that shows Girish already understands it from the inside.

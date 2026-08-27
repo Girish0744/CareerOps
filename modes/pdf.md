@@ -9,7 +9,7 @@
 5. Detect company location → paper format: US/Canada → `letter`, rest of world → `a4`
 6. Select the most relevant projects using the Project Selection Matrix: 3 projects by default, 4 only if page 2 needs density and space allows
 7. Write the tailored profile paragraph (3-4 sentences, zero first-person)
-8. Build Highlights of Qualifications (always exactly 4 bullets)
+8. Build Highlights of Qualifications (always exactly 3 bullets)
 9. Select experience bullets by archetype
 10. Reorder skills within each category by JD relevance
 11. Select extracurricular entries (2 always + 1 optional)
@@ -129,7 +129,7 @@ Profile starters by archetype (adapt, do not copy verbatim):
 - SYSTEMS_CPP: "Software developer with hands-on experience building networked systems and protocol implementations in C++ using TCP/IP, binary packet design, and state machine architecture..."
 - CSHARP_DOTNET: "Software developer with hands-on experience building multi-role desktop applications in C# using Windows Forms, SQL Server, and TCP networking..."
 
-### Highlights of Qualifications (Step 8) — always exactly 4 bullets
+### Highlights of Qualifications (Step 8) — always exactly 3 bullets
 
 1. Delivery range (NEVER the degree, school, or GPA — Education states those): coursework may still be referenced from [4–5 JD-relevant subjects from: Software Engineering, OOP, Data Structures and Algorithms, Database Systems, Computer Networks, OS and Security, Cloud Computing, Big Data, AI and Machine Learning]"
 2. Co-op: "Completed 2 co-op work terms at Conestoga College; converted from part-time to co-op based on performance and retained through departmental restructuring"
@@ -268,7 +268,7 @@ Use `templates/cv-template.html`. Replace every `{{...}}` placeholder:
     <div class="entry-right">September 2022 – August 2026</div>
   </div>
   <ul>
-    <li>GPA: 3.76/4.00</li>
+    <li>Graduated with Distinction; GPA: 3.76/4.00</li>
     <li>Relevant coursework: Software Engineering, Database Systems, Cloud Computing, Big Data, AI and Machine Learning</li>
   </ul>
 </div>
